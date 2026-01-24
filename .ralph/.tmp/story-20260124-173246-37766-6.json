@@ -1,0 +1,12 @@
+{
+  "ok": true,
+  "total": 26,
+  "remaining": 21,
+  "quality_gates": [
+    "npm run typecheck",
+    "npm run lint",
+    "npm run test"
+  ],
+  "id": "US-006",
+  "title": "Implement criticality.toml parser"
+}
