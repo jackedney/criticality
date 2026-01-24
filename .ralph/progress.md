@@ -971,3 +971,62 @@ Run summary: /Users/jackedney/criticality/.ralph/runs/run-20260124-213521-33625-
   - AsyncGenerator return type requires careful typing with StreamChunk and ModelRouterResult
   - ESLint require-yield can be disabled for minimal generator implementations in tests
 ---
+
+## 2026-01-24 22:15 - US-021: Implement Claude Code client
+Thread:
+Run: 20260124-213521-33625 (iteration 5)
+Run log: /Users/jackedney/criticality/.ralph/runs/run-20260124-213521-33625-iter-5.log
+Run summary: /Users/jackedney/criticality/.ralph/runs/run-20260124-213521-33625-iter-5.md
+- Guardrails reviewed: yes
+- No-commit run: false
+- Commit: d1144ef feat(US-021): Implement Claude Code client
+- Post-commit status: clean (remaining files are PRD and ralph temp files)
+- Verification:
+  - Command: npm run typecheck -> PASS
+  - Command: npm run lint -> PASS
+  - Command: npm run test -> PASS (661 tests passed - 631 existing + 30 new client tests)
+- Files changed:
+  - package.json (added execa dependency)
+  - package-lock.json (updated)
+  - src/router/claude-code-client.ts (new - ClaudeCodeClient implementation)
+  - src/router/claude-code-client.test.ts (new - 30 tests for client)
+  - src/router/index.ts (updated - exports for client module)
+- What was implemented:
+  - ClaudeCodeClient class implementing ModelRouter interface:
+    - prompt(modelAlias, prompt): Simple prompt method
+    - complete(request): Full request with parameters
+    - stream(request): Streaming response with AsyncGenerator
+  - Subprocess management with execa:
+    - Uses -p flag for non-interactive print mode
+    - Uses --output-format json for non-streaming requests
+    - Uses --output-format stream-json for streaming requests
+    - Uses --no-session-persistence to avoid session files
+    - Supports custom timeout, cwd, and additional CLI flags
+  - Model alias resolution from configuration:
+    - Maps architect, auditor, structurer, worker, fallback to config models
+    - Passes resolved model via --model flag
+  - Response parsing:
+    - Parses JSON output for assistant messages and result messages
+    - Extracts content from text content blocks
+    - Extracts usage information (input_tokens, output_tokens)
+    - Extracts latency from duration_ms in result
+  - Error handling:
+    - ClaudeCodeNotInstalledError for missing CLI
+    - checkClaudeCodeInstalled() function for pre-flight check
+    - createClaudeCodeClient() factory with installation check
+    - Proper error mapping to ModelRouterError types
+  - All acceptance criteria verified:
+    - [x] Install execa for subprocess management
+    - [x] Spawn Claude Code subprocess with appropriate flags
+    - [x] Pass prompts and receive responses
+    - [x] Handle streaming output
+    - [x] Capture usage/cost information if available
+    - [x] Example: send prompt to Claude via Claude Code CLI and receive response (tested)
+    - [x] Negative case: Claude Code not installed returns clear error (tested)
+- **Learnings for future iterations:**
+  - execa's stdout is always truthy, no need for conditional checks
+  - JSON output format from Claude Code includes system, assistant, and result message types
+  - stream-json format sends messages line-by-line as JSON objects
+  - Mock async generators need explicit return type annotations for TypeScript
+  - Tests calling functions twice need separate mock setups or promise capture
+---
