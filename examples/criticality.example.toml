@@ -1,0 +1,89 @@
+# Example Criticality Protocol Configuration
+# This file configures the protocol's model routing, paths, and thresholds.
+#
+# All fields are optional - missing fields use sensible defaults.
+# See the defaults in src/config/defaults.ts for reference.
+
+# =============================================================================
+# MODEL ASSIGNMENTS
+# =============================================================================
+# Maps role-based aliases to actual model identifiers.
+# Role aliases allow model updates without touching the decision ledger.
+
+[models]
+# Model for high-level architecture and user interaction (Ignition phase)
+architect_model = "claude-opus-4.5"
+
+# Model for logical consistency auditing (Composition Audit phase)
+auditor_model = "kimi-k2"
+
+# Model for structure generation (Lattice phase)
+structurer_model = "claude-sonnet-4.5"
+
+# Model for primary function implementation (Injection phase)
+worker_model = "minimax-m2"
+
+# Model for fallback when worker fails
+fallback_model = "claude-sonnet-4.5"
+
+# =============================================================================
+# PATH CONFIGURATION
+# =============================================================================
+# Directories and files for artifacts and state.
+# All paths are relative to the project root.
+
+[paths]
+# Directory for specification artifacts (spec.toml, witnesses, etc.)
+specs = ".criticality/specs"
+
+# Directory for archived phase artifacts (for audit purposes)
+archive = ".criticality/archive"
+
+# File path for protocol state persistence (checkpoint/resume)
+state = ".criticality/state.json"
+
+# Directory for telemetry and event logs
+logs = ".criticality/logs"
+
+# Directory for decision ledger files
+ledger = ".criticality/ledger"
+
+# =============================================================================
+# THRESHOLD CONFIGURATION
+# =============================================================================
+# Configurable thresholds for routing decisions and circuit breakers.
+
+[thresholds]
+# Context token threshold for pre-emptive model upgrade
+# If input exceeds this, route to more capable model
+context_token_upgrade = 12000
+
+# Signature complexity threshold for model upgrade
+# Formula: genericParams*2 + unionMembers + lifetimeParams*2 + nestedTypeDepth + paramCount*0.5
+signature_complexity_upgrade = 5
+
+# Maximum retry attempts before circuit breaker triggers
+max_retry_attempts = 3
+
+# Base delay in milliseconds for exponential backoff
+retry_base_delay_ms = 1000
+
+# Variance threshold for performance claim verification (0.0 to 1.0)
+# Values above this trigger failure for complexity verification
+performance_variance_threshold = 0.2
+
+# =============================================================================
+# NOTIFICATION CONFIGURATION
+# =============================================================================
+# Settings for blocking state notifications.
+# When the protocol enters BLOCKED state, it can notify via these channels.
+
+[notifications]
+# Whether notifications are enabled
+enabled = false
+
+# Notification channel type: "slack", "email", or "webhook"
+# channel = "slack"
+
+# Webhook URL, email address, or Slack webhook URL
+# endpoint = "https://hooks.slack.com/services/xxx/yyy/zzz"
