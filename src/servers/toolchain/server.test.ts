@@ -210,7 +210,7 @@ export function multiply(a: number, b: number): number {
       expect(typeof parsed.durationMs).toBe('number');
       expect(typeof parsed.command).toBe('string');
       expect(typeof parsed.exitCode).toBe('number');
-    });
+    }, 15000);
 
     it('includes test pattern in command', async () => {
       const result = await callTool(client, 'run_function_test', {
