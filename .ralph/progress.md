@@ -1231,3 +1231,60 @@ Run summary: /Users/jackedney/criticality/.ralph/runs/run-20260124-213521-33625-
   - exactOptionalPropertyTypes requires conditional building for error options
   - Existing isRetryableError from types.ts enables consistent retry decisions
 ---
+
+## 2026-01-24 22:46 - US-025: Implement Context Budgeting and Truncation
+Thread:
+Run: 20260124-213521-33625 (iteration 10)
+Run log: /Users/jackedney/criticality/.ralph/runs/run-20260124-213521-33625-iter-10.log
+Run summary: /Users/jackedney/criticality/.ralph/runs/run-20260124-213521-33625-iter-10.md
+- Guardrails reviewed: yes
+- No-commit run: false
+- Commit: ee33460 feat(US-025): Implement context budgeting and truncation
+- Post-commit status: clean (only unrelated modified files remain)
+- Verification:
+  - Command: npm run typecheck -> PASS
+  - Command: npm run lint -> PASS
+  - Command: npm run test -> PASS (860 tests, 63 new tests for context budgeting)
+- Files changed:
+  - src/router/context.ts (new - 808 lines)
+  - src/router/context.test.ts (new - 860 lines)
+  - src/router/index.ts (updated exports)
+- What was implemented:
+  - Token counting for inputs:
+    - estimateTokensSimple() - character-based (~4 chars/token)
+    - estimateTokensWordBased() - word-based with code-aware heuristics
+    - defaultTokenCounter - injectable token counter interface
+  - Model context limits:
+    - MODEL_CONTEXT_LIMITS map for MiniMax, Kimi, Claude models
+    - getModelLimits() with partial name matching
+    - DEFAULT_MODEL_LIMITS for unknown models
+  - TruncationOrder (comments > examples > types):
+    - SECTION_PRIORITY with priorities 10-100
+    - TRUNCATABLE_SECTIONS: comments, examples, relatedTypes, requiredTypes
+    - PROTECTED_SECTIONS: systemPrompt, signature, contracts
+    - DEFAULT_TRUNCATION_ORDER per specification
+  - ContextOverflowStrategy (truncate, upgrade, reject):
+    - determineOverflowStrategy() based on overflow percentage
+    - Mild (<20%): truncate
+    - Moderate (20-100%): upgrade to larger model
+    - Severe (>100%): reject with error
+  - Truncation when input exceeds model limits:
+    - truncatePrompt() removes sections in priority order
+    - extractSections() analyzes prompt token usage
+    - buildPromptFromSections() constructs prompts from parts
+    - applyOverflowStrategy() applies strategy to requests
+    - ContextOverflowError for rejection cases
+  - All acceptance criteria verified:
+    - [x] Implement token counting for inputs (estimateTokensSimple, estimateTokensWordBased)
+    - [x] Define TruncationOrder (comments > examples > types in SECTION_PRIORITY)
+    - [x] Implement ContextOverflowStrategy (truncate, upgrade, reject)
+    - [x] Apply truncation when input exceeds model limits (truncatePrompt)
+    - [x] Example: Request over limit triggers truncation of comments (test passes)
+    - [x] Negative case: Request exceeding max limit after truncation returns rejection error (test passes)
+- **Learnings for future iterations:**
+  - Word-based token estimation is more accurate for code than simple character count
+  - Protected sections (systemPrompt, signature, contracts) should never be truncated
+  - Truncation order matters: comments (10) -> examples (30) -> relatedTypes (40) -> requiredTypes (80)
+  - Upgrade path: worker -> structurer -> architect -> fallback
+  - DEFAULT_MODEL_LIMITS matches minimax-m2, so partial matching tests need models with different limits
+---

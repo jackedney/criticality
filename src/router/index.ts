@@ -104,3 +104,45 @@ export {
   wrapWithRetry,
   defaultSleep,
 } from './retry.js';
+
+// Context budgeting and truncation
+export {
+  // Types
+  type TruncatableSection,
+  type TruncationOrder,
+  type ModelContextLimits,
+  type ContextOverflowStrategy,
+  type ContextBudgetResult,
+  type ContentSection,
+  type StructuredPrompt,
+  type TruncationResult,
+  type TokenCounter,
+  // Constants
+  SECTION_PRIORITY,
+  TRUNCATABLE_SECTIONS,
+  PROTECTED_SECTIONS,
+  DEFAULT_TRUNCATION_ORDER,
+  MODEL_CONTEXT_LIMITS,
+  DEFAULT_MODEL_LIMITS,
+  // Token counting
+  estimateTokensSimple,
+  estimateTokensWordBased,
+  defaultTokenCounter,
+  // Model limits
+  getModelLimits,
+  // Context analysis
+  analyzeContextBudget,
+  determineOverflowStrategy,
+  // Truncation
+  truncatePrompt,
+  extractSections,
+  buildPromptFromSections,
+  // Strategy application
+  applyOverflowStrategy,
+  ContextOverflowError,
+  // Utilities
+  isProtectedSection,
+  isTruncatableSection,
+  getSectionPriority,
+  sortByTruncationPriority,
+} from './context.js';
