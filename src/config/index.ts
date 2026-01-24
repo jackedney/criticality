@@ -1,7 +1,10 @@
 /**
  * Configuration module for criticality.toml parsing and validation.
  *
- * Provides typed configuration parsing with sensible defaults and semantic validation.
+ * Provides typed configuration parsing with sensible defaults, semantic validation,
+ * and environment variable overrides.
+ *
+ * Override precedence: env > config file > defaults
  *
  * @packageDocumentation
  */
@@ -36,3 +39,10 @@ export type {
   ValidationResult,
   ValidateConfigOptions,
 } from './validator.js';
+export {
+  EnvCoercionError,
+  readEnvOverrides,
+  applyEnvOverrides,
+  getEnvVarDocumentation,
+} from './env.js';
+export type { EnvOverrideResult, EnvRecord } from './env.js';
