@@ -55,3 +55,12 @@ export {
   createClaudeCodeClient,
   type ClaudeCodeClientOptions,
 } from './claude-code-client.js';
+
+// OpenCode client
+export {
+  OpenCodeClient,
+  OpenCodeNotInstalledError,
+  checkOpenCodeInstalled,
+  createOpenCodeClient,
+  type OpenCodeClientOptions,
+} from './opencode-client.js';
