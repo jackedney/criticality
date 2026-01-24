@@ -84,7 +84,7 @@
     {
       "id": "US-001",
       "title": "Initialize TypeScript project with strict mode",
-      "status": "in_progress",
+      "status": "done",
       "dependsOn": [],
       "description": "As a developer, I want a properly configured TypeScript project with strict mode so that we catch type errors early and have a solid foundation.",
       "acceptanceCriteria": [
@@ -95,13 +95,13 @@
         "Negative case: code with implicit any fails typecheck"
       ],
       "startedAt": "2026-01-24T17:32:46.913560+00:00",
-      "completedAt": null,
-      "updatedAt": "2026-01-24T17:32:46.913760+00:00"
+      "completedAt": "2026-01-24T17:36:30.390722+00:00",
+      "updatedAt": "2026-01-24T17:36:30.390511+00:00"
     },
     {
       "id": "US-002",
       "title": "Set up CI/CD pipeline with GitHub Actions",
-      "status": "open",
+      "status": "in_progress",
       "dependsOn": [
         "US-001"
       ],
@@ -114,7 +114,10 @@
         "Caches node_modules for faster runs",
         "Example: PR with failing test blocks merge",
         "Negative case: PR with syntax error in workflow file is detected"
-      ]
+      ],
+      "startedAt": "2026-01-24T17:36:32.470633+00:00",
+      "completedAt": null,
+      "updatedAt": "2026-01-24T17:36:32.470817+00:00"
     },
     {
       "id": "US-003",

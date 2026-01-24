@@ -39,3 +39,32 @@ Run summary: /Users/jackedney/criticality/.ralph/runs/run-20260124-173246-37766-
   - test-fixtures pattern useful for verifying that TypeScript settings work as expected
   - Placeholder scripts for lint/test acceptable since those are separate stories (US-003, US-004)
 ---
+
+## 2026-01-24 17:40 - US-002: Set up CI/CD pipeline with GitHub Actions
+Thread:
+Run: 20260124-173246-37766 (iteration 2)
+Run log: /Users/jackedney/criticality/.ralph/runs/run-20260124-173246-37766-iter-2.log
+Run summary: /Users/jackedney/criticality/.ralph/runs/run-20260124-173246-37766-iter-2.md
+- Guardrails reviewed: yes
+- No-commit run: false
+- Commit: 929d08f feat(US-002): Set up CI/CD pipeline with GitHub Actions
+- Post-commit status: clean
+- Verification:
+  - Command: npm run typecheck -> PASS
+  - Command: npm run lint -> PASS (placeholder)
+  - Command: npm run test -> PASS (placeholder)
+  - Command: YAML syntax validation -> PASS
+- Files changed:
+  - .github/workflows/ci.yml (new CI workflow)
+- What was implemented:
+  - Created .github/workflows/ci.yml GitHub Actions workflow
+  - Workflow triggers on push to main and all PRs
+  - Workflow runs lint, typecheck, and test steps sequentially
+  - Workflow fails on any step failure (default GitHub Actions behavior)
+  - node_modules caching configured with package-lock.json hash key
+  - Uses actions/checkout@v4, actions/setup-node@v4, actions/cache@v4
+- **Learnings for future iterations:**
+  - GitHub Actions validates workflow syntax on push, syntax errors are detected
+  - Caching node_modules with package-lock.json hash is the standard pattern
+  - setup-node@v4 has built-in npm caching via cache: 'npm' option
+---
