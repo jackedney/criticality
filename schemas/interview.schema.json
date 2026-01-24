@@ -1,0 +1,397 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://criticality.dev/schemas/interview.schema.json",
+  "title": "Ignition Interview State",
+  "description": "Schema for tracking the structured conversation during Ignition phase",
+  "type": "object",
+  "required": ["project_id", "status", "current_phase", "turns", "created_at"],
+  "properties": {
+    "project_id": {
+      "type": "string",
+      "description": "Unique project identifier"
+    },
+    "status": {
+      "type": "string",
+      "enum": ["in_progress", "awaiting_response", "synthesis", "approval_pending", "approved", "revision_requested", "rejected"],
+      "description": "Current interview status"
+    },
+    "created_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "When the interview began"
+    },
+    "last_activity_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "Last interaction timestamp"
+    },
+    "current_phase": {
+      "type": "string",
+      "enum": ["discovery", "architecture", "constraints", "design_preferences", "synthesis", "approval"],
+      "description": "Current interview phase"
+    },
+    "current_question_id": {
+      "type": "string",
+      "description": "ID of the question awaiting response (if status is awaiting_response)"
+    },
+    "phases_completed": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "List of completed phase names"
+    },
+    "delegated_phases": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "Phases where user delegated to Architect judgment"
+    },
+    "delegation_notes": {
+      "type": "object",
+      "additionalProperties": { "type": "string" },
+      "description": "User notes provided when delegating (keyed by phase)"
+    },
+    "turns": {
+      "type": "array",
+      "items": { "$ref": "#/definitions/Turn" },
+      "description": "Ordered list of conversation turns"
+    },
+    "extracted_requirements": {
+      "$ref": "#/definitions/ExtractedRequirements",
+      "description": "Structured data extracted from conversation"
+    },
+    "proposal_versions": {
+      "type": "array",
+      "items": { "$ref": "#/definitions/ProposalReference" },
+      "description": "References to generated proposals"
+    },
+    "approval_record": {
+      "$ref": "#/definitions/ApprovalRecord",
+      "description": "Final approval details (if approved)"
+    }
+  },
+  "definitions": {
+    "Turn": {
+      "type": "object",
+      "required": ["id", "timestamp", "speaker", "content"],
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Unique turn identifier",
+          "pattern": "^turn_\\d+$"
+        },
+        "timestamp": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "speaker": {
+          "type": "string",
+          "enum": ["interviewer", "user"],
+          "description": "Who produced this turn"
+        },
+        "phase": {
+          "type": "string",
+          "description": "Which interview phase this turn belongs to"
+        },
+        "content": {
+          "type": "string",
+          "description": "The message content"
+        },
+        "question_type": {
+          "type": "string",
+          "enum": ["open", "multiple_choice", "confirmation", "delegation_offer", "clarification", "summary"],
+          "description": "Type of question (for interviewer turns)"
+        },
+        "question_id": {
+          "type": "string",
+          "description": "Reference to question bank ID"
+        },
+        "options": {
+          "type": "array",
+          "items": { "$ref": "#/definitions/Option" },
+          "description": "Available options (for multiple_choice)"
+        },
+        "allows_freeform": {
+          "type": "boolean",
+          "default": true,
+          "description": "Whether freeform text is accepted in addition to options"
+        },
+        "selected_option": {
+          "type": "string",
+          "description": "ID of selected option (for user response to multiple_choice)"
+        },
+        "freeform_response": {
+          "type": "string",
+          "description": "Freeform text from user"
+        },
+        "extracted_facts": {
+          "type": "array",
+          "items": { "$ref": "#/definitions/Fact" },
+          "description": "Facts extracted from this turn"
+        }
+      }
+    },
+    "Option": {
+      "type": "object",
+      "required": ["id", "text"],
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Option identifier (for selection)"
+        },
+        "text": {
+          "type": "string",
+          "description": "Display text"
+        },
+        "description": {
+          "type": "string",
+          "description": "Additional context for this option"
+        }
+      }
+    },
+    "Fact": {
+      "type": "object",
+      "required": ["id", "category", "content"],
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Unique fact identifier",
+          "pattern": "^fact_\\d+$"
+        },
+        "category": {
+          "type": "string",
+          "enum": [
+            "problem",
+            "user_persona",
+            "success_criterion",
+            "feature_core",
+            "feature_foundational",
+            "feature_bolt_on",
+            "constraint_technical",
+            "constraint_performance",
+            "constraint_security",
+            "constraint_compliance",
+            "preference",
+            "integration",
+            "language_choice",
+            "platform_choice"
+          ],
+          "description": "What kind of requirement this represents"
+        },
+        "content": {
+          "type": "string",
+          "description": "The actual requirement/fact"
+        },
+        "confidence": {
+          "type": "string",
+          "enum": ["explicit", "inferred", "clarification_needed"],
+          "default": "explicit",
+          "description": "How confident we are in this fact"
+        },
+        "source_turn_id": {
+          "type": "string",
+          "description": "Which turn this was extracted from"
+        },
+        "clarified_by_turn_id": {
+          "type": "string",
+          "description": "Turn that clarified an inferred fact"
+        }
+      }
+    },
+    "ExtractedRequirements": {
+      "type": "object",
+      "description": "Structured summary of all extracted requirements",
+      "properties": {
+        "problem_statement": {
+          "type": "string",
+          "description": "One-paragraph problem description"
+        },
+        "target_users": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "persona": { "type": "string" },
+              "description": { "type": "string" },
+              "technical_level": {
+                "type": "string",
+                "enum": ["non_technical", "technical", "developer"]
+              }
+            }
+          }
+        },
+        "success_criteria": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "criterion": { "type": "string" },
+              "measurable": { "type": "boolean" },
+              "metric": { "type": "string" }
+            }
+          }
+        },
+        "features": {
+          "type": "object",
+          "properties": {
+            "core": {
+              "type": "array",
+              "items": { "$ref": "#/definitions/Feature" },
+              "description": "Must ship in MVP"
+            },
+            "foundational": {
+              "type": "array",
+              "items": { "$ref": "#/definitions/Feature" },
+              "description": "Not in MVP but affects architecture"
+            },
+            "bolt_on": {
+              "type": "array",
+              "items": { "$ref": "#/definitions/Feature" },
+              "description": "Can add later without refactoring"
+            }
+          }
+        },
+        "constraints": {
+          "type": "object",
+          "properties": {
+            "technical": {
+              "type": "array",
+              "items": { "type": "string" }
+            },
+            "performance": {
+              "type": "object",
+              "properties": {
+                "throughput": { "type": "string" },
+                "latency_p50": { "type": "string" },
+                "latency_p99": { "type": "string" },
+                "data_volume": { "type": "string" },
+                "notes": { "type": "string" }
+              }
+            },
+            "security": {
+              "type": "array",
+              "items": { "type": "string" }
+            },
+            "compliance": {
+              "type": "array",
+              "items": { "type": "string" }
+            }
+          }
+        },
+        "preferences": {
+          "type": "object",
+          "properties": {
+            "error_handling": { "type": "string" },
+            "logging": { "type": "string" },
+            "testing": { "type": "string" },
+            "api_style": { "type": "string" },
+            "state_management": { "type": "string" }
+          },
+          "additionalProperties": { "type": "string" }
+        },
+        "integrations": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "name": { "type": "string" },
+              "type": {
+                "type": "string",
+                "enum": ["api", "database", "message_queue", "file_system", "third_party_service"]
+              },
+              "description": { "type": "string" },
+              "required": { "type": "boolean" }
+            }
+          }
+        },
+        "language": {
+          "type": "string",
+          "description": "Chosen implementation language"
+        },
+        "platform": {
+          "type": "string",
+          "description": "Target platform (web, cli, mobile, etc.)"
+        }
+      }
+    },
+    "Feature": {
+      "type": "object",
+      "required": ["id", "name"],
+      "properties": {
+        "id": {
+          "type": "string",
+          "pattern": "^f\\d+$"
+        },
+        "name": {
+          "type": "string"
+        },
+        "description": {
+          "type": "string"
+        },
+        "rationale": {
+          "type": "string",
+          "description": "Why classified in this category"
+        },
+        "source_turn_id": {
+          "type": "string"
+        },
+        "user_stories": {
+          "type": "array",
+          "items": { "type": "string" }
+        }
+      }
+    },
+    "ProposalReference": {
+      "type": "object",
+      "required": ["version", "file_path", "generated_at"],
+      "properties": {
+        "version": {
+          "type": "string",
+          "pattern": "^v\\d+$"
+        },
+        "file_path": {
+          "type": "string"
+        },
+        "generated_at": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "hash": {
+          "type": "string",
+          "description": "SHA256 hash of proposal content"
+        },
+        "feedback_file": {
+          "type": "string",
+          "description": "Path to user feedback (if revision requested)"
+        }
+      }
+    },
+    "ApprovalRecord": {
+      "type": "object",
+      "required": ["proposal_version", "approved_at", "approval_type"],
+      "properties": {
+        "proposal_version": {
+          "type": "string"
+        },
+        "approved_at": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "approval_type": {
+          "type": "string",
+          "enum": ["full", "conditional"],
+          "description": "Full approval or conditional with caveats"
+        },
+        "user_notes": {
+          "type": "string"
+        },
+        "conditions": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Conditions attached to conditional approval"
+        },
+        "proposal_hash": {
+          "type": "string"
+        }
+      }
+    }
+  }
+}

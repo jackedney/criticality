@@ -1,0 +1,148 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://criticality.dev/schemas/ledger.schema.json",
+  "title": "Decision Ledger",
+  "description": "Schema for the Decision Ledger that persists across phase transitions",
+  "type": "object",
+  "required": ["meta", "decisions"],
+  "properties": {
+    "meta": {
+      "type": "object",
+      "required": ["version", "created", "project"],
+      "properties": {
+        "version": {
+          "type": "string",
+          "description": "Schema version",
+          "pattern": "^\\d+\\.\\d+\\.\\d+$"
+        },
+        "created": {
+          "type": "string",
+          "format": "date-time",
+          "description": "When the ledger was created"
+        },
+        "project": {
+          "type": "string",
+          "description": "Project identifier"
+        },
+        "last_modified": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Last modification timestamp"
+        }
+      }
+    },
+    "decisions": {
+      "type": "array",
+      "items": {
+        "$ref": "#/definitions/Decision"
+      },
+      "description": "Ordered list of decisions (append-only)"
+    }
+  },
+  "definitions": {
+    "Decision": {
+      "type": "object",
+      "required": ["id", "timestamp", "category", "constraint", "source", "confidence", "phase"],
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Unique decision identifier",
+          "pattern": "^[a-z_]+_\\d{3}$"
+        },
+        "timestamp": {
+          "type": "string",
+          "format": "date-time",
+          "description": "When the decision was made"
+        },
+        "category": {
+          "type": "string",
+          "enum": [
+            "architectural",
+            "phase_structure",
+            "injection",
+            "ledger",
+            "type_witnesses",
+            "contracts",
+            "models",
+            "blocking",
+            "testing",
+            "orchestrator",
+            "language_support",
+            "data_model",
+            "interface",
+            "constraint",
+            "security"
+          ],
+          "description": "Decision category"
+        },
+        "constraint": {
+          "type": "string",
+          "description": "The actual decision/constraint (WHAT, not WHY)"
+        },
+        "rationale": {
+          "type": "string",
+          "description": "Explanation of why this decision was made"
+        },
+        "source": {
+          "type": "string",
+          "enum": [
+            "user_explicit",
+            "design_principle",
+            "original_design",
+            "discussion",
+            "design_choice",
+            "design_review",
+            "injection_failure",
+            "auditor_contradiction",
+            "composition_audit",
+            "mesoscopic_failure",
+            "human_resolution"
+          ],
+          "description": "Origin of the decision"
+        },
+        "confidence": {
+          "type": "string",
+          "enum": ["canonical", "delegated", "inferred", "provisional", "suspended", "blocking"],
+          "description": "Confidence level determining override rules. 'delegated' for decisions made by Architect on user's behalf."
+        },
+        "status": {
+          "type": "string",
+          "enum": ["active", "superseded", "invalidated"],
+          "default": "active",
+          "description": "Entry status for hybrid append-only model. Entries are never modified, only status changes."
+        },
+        "phase": {
+          "type": "string",
+          "enum": ["design", "ignition", "lattice", "composition_audit", "injection", "mesoscopic", "mass_defect"],
+          "description": "Phase in which the decision was made"
+        },
+        "dependencies": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "IDs of decisions this depends on"
+        },
+        "supersedes": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "IDs of decisions this supersedes"
+        },
+        "superseded_by": {
+          "type": "string",
+          "description": "ID of decision that superseded this one"
+        },
+        "failure_context": {
+          "type": "string",
+          "description": "For inferred decisions: what failure led to this"
+        },
+        "contradiction_resolved": {
+          "type": "string",
+          "description": "For resolved contradictions: explanation"
+        },
+        "human_query_id": {
+          "type": "string",
+          "description": "For human resolutions: the query that prompted this"
+        }
+      }
+    }
+  }
+}

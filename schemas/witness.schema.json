@@ -1,0 +1,233 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://criticality.dev/schemas/witness.schema.json",
+  "title": "Universal Witness Schema",
+  "description": "Language-agnostic type witness definition that compiles to multiple target languages",
+  "type": "object",
+  "required": ["witness"],
+  "properties": {
+    "witness": {
+      "$ref": "#/definitions/WitnessSpec"
+    }
+  },
+  "definitions": {
+    "WitnessSpec": {
+      "type": "object",
+      "required": ["name", "base_type", "invariants"],
+      "properties": {
+        "name": {
+          "type": "string",
+          "description": "Witness type name (PascalCase)",
+          "pattern": "^[A-Z][a-zA-Z0-9]*$"
+        },
+        "description": {
+          "type": "string",
+          "description": "Human-readable description of what this witness represents"
+        },
+        "base_type": {
+          "type": "string",
+          "description": "The underlying type being wrapped (e.g., Decimal, Vec<T>, String)"
+        },
+        "type_params": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/TypeParam"
+          },
+          "description": "Generic type parameters (for parameterized witnesses)"
+        },
+        "invariants": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/Invariant"
+          },
+          "minItems": 1,
+          "description": "Invariants this witness guarantees"
+        },
+        "constructors": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/Constructor"
+          },
+          "description": "Available constructors for creating instances"
+        },
+        "preserving_operations": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/PreservingOperation"
+          },
+          "description": "Operations that preserve the invariants"
+        },
+        "unwrap_operations": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/UnwrapOperation"
+          },
+          "description": "Operations that expose/consume the inner type"
+        },
+        "language_overrides": {
+          "type": "object",
+          "description": "Language-specific overrides",
+          "additionalProperties": {
+            "$ref": "#/definitions/LanguageOverride"
+          }
+        }
+      }
+    },
+    "TypeParam": {
+      "type": "object",
+      "required": ["name"],
+      "properties": {
+        "name": {
+          "type": "string",
+          "description": "Type parameter name (e.g., T, K, V)"
+        },
+        "bounds": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Trait/interface bounds (e.g., Ord, Clone)"
+        },
+        "default": {
+          "type": "string",
+          "description": "Default type if not specified"
+        }
+      }
+    },
+    "Invariant": {
+      "type": "object",
+      "required": ["id", "description"],
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Invariant identifier (snake_case)",
+          "pattern": "^[a-z][a-z0-9_]*$"
+        },
+        "description": {
+          "type": "string",
+          "description": "Human-readable description"
+        },
+        "formal": {
+          "type": "string",
+          "description": "Formal specification (predicate logic)"
+        },
+        "testable": {
+          "type": "boolean",
+          "default": true,
+          "description": "Whether this can be automatically tested"
+        },
+        "optional": {
+          "type": "boolean",
+          "default": false,
+          "description": "Whether this invariant can be omitted in some contexts"
+        }
+      }
+    },
+    "Constructor": {
+      "type": "object",
+      "required": ["name", "trust_level"],
+      "properties": {
+        "name": {
+          "type": "string",
+          "description": "Constructor function name"
+        },
+        "description": {
+          "type": "string"
+        },
+        "params": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Parameter list as 'name: Type' strings"
+        },
+        "precondition": {
+          "type": "string",
+          "description": "What caller must guarantee"
+        },
+        "trust_level": {
+          "type": "string",
+          "enum": ["safe", "unsafe"],
+          "description": "safe = constructor guarantees invariant; unsafe = caller must guarantee"
+        },
+        "side_effect": {
+          "type": "string",
+          "description": "Any side effects (e.g., 'sorts input')"
+        },
+        "complexity": {
+          "type": "string",
+          "description": "Time complexity (e.g., O(n log n))"
+        }
+      }
+    },
+    "PreservingOperation": {
+      "type": "object",
+      "required": ["name", "preserves"],
+      "properties": {
+        "name": {
+          "type": "string",
+          "description": "Operation name"
+        },
+        "description": {
+          "type": "string"
+        },
+        "params": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "returns": {
+          "type": "string"
+        },
+        "preserves": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "IDs of invariants this operation preserves"
+        },
+        "complexity": {
+          "type": "string"
+        }
+      }
+    },
+    "UnwrapOperation": {
+      "type": "object",
+      "required": ["name", "returns"],
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "description": {
+          "type": "string"
+        },
+        "returns": {
+          "type": "string",
+          "description": "The exposed inner type"
+        },
+        "note": {
+          "type": "string",
+          "description": "Warnings about invariant loss"
+        }
+      }
+    },
+    "LanguageOverride": {
+      "type": "object",
+      "description": "Language-specific customizations",
+      "properties": {
+        "type_definition": {
+          "type": "string",
+          "description": "Custom type definition code"
+        },
+        "imports": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Required imports"
+        },
+        "skip_constructors": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Constructor names to skip for this language"
+        },
+        "additional_derives": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Additional derives/traits to implement"
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,231 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://criticality.dev/schemas/question-bank.schema.json",
+  "title": "Interview Question Bank",
+  "description": "Schema for the structured question bank used during Ignition interviews",
+  "type": "object",
+  "required": ["version", "phases"],
+  "properties": {
+    "version": {
+      "type": "string",
+      "description": "Question bank version"
+    },
+    "phases": {
+      "type": "object",
+      "properties": {
+        "discovery": { "$ref": "#/definitions/Phase" },
+        "architecture": { "$ref": "#/definitions/Phase" },
+        "constraints": { "$ref": "#/definitions/Phase" },
+        "design_preferences": { "$ref": "#/definitions/Phase" }
+      },
+      "additionalProperties": { "$ref": "#/definitions/Phase" }
+    }
+  },
+  "definitions": {
+    "Phase": {
+      "type": "object",
+      "properties": {
+        "description": {
+          "type": "string",
+          "description": "What this phase covers"
+        },
+        "required": {
+          "type": "boolean",
+          "default": true,
+          "description": "Whether this phase is required or optional"
+        },
+        "delegation_eligible": {
+          "type": "boolean",
+          "default": false,
+          "description": "Whether user can delegate this entire phase"
+        },
+        "topics": {
+          "type": "object",
+          "additionalProperties": { "$ref": "#/definitions/Topic" }
+        },
+        "phase_summary_template": {
+          "type": "string",
+          "description": "Template for summarizing phase completion"
+        },
+        "delegation_prompt": {
+          "type": "string",
+          "description": "What to say when offering delegation"
+        }
+      }
+    },
+    "Topic": {
+      "type": "object",
+      "required": ["primary"],
+      "properties": {
+        "primary": {
+          "$ref": "#/definitions/Question",
+          "description": "The main question for this topic"
+        },
+        "follow_ups": {
+          "type": "array",
+          "items": { "$ref": "#/definitions/Question" },
+          "description": "Follow-up questions based on response"
+        },
+        "conditional_follow_ups": {
+          "type": "array",
+          "items": { "$ref": "#/definitions/ConditionalQuestion" },
+          "description": "Follow-ups that trigger based on specific responses"
+        },
+        "required": {
+          "type": "boolean",
+          "default": true
+        },
+        "delegation_eligible": {
+          "type": "boolean",
+          "default": false,
+          "description": "Whether this specific topic can be delegated"
+        }
+      }
+    },
+    "Question": {
+      "type": "object",
+      "required": ["id", "text"],
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Unique question identifier"
+        },
+        "text": {
+          "type": "string",
+          "description": "The question text (may include {placeholders})"
+        },
+        "type": {
+          "type": "string",
+          "enum": ["open", "multiple_choice", "confirmation", "rating", "list"],
+          "default": "open"
+        },
+        "options": {
+          "type": "array",
+          "items": { "$ref": "#/definitions/Option" },
+          "description": "Options for multiple_choice questions"
+        },
+        "allows_freeform": {
+          "type": "boolean",
+          "default": true,
+          "description": "Whether freeform response is accepted"
+        },
+        "allows_multiple": {
+          "type": "boolean",
+          "default": false,
+          "description": "Whether multiple options can be selected"
+        },
+        "context": {
+          "type": "string",
+          "description": "Additional context shown with the question"
+        },
+        "examples": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Example responses to guide user"
+        },
+        "extract_as": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "enum": [
+              "problem",
+              "user_persona",
+              "success_criterion",
+              "feature_core",
+              "feature_foundational",
+              "feature_bolt_on",
+              "constraint_technical",
+              "constraint_performance",
+              "constraint_security",
+              "constraint_compliance",
+              "preference",
+              "integration",
+              "language_choice",
+              "platform_choice"
+            ]
+          },
+          "description": "What fact categories responses should be extracted as"
+        },
+        "voice_friendly": {
+          "type": "boolean",
+          "default": true,
+          "description": "Whether this question works well in voice mode"
+        },
+        "voice_alternative": {
+          "type": "string",
+          "description": "Alternative phrasing for voice mode"
+        }
+      }
+    },
+    "ConditionalQuestion": {
+      "type": "object",
+      "required": ["condition", "question"],
+      "properties": {
+        "condition": {
+          "$ref": "#/definitions/Condition",
+          "description": "When to ask this question"
+        },
+        "question": {
+          "$ref": "#/definitions/Question"
+        }
+      }
+    },
+    "Condition": {
+      "type": "object",
+      "properties": {
+        "previous_question_id": {
+          "type": "string",
+          "description": "ID of question whose response triggers this"
+        },
+        "selected_option": {
+          "type": "string",
+          "description": "Specific option that triggers this"
+        },
+        "response_contains": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Keywords in freeform response that trigger this"
+        },
+        "fact_exists": {
+          "type": "string",
+          "description": "Fact category that must exist"
+        },
+        "fact_missing": {
+          "type": "string",
+          "description": "Fact category that must not exist"
+        }
+      }
+    },
+    "Option": {
+      "type": "object",
+      "required": ["id", "text"],
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "text": {
+          "type": "string"
+        },
+        "description": {
+          "type": "string",
+          "description": "Additional context for this option"
+        },
+        "implies_facts": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "category": { "type": "string" },
+              "content": { "type": "string" }
+            }
+          },
+          "description": "Facts automatically extracted if this option is selected"
+        },
+        "triggers_follow_up": {
+          "type": "string",
+          "description": "Question ID to ask if this is selected"
+        }
+      }
+    }
+  }
+}

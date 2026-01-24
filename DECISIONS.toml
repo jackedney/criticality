@@ -1,0 +1,1201 @@
+# Criticality Protocol - Decision Ledger
+#
+# This file records all validated decisions made during protocol design.
+# It serves as the canonical source of truth for design choices.
+#
+# Confidence Levels:
+#   canonical  - User/team confirmed, only human can override
+#   inferred   - Derived from analysis, can be revised
+#   provisional - Tentative, dropped on failure
+#   suspended  - Dependent on invalidated decision
+#   blocking   - Unresolved, protocol halted
+
+[meta]
+version = "0.1.0"
+created = "2025-01-23T00:00:00Z"
+project = "criticality-protocol"
+
+# =============================================================================
+# ARCHITECTURAL DECISIONS
+# =============================================================================
+
+[[decisions]]
+id = "arch_001"
+timestamp = "2025-01-23T00:00:00Z"
+category = "architectural"
+constraint = "Protocol uses irreversible phase transitions with context destruction at boundaries"
+rationale = """
+LLM reliability degrades with accumulated heterogeneous context. By enforcing
+context shedding at phase boundaries, we prevent entropy accumulation and
+ensure each phase starts with clean, structured inputs only.
+"""
+source = "design_principle"
+confidence = "canonical"
+phase = "design"
+dependencies = []
+
+[[decisions]]
+id = "arch_002"
+timestamp = "2025-01-23T00:00:00Z"
+category = "architectural"
+constraint = "System must remain compilable from Phase II (Lattice) onward"
+rationale = """
+The 'structural criticality' invariant constrains the search space and provides
+immediate feedback on structural errors. The compiler becomes a governing oracle
+rather than a debugging aid.
+"""
+source = "design_principle"
+confidence = "canonical"
+phase = "design"
+dependencies = []
+
+[[decisions]]
+id = "arch_003"
+timestamp = "2025-01-23T00:00:00Z"
+category = "architectural"
+constraint = "Only structured artifacts pass between phases, never conversation history"
+rationale = """
+Artifacts (spec.toml, code, contracts) are well-defined and parseable.
+Conversation history contains reasoning traces that should not influence
+subsequent phases.
+"""
+source = "design_principle"
+confidence = "canonical"
+phase = "design"
+dependencies = ["arch_001"]
+
+[[decisions]]
+id = "arch_004"
+timestamp = "2025-01-23T00:00:00Z"
+category = "architectural"
+constraint = "Composition Audit phase inserted between Lattice and Injection"
+rationale = """
+Logical contradictions should be detected before wasting compute on
+implementation. This is a reasoning task that catches impossible compositions
+early.
+"""
+source = "discussion"
+confidence = "canonical"
+phase = "design"
+dependencies = ["arch_001"]
+
+# =============================================================================
+# PHASE STRUCTURE DECISIONS
+# =============================================================================
+
+[[decisions]]
+id = "phase_001"
+timestamp = "2025-01-23T00:00:00Z"
+category = "phase_structure"
+constraint = "Protocol has 4 primary phases: Ignition, Lattice, Injection, Mass Defect"
+rationale = """
+Each phase has distinct responsibilities:
+- Ignition: Specification interrogation
+- Lattice: Structural skeleton generation
+- Injection: Atomic stateless implementation
+- Mass Defect: Code reduction and refinement
+"""
+source = "original_design"
+confidence = "canonical"
+phase = "design"
+dependencies = []
+
+[[decisions]]
+id = "phase_002"
+timestamp = "2025-01-23T00:00:00Z"
+category = "phase_structure"
+constraint = "Mesoscopic Verification (Phase III.5) is recommended but optional"
+rationale = """
+Cross-module integration testing catches non-local errors. It operates on
+spec compliance, not implementation details, maintaining statelessness.
+"""
+source = "discussion"
+confidence = "canonical"
+phase = "design"
+dependencies = ["phase_001"]
+
+# =============================================================================
+# INJECTION PHASE DECISIONS
+# =============================================================================
+
+[[decisions]]
+id = "inject_001"
+timestamp = "2025-01-23T00:00:00Z"
+category = "injection"
+constraint = "Each function implementation receives only: signature, contracts, required types"
+rationale = """
+Minimal context prevents hallucination loops. The model cannot reference
+prior failed attempts because they are not provided.
+"""
+source = "design_principle"
+confidence = "canonical"
+phase = "design"
+dependencies = ["arch_001"]
+
+[[decisions]]
+id = "inject_002"
+timestamp = "2025-01-23T00:00:00Z"
+category = "injection"
+constraint = "Failed implementations are discarded, not debugged"
+rationale = """
+Debugging creates conversational loops that accumulate context. Starting
+fresh with the same minimal context is more reliable.
+"""
+source = "design_principle"
+confidence = "canonical"
+phase = "design"
+dependencies = ["inject_001"]
+
+[[decisions]]
+id = "inject_003"
+timestamp = "2025-01-23T00:00:00Z"
+category = "injection"
+constraint = "Escalation chain: MiniMax M2 -> Sonnet 4.5 -> Opus 4.5 -> Human"
+rationale = """
+Start with cheapest capable model. Escalate on failure. This optimizes
+cost while ensuring capability is available when needed.
+"""
+source = "discussion"
+confidence = "canonical"
+phase = "design"
+dependencies = []
+
+# =============================================================================
+# DECISION LEDGER DECISIONS
+# =============================================================================
+
+[[decisions]]
+id = "ledger_001"
+timestamp = "2025-01-23T00:00:00Z"
+category = "ledger"
+constraint = "Decision Ledger is append-only with explicit override operations"
+rationale = """
+Append-only ensures auditability. Overrides are explicit operations that
+create new entries rather than modifying history.
+"""
+source = "discussion"
+confidence = "canonical"
+phase = "design"
+dependencies = []
+
+[[decisions]]
+id = "ledger_002"
+timestamp = "2025-01-23T00:00:00Z"
+category = "ledger"
+constraint = "Ledger records WHAT was decided, not HOW it was reasoned"
+rationale = """
+Preserving reasoning traces would violate context shedding. Only the
+constraint itself and its source are preserved.
+"""
+source = "discussion"
+confidence = "canonical"
+phase = "design"
+dependencies = ["arch_001", "ledger_001"]
+
+[[decisions]]
+id = "ledger_003"
+timestamp = "2025-01-23T00:00:00Z"
+category = "ledger"
+constraint = "Canonical conflicts require human intervention and block the protocol"
+rationale = """
+Two user-confirmed decisions that contradict represent a specification
+error that no amount of automated reasoning can resolve. The protocol
+must halt until a human resolves the conflict.
+"""
+source = "discussion"
+confidence = "canonical"
+phase = "design"
+dependencies = ["ledger_001"]
+
+# =============================================================================
+# TYPE WITNESS DECISIONS
+# =============================================================================
+
+[[decisions]]
+id = "witness_001"
+timestamp = "2025-01-23T00:00:00Z"
+category = "type_witnesses"
+constraint = "Type witnesses use universal schema with language-specific generators"
+rationale = """
+Invariants should be defined once in a language-agnostic way. Each target
+language gets maximally expressive encoding, degrading gracefully where
+the type system is weaker.
+"""
+source = "discussion"
+confidence = "canonical"
+phase = "design"
+dependencies = []
+
+[[decisions]]
+id = "witness_002"
+timestamp = "2025-01-23T00:00:00Z"
+category = "type_witnesses"
+constraint = "Verification tiers: Compile-proof > Compile-distinction > Runtime > Doc-only"
+rationale = """
+Different languages have different type system capabilities. The tier
+system allows us to generate the strongest possible encoding for each
+language while maintaining semantic consistency.
+"""
+source = "discussion"
+confidence = "canonical"
+phase = "design"
+dependencies = ["witness_001"]
+
+# =============================================================================
+# MICRO-CONTRACT DECISIONS
+# =============================================================================
+
+[[decisions]]
+id = "contract_001"
+timestamp = "2025-01-23T00:00:00Z"
+category = "contracts"
+constraint = "Micro-contracts attached to all todo!() sites during Lattice phase"
+rationale = """
+Contracts provide semantic guidance to the Injection phase without
+accumulating conversational context. They are declarative (what, not how)
+and local (attached to the function).
+"""
+source = "discussion"
+confidence = "canonical"
+phase = "design"
+dependencies = []
+
+[[decisions]]
+id = "contract_002"
+timestamp = "2025-01-23T00:00:00Z"
+category = "contracts"
+constraint = "Contract grammar: REQUIRES, ENSURES, INVARIANT, COMPLEXITY, PURITY"
+rationale = """
+These categories cover the essential semantic constraints:
+- REQUIRES: Preconditions
+- ENSURES: Postconditions
+- INVARIANT: Properties that must hold
+- COMPLEXITY: Performance requirements
+- PURITY: Side effect classification
+"""
+source = "discussion"
+confidence = "canonical"
+phase = "design"
+dependencies = ["contract_001"]
+
+# =============================================================================
+# MODEL ALLOCATION DECISIONS
+# =============================================================================
+
+[[decisions]]
+id = "model_001"
+timestamp = "2025-01-23T00:00:00Z"
+category = "models"
+constraint = "Claude Opus 4.5 for high-level architecture and complex reasoning"
+rationale = """
+Opus has the strongest reasoning capabilities. Used for Ignition (user
+interaction, spec synthesis) and as final fallback in Injection.
+"""
+source = "discussion"
+confidence = "canonical"
+phase = "design"
+dependencies = []
+
+[[decisions]]
+id = "model_002"
+timestamp = "2025-01-23T00:00:00Z"
+category = "models"
+constraint = "Kimi K2 on Groq for fast logical consistency auditing"
+rationale = """
+Kimi K2 has strong formal reasoning capabilities. Running on Groq provides
+the speed needed for rapid audit loops.
+"""
+source = "discussion"
+confidence = "canonical"
+phase = "design"
+dependencies = []
+
+[[decisions]]
+id = "model_003"
+timestamp = "2025-01-23T00:00:00Z"
+category = "models"
+constraint = "MiniMax M2 on Cerebras as primary Injection worker"
+rationale = """
+Most function implementations are straightforward. MiniMax provides
+sufficient capability at much lower cost and higher speed than Sonnet/Opus.
+"""
+source = "discussion"
+confidence = "canonical"
+phase = "design"
+dependencies = []
+
+[[decisions]]
+id = "model_004"
+timestamp = "2025-01-23T00:00:00Z"
+category = "models"
+constraint = "Claude Sonnet 4.5 for structure generation and as first fallback"
+rationale = """
+Sonnet balances capability and cost. Good for Lattice generation and
+as intermediate escalation target between MiniMax and Opus.
+"""
+source = "discussion"
+confidence = "canonical"
+phase = "design"
+dependencies = []
+
+# =============================================================================
+# BLOCKING AND HUMAN INTERVENTION DECISIONS
+# =============================================================================
+
+[[decisions]]
+id = "block_001"
+timestamp = "2025-01-23T00:00:00Z"
+category = "blocking"
+constraint = "Protocol enters BLOCKED state on canonical conflicts, halting all phases"
+rationale = """
+True blocking means nothing proceeds while waiting. No 'let me try
+something else' or 'I'll make a guess'. The system waits for human input.
+"""
+source = "discussion"
+confidence = "canonical"
+phase = "design"
+dependencies = ["ledger_003"]
+
+[[decisions]]
+id = "block_002"
+timestamp = "2025-01-23T00:00:00Z"
+category = "blocking"
+constraint = "Blocked state must be persistable and resumable across restarts"
+rationale = """
+Blocks can last days or weeks (waiting for human). State must survive
+process restarts and system reboots.
+"""
+source = "discussion"
+confidence = "canonical"
+phase = "design"
+dependencies = ["block_001"]
+
+[[decisions]]
+id = "block_003"
+timestamp = "2025-01-23T00:00:00Z"
+category = "blocking"
+constraint = "When resuming from block, only ledger decisions persist, not prior context"
+rationale = """
+Consistent with context shedding principle. The human's resolution is
+recorded in the ledger; no other context from before the block is restored.
+"""
+source = "discussion"
+confidence = "canonical"
+phase = "design"
+dependencies = ["block_001", "arch_001"]
+
+# =============================================================================
+# PROPERTY TESTING DECISIONS
+# =============================================================================
+
+[[decisions]]
+id = "test_001"
+timestamp = "2025-01-23T00:00:00Z"
+category = "testing"
+constraint = "Property tests are generated from spec claims, not implementation details"
+rationale = """
+Mesoscopic verification tests spec compliance. The verifier receives
+public interfaces and spec claims, not implementation bodies.
+"""
+source = "discussion"
+confidence = "canonical"
+phase = "design"
+dependencies = ["phase_002"]
+
+[[decisions]]
+id = "test_002"
+timestamp = "2025-01-23T00:00:00Z"
+category = "testing"
+constraint = "Claim types: Invariant, Behavioral, Negative, Temporal, Concurrent, Performance"
+rationale = """
+These categories cover the common patterns of testable claims and map
+cleanly to different testing strategies.
+"""
+source = "discussion"
+confidence = "canonical"
+phase = "design"
+dependencies = ["test_001"]
+
+[[decisions]]
+id = "test_003"
+timestamp = "2025-01-23T00:00:00Z"
+category = "testing"
+constraint = "Failed clusters are re-injected wholesale, not debugged"
+rationale = """
+Consistent with stateless execution principle. If a cluster fails
+mesoscopic verification, all its functions are re-injected fresh.
+"""
+source = "discussion"
+confidence = "canonical"
+phase = "design"
+dependencies = ["inject_002", "test_001"]
+
+# =============================================================================
+# ORCHESTRATOR DECISIONS
+# =============================================================================
+
+[[decisions]]
+id = "orch_001"
+timestamp = "2025-01-23T00:00:00Z"
+category = "orchestrator"
+constraint = "Orchestrator is deterministic and performs no reasoning"
+rationale = """
+The orchestrator is a state machine, not an agent. It executes transitions
+based on artifact contents and verification results, never on judgment.
+"""
+source = "original_design"
+confidence = "canonical"
+phase = "design"
+dependencies = []
+
+[[decisions]]
+id = "orch_002"
+timestamp = "2025-01-23T00:00:00Z"
+category = "orchestrator"
+constraint = "AST operations used for code injection rather than string manipulation"
+rationale = """
+AST-based injection (via syn/quote for Rust, ts-morph for TypeScript)
+is more reliable than string manipulation and enables structural validation.
+"""
+source = "discussion"
+confidence = "canonical"
+phase = "design"
+dependencies = ["orch_001"]
+
+# =============================================================================
+# LANGUAGE SUPPORT DECISIONS
+# =============================================================================
+
+[[decisions]]
+id = "lang_001"
+timestamp = "2025-01-24T00:00:00Z"
+category = "implementation"
+constraint = "Orchestrator implemented in TypeScript"
+rationale = """
+TypeScript chosen for the orchestrator implementation because:
+- Excellent LLM SDK ecosystem (Anthropic, OpenAI SDKs are TS-first)
+- Native JSON handling, good TOML parsing
+- Easy GUI integration path (Electron/web-based)
+- Web Speech API for future voice agent support
+- Fast development iteration during design phase
+- The orchestrator is I/O-bound (waiting on LLM APIs), not CPU-bound,
+  so TypeScript's performance characteristics are well-suited.
+"""
+source = "discussion"
+confidence = "canonical"
+phase = "design"
+dependencies = []
+supersedes = ["lang_001_old"]
+
+[[decisions]]
+id = "lang_002"
+timestamp = "2025-01-23T00:00:00Z"
+category = "target_languages"
+constraint = "Rust as Tier 1 (full support) target language for generated code"
+rationale = """
+Rust has strong type system (enabling Tier 1-2 witnesses), excellent
+tooling (cargo, clippy, rustfmt). The orchestrator shells out to a
+Rust helper binary for Rust-specific AST operations.
+"""
+source = "design_choice"
+confidence = "canonical"
+phase = "design"
+dependencies = []
+
+[[decisions]]
+id = "lang_003"
+timestamp = "2025-01-23T00:00:00Z"
+category = "target_languages"
+constraint = "TypeScript, Python, Go as Tier 2 (strong support) target languages"
+rationale = """
+These languages have sufficient type systems and testing frameworks
+to support the protocol, though with weaker type witnesses than Rust.
+TypeScript also serves as the first target language since the orchestrator
+is written in TypeScript, allowing shared tooling.
+"""
+source = "discussion"
+confidence = "canonical"
+phase = "design"
+dependencies = []
+
+# =============================================================================
+# DESIGN REVIEW RESOLUTIONS (2025-01-24)
+# =============================================================================
+
+# --- C1: Ledger Append-Only vs Override Operations ---
+[[decisions]]
+id = "ledger_004"
+timestamp = "2025-01-24T00:00:00Z"
+category = "ledger"
+constraint = "Ledger uses hybrid append-only model: entries are never modified, but status field marks entries as active/superseded/invalidated"
+rationale = """
+Maintains true append-only invariant for auditability while supporting logical
+overrides. 'Override' operation renamed to 'supersede' for clarity. New entries
+explicitly link to what they replace via supersedes field.
+"""
+source = "design_review"
+confidence = "canonical"
+phase = "design"
+dependencies = ["ledger_001"]
+
+# --- C2: Context Shedding vs Rationale Preservation ---
+[[decisions]]
+id = "ledger_005"
+timestamp = "2025-01-24T00:00:00Z"
+category = "ledger"
+constraint = "Rationale field is for human audit only - NEVER included in LLM prompts; only constraint text is fed to subsequent phases"
+rationale = """
+Rationale serves human auditors and future maintainers. The key invariant is
+that LLM prompts receive only the constraint text, never the rationale. This
+preserves context shedding while maintaining audit trail.
+"""
+source = "design_review"
+confidence = "canonical"
+phase = "design"
+dependencies = ["ledger_002", "arch_001"]
+
+# --- C3: Mesoscopic Verification Mandatory ---
+[[decisions]]
+id = "phase_003"
+timestamp = "2025-01-24T00:00:00Z"
+category = "phase_structure"
+constraint = "Mesoscopic Verification (Phase III.5) is mandatory for all projects"
+rationale = """
+Integration testing catches non-local errors that span multiple functions or
+modules. Making it mandatory ensures consistent quality guarantees and simplifies
+the phase transition model. Single-module projects still benefit from spec
+compliance verification.
+"""
+source = "design_review"
+confidence = "canonical"
+phase = "design"
+dependencies = ["phase_001"]
+supersedes = ["phase_002"]
+
+# --- C4: Descriptive Names for Verification/Support Tiers ---
+[[decisions]]
+id = "witness_003"
+timestamp = "2025-01-24T00:00:00Z"
+category = "type_witnesses"
+constraint = "Witness verification levels use descriptive names: proof, distinction, runtime, doc; Language support tiers use: full, strong, basic"
+rationale = """
+Numbers are confusing when two different hierarchies exist. Descriptive names
+make the distinction obvious without requiring readers to remember which
+'tier 2' is which. Witness levels describe verification strength; support tiers
+describe tooling completeness.
+"""
+source = "design_review"
+confidence = "canonical"
+phase = "design"
+dependencies = ["witness_002"]
+
+# --- C5: Witness Schema Field Simplification ---
+[[decisions]]
+id = "witness_004"
+timestamp = "2025-01-24T00:00:00Z"
+category = "type_witnesses"
+constraint = "Witness schema uses simplified base_type string field with optional type_params array for generics"
+rationale = """
+Aligns all schemas (spec.schema.json, witness.schema.json, examples) to use
+consistent structure. Keeps TOML simple while supporting complex cases via
+type_params array at same level.
+"""
+source = "design_review"
+confidence = "canonical"
+phase = "design"
+dependencies = ["witness_001"]
+
+# --- C6: Hybrid Circuit Breaker ---
+[[decisions]]
+id = "inject_004"
+timestamp = "2025-01-24T00:00:00Z"
+category = "injection"
+constraint = "Circuit breaker uses hybrid conditions: break if (all tiers exhausted) OR (max attempts exceeded), with require_opus_attempt=true"
+rationale = """
+Hybrid approach provides safety bounds while ensuring capable models get a
+chance. Hard cap on attempts prevents runaway costs; requiring Opus attempt
+ensures we don't give up before trying the most capable model.
+"""
+source = "design_review"
+confidence = "canonical"
+phase = "design"
+dependencies = ["inject_003"]
+
+# --- U1: Phase Boundary Artifact Archival ---
+[[decisions]]
+id = "arch_005"
+timestamp = "2025-01-24T00:00:00Z"
+category = "architectural"
+constraint = "Completed phase artifacts are archived (not destroyed); archived data is NEVER fed back into LLM prompts"
+rationale = """
+Archive for audit purposes while maintaining context shedding. Interview
+transcripts, proposals, and failed Lattice code move to archive/ directory.
+The key invariant is isolation: archived data is for human review only.
+"""
+source = "design_review"
+confidence = "canonical"
+phase = "design"
+dependencies = ["arch_001"]
+
+# --- U2: Composition Audit Failure Targeted Revision ---
+[[decisions]]
+id = "arch_006"
+timestamp = "2025-01-24T00:00:00Z"
+category = "architectural"
+constraint = "Composition Audit failures trigger targeted revision: return to relevant interview phase, present contradiction, preserve unaffected spec portions"
+rationale = """
+Efficient handling of contradictions without discarding valid work. Simple
+contradictions (single constraint conflict) get targeted revision. Complex
+contradictions (multiple interacting constraints) may still enter BLOCKED
+state for human guidance.
+"""
+source = "design_review"
+confidence = "canonical"
+phase = "design"
+dependencies = ["arch_004", "block_001"]
+
+# --- U3: Orchestrator Classification vs Reasoning ---
+[[decisions]]
+id = "orch_003"
+timestamp = "2025-01-24T00:00:00Z"
+category = "orchestrator"
+constraint = "Orchestrator performs CLASSIFICATION (deterministic mapping to predefined categories) but not REASONING (creative problem-solving, multi-step inference)"
+rationale = """
+Clarifies the 'no reasoning' boundary. Classification can use heuristics or
+even an LLM as long as output is a discrete category from a fixed set.
+Reasoning involves creative problem-solving and chain-of-thought that the
+orchestrator must not perform.
+"""
+source = "design_review"
+confidence = "canonical"
+phase = "design"
+dependencies = ["orch_001"]
+
+# --- U4: CLI Resume Model for Blocking ---
+[[decisions]]
+id = "block_004"
+timestamp = "2025-01-24T00:00:00Z"
+category = "blocking"
+constraint = "On block: persist state, send one-time notification, exit process; human runs 'criticality status' or 'criticality resume' when ready"
+rationale = """
+Keeps orchestrator simple with no daemon mode. Fire-and-forget notifications
+(Slack/email) alert human to block. State machine nature preserved - process
+exits cleanly and resumes from persisted state.
+"""
+source = "design_review"
+confidence = "canonical"
+phase = "design"
+dependencies = ["block_002"]
+
+# --- U5: Delegated Confidence Level ---
+[[decisions]]
+id = "ledger_006"
+timestamp = "2025-01-24T00:00:00Z"
+category = "ledger"
+constraint = "New confidence level 'delegated' for decisions made by Architect on user's behalf during interview delegation"
+rationale = """
+Accurately represents situation where user authorized Architect to decide but
+hasn't explicitly confirmed each decision. Delegated decisions are treated as
+canonical unless they cause failures, at which point they can be revised.
+"""
+source = "design_review"
+confidence = "canonical"
+phase = "design"
+dependencies = ["ledger_001"]
+
+# --- U6: Conditional Approval as Ledger Entries ---
+[[decisions]]
+id = "phase_004"
+timestamp = "2025-01-24T00:00:00Z"
+category = "phase_structure"
+constraint = "Conditional approval proceeds to Lattice; conditions recorded as provisional ledger entries validated during Composition Audit"
+rationale = """
+Non-blocking approach to conditional approval. Conditions become provisional
+constraints that are verified during normal audit flow. If violated, triggers
+appropriate failure path without special handling.
+"""
+source = "design_review"
+confidence = "canonical"
+phase = "design"
+dependencies = ["ledger_001", "phase_001"]
+
+# --- U7: Model Role Aliases ---
+[[decisions]]
+id = "model_005"
+timestamp = "2025-01-24T00:00:00Z"
+category = "models"
+constraint = "Decisions reference role-based aliases (architect_model, auditor_model, worker_model); configuration maps aliases to actual models"
+rationale = """
+Allows model updates without touching the ledger. As new models emerge,
+configuration file changes suffice. Ledger decisions specify capability
+requirements via roles, not specific model names.
+"""
+source = "design_review"
+confidence = "canonical"
+phase = "design"
+dependencies = ["model_001", "model_002", "model_003", "model_004"]
+
+# --- G1: Enum Section in Spec Schema ---
+[[decisions]]
+id = "spec_001"
+timestamp = "2025-01-24T00:00:00Z"
+category = "data_model"
+constraint = "Spec schema includes dedicated 'enums' section for simple enumeration types"
+rationale = """
+Addresses gap where AccountStatus, TransactionStatus types were referenced
+but not definable. Simple structure: name and list of variants. Complex
+discriminated unions deferred to future work.
+"""
+source = "design_review"
+confidence = "canonical"
+phase = "design"
+dependencies = []
+
+# --- G2: Single-Language v1 Limitation ---
+[[decisions]]
+id = "lang_004"
+timestamp = "2025-01-24T00:00:00Z"
+category = "language_support"
+constraint = "Protocol v1 assumes single-language projects; multi-language support deferred to Phase 7"
+rationale = """
+Multi-language compilation oracle is complex. Current protocol assumes single
+language with single compiler as oracle. Multi-language support (cross-language
+type mapping, unified spec, FFI generation) is explicitly future work.
+"""
+source = "design_review"
+confidence = "canonical"
+phase = "design"
+dependencies = ["arch_002"]
+
+# --- G3: Ralph Wiggum Loop Documentation ---
+[[decisions]]
+id = "inject_005"
+timestamp = "2025-01-24T00:00:00Z"
+category = "injection"
+constraint = "Ralph Loop named after 'Ralph Wiggum Loop' pattern: persistent iteration despite setbacks, inspired by awesomeclaude.ai methodology"
+rationale = """
+The Ralph Wiggum technique is an iterative AI development methodology where
+a prompt is repeatedly fed to an agent until task completion. Named after
+The Simpsons character embodying 'persistent iteration despite setbacks'.
+The pattern prioritizes 'Iteration > Perfection' - failures provide predictable,
+informative data, and persistence handles retry logic automatically.
+Reference: https://awesomeclaude.ai/ralph-wiggum
+"""
+source = "design_review"
+confidence = "canonical"
+phase = "design"
+dependencies = ["inject_002"]
+
+# =============================================================================
+# ORCHESTRATOR STATE MACHINE SPECIFICATION (2025-01-24)
+# =============================================================================
+
+[[decisions]]
+id = "orch_004"
+timestamp = "2025-01-24T00:00:00Z"
+category = "orchestrator"
+constraint = "Orchestrator uses hierarchical state machine: top-level (blocked/active/completed) with phase-specific sub-states for precise checkpointing"
+rationale = """
+Hierarchical structure enables:
+- Precise checkpoint/resume from any point
+- Clear notification points
+- Testable state transitions
+Each phase has 2-4 sub-states representing distinct operational modes.
+"""
+source = "design"
+confidence = "canonical"
+phase = "design"
+dependencies = ["orch_001"]
+
+[[decisions]]
+id = "orch_005"
+timestamp = "2025-01-24T00:00:00Z"
+category = "orchestrator"
+constraint = "State transitions defined as (from, to, guard, action) tuples with composable guards (and/or/not) and sequenceable actions"
+rationale = """
+Formal transition definitions enable:
+- Deterministic behavior verification
+- Complete transition coverage testing
+- Clear documentation of all possible paths
+Guards evaluate conditions; actions execute side effects.
+"""
+source = "design"
+confidence = "canonical"
+phase = "design"
+dependencies = ["orch_004"]
+
+[[decisions]]
+id = "orch_006"
+timestamp = "2025-01-24T00:00:00Z"
+category = "orchestrator"
+constraint = "Orchestrator executes as tick loop: each tick evaluates guards, executes one transition, persists state"
+rationale = """
+Tick-based execution provides:
+- Determinism (same state + artifacts = same transition)
+- Resumability (persist after every transition)
+- Testability (mock external operations)
+Async operations (model calls, compilation, tests) complete between ticks.
+"""
+source = "design"
+confidence = "canonical"
+phase = "design"
+dependencies = ["orch_004", "orch_005"]
+
+[[decisions]]
+id = "orch_007"
+timestamp = "2025-01-24T00:00:00Z"
+category = "orchestrator"
+constraint = "State persistence uses atomic write pattern (temp file + rename) with version field for migrations"
+rationale = """
+Atomic writes prevent corruption on crash. Version field enables
+forward-compatible schema evolution. No LLM conversation history
+is ever persisted (context isolation invariant).
+"""
+source = "design"
+confidence = "canonical"
+phase = "design"
+dependencies = ["orch_006", "block_002"]
+
+[[decisions]]
+id = "orch_008"
+timestamp = "2025-01-24T00:00:00Z"
+category = "orchestrator"
+constraint = "CLI provides three commands: 'status' (read-only), 'resume' (continue execution), 'resolve' (answer blocking query)"
+rationale = """
+Minimal CLI surface for human interaction. Status is always safe
+to run. Resume continues from persisted state. Resolve stores
+human response for next resume cycle.
+"""
+source = "design"
+confidence = "canonical"
+phase = "design"
+dependencies = ["orch_006", "block_004"]
+
+# =============================================================================
+# MODEL ROUTING DECISIONS (2025-01-24)
+# =============================================================================
+
+[[decisions]]
+id = "routing_001"
+timestamp = "2025-01-24T00:00:00Z"
+category = "model_routing"
+constraint = "Model routing uses deterministic rules based on measurable signals; no LLM reasoning for routing decisions"
+rationale = """
+The orchestrator must remain deterministic. Routing decisions are based on
+static signals (token count, signature complexity) that can be computed
+without LLM involvement. This maintains the 'classification not reasoning'
+principle.
+"""
+source = "design"
+confidence = "canonical"
+phase = "design"
+dependencies = ["orch_001", "orch_003"]
+
+[[decisions]]
+id = "routing_002"
+timestamp = "2025-01-24T00:00:00Z"
+category = "model_routing"
+constraint = "Conservative pre-emption: upgrade model only on strong signals (context > 12k tokens OR signature complexity > 5)"
+rationale = """
+Balances cost optimization with avoiding wasted attempts. Most tasks succeed
+with cheap models; pre-emption only triggers when failure is very likely.
+Two signals chosen: context size (hard limit) and signature complexity
+(proven predictor of implementation difficulty).
+"""
+source = "design"
+confidence = "canonical"
+phase = "design"
+dependencies = ["routing_001"]
+
+[[decisions]]
+id = "routing_003"
+timestamp = "2025-01-24T00:00:00Z"
+category = "model_routing"
+constraint = "Two routing paths: Claude models via Claude Code, other models via OpenCode/OpenRouter"
+rationale = """
+Claude Code provides native integration for Anthropic models with best tooling.
+OpenRouter via OpenCode provides single API for all non-Anthropic models
+(MiniMax, Kimi K2) with internal provider failover handling.
+"""
+source = "design"
+confidence = "canonical"
+phase = "design"
+dependencies = ["routing_001"]
+
+[[decisions]]
+id = "routing_004"
+timestamp = "2025-01-24T00:00:00Z"
+category = "model_routing"
+constraint = "Context overflow handling: truncate (mild), upgrade (moderate), reject (severe); chunking allowed only for audit tasks"
+rationale = """
+Deterministic overflow strategies based on severity. Truncation follows
+fixed priority order (comments first, signature/contracts never).
+Chunking only for audits because implementation tasks require coherent
+full context. Severe overflow (exceeds largest model) triggers BLOCK.
+"""
+source = "design"
+confidence = "canonical"
+phase = "design"
+dependencies = ["routing_001"]
+
+[[decisions]]
+id = "telemetry_001"
+timestamp = "2025-01-24T00:00:00Z"
+category = "observability"
+constraint = "Telemetry emitted as JSON summary (telemetry.json) and append-only JSONL event log (events.jsonl)"
+rationale = """
+Two-file approach: summary for dashboards/quick checks, event log for
+debugging and replay. JSONL format enables streaming writes and easy
+grep-based analysis. Events cover model calls, phase transitions,
+escalations, and blocks.
+"""
+source = "design"
+confidence = "canonical"
+phase = "design"
+dependencies = ["orch_001"]
+
+[[decisions]]
+id = "metrics_001"
+timestamp = "2025-01-24T00:00:00Z"
+category = "metrics"
+constraint = "Success metrics defined across four categories: correctness (100% compile, 95% tests), efficiency (<10% Sonnet escalation, <1% Opus), reliability (95% recovery, <5% human intervention), quality (<10 cyclomatic, >80% coverage)"
+rationale = """
+Concrete targets enable objective evaluation of protocol effectiveness.
+Correctness targets are hard requirements; efficiency and quality targets
+are optimization goals. Metrics tracked via telemetry and compared against
+benchmark suite over time.
+"""
+source = "design"
+confidence = "canonical"
+phase = "design"
+dependencies = ["telemetry_001"]
+
+# =============================================================================
+# DESIGN REVIEW RESOLUTIONS - PART B (2025-01-24)
+# =============================================================================
+
+# --- C1: Witness Schema Flattening ---
+[[decisions]]
+id = "witness_005"
+timestamp = "2025-01-24T12:00:00Z"
+category = "type_witnesses"
+constraint = "Witness schema uses flat base_type string (not nested base object); type_params array at top level for generics"
+rationale = """
+Ensures consistency between standalone witness files (witness.schema.json) and
+inline witnesses in spec files (spec.schema.json). Simpler structure for common
+cases while still supporting generics via optional type_params array.
+"""
+source = "design_review_b"
+confidence = "canonical"
+phase = "design"
+dependencies = ["witness_001", "witness_004"]
+
+# --- C2: Model Role Alias Migration ---
+[[decisions]]
+id = "model_006"
+timestamp = "2025-01-24T12:00:00Z"
+category = "models"
+constraint = "All documentation uses role-based aliases exclusively; specific model names appear only in configuration files"
+rationale = """
+Full migration to role aliases (architect_model, auditor_model, worker_model,
+fallback_model) ensures documentation remains accurate as models evolve.
+Configuration file maps aliases to current model selections.
+"""
+source = "design_review_b"
+confidence = "canonical"
+phase = "design"
+dependencies = ["model_005"]
+
+# --- C3: Semantic Phase Names ---
+[[decisions]]
+id = "phase_005"
+timestamp = "2025-01-24T12:00:00Z"
+category = "phase_structure"
+constraint = "Phases referenced by semantic name only (Ignition, Lattice, Composition Audit, Injection, Mesoscopic, Mass Defect); phase numbers deprecated"
+rationale = """
+Removes numbering conflicts and ambiguity. Names are more memorable and
+flexible for future changes. All phases (including verification stages)
+treated equally in documentation.
+"""
+source = "design_review_b"
+confidence = "canonical"
+phase = "design"
+dependencies = ["phase_001"]
+
+# --- U1: Context Shedding Terminology ---
+[[decisions]]
+id = "arch_007"
+timestamp = "2025-01-24T12:00:00Z"
+category = "architectural"
+constraint = "Use 'shedContext' as the action name; 'shed' means 'archive to disk, remove from active LLM context'"
+rationale = """
+Neutral terminology that matches 'context shedding' concept. Clarifies that
+data is preserved (archived) but isolated from active processing. Avoids
+ambiguity of 'destroy' which implies deletion.
+"""
+source = "design_review_b"
+confidence = "canonical"
+phase = "design"
+dependencies = ["arch_001", "arch_005"]
+
+# --- U2: TypeScript Strict Mode ---
+[[decisions]]
+id = "lang_005"
+timestamp = "2025-01-24T12:00:00Z"
+category = "target_languages"
+constraint = "TypeScript targets require strict: true in tsconfig.json; this is the compilation oracle configuration"
+rationale = """
+Maximum type safety catches more errors at compile time. Clear, simple rule
+that provides consistent invariants. The protocol's structural criticality
+principle requires strong type checking.
+"""
+source = "design_review_b"
+confidence = "canonical"
+phase = "design"
+dependencies = ["arch_002"]
+
+# --- U3: Claim-Based Re-injection Scope ---
+[[decisions]]
+id = "test_004"
+timestamp = "2025-01-24T12:00:00Z"
+category = "testing"
+constraint = "Mesoscopic failures re-inject only functions explicitly referenced by violated claims; requires claim-function mapping in spec"
+rationale = """
+More efficient than re-injecting entire clusters. Violated claims identify
+which functions are involved. Requires explicit claim-function mapping
+(via CLAIM_REF comments) to enable targeted re-injection.
+"""
+source = "design_review_b"
+confidence = "canonical"
+phase = "design"
+dependencies = ["test_001", "test_003"]
+
+# --- U4: Delegated Confidence Downgrade ---
+[[decisions]]
+id = "ledger_007"
+timestamp = "2025-01-24T12:00:00Z"
+category = "ledger"
+constraint = "Delegated decisions downgrade to 'inferred' only when Composition Audit finds contradictions involving the decision"
+rationale = """
+Targeted, logical trigger based on formal reasoning. Composition Audit is
+the appropriate phase to detect decision conflicts. Other failures (test,
+compilation) don't trigger downgrade as they may be implementation issues
+rather than decision flaws.
+"""
+source = "design_review_b"
+confidence = "canonical"
+phase = "design"
+dependencies = ["ledger_006", "arch_004"]
+
+# --- U5: Signature Complexity Formula ---
+[[decisions]]
+id = "routing_005"
+timestamp = "2025-01-24T12:00:00Z"
+category = "model_routing"
+constraint = "signatureComplexity = genericParams*2 + unionMembers + lifetimeParams*2 + nestedTypeDepth + paramCount*0.5"
+rationale = """
+Explicit, reproducible formula for pre-emptive model upgrades. Weights
+reflect empirical difficulty: generics and lifetimes are harder, parameter
+count has diminishing impact. Threshold of 5 triggers upgrade.
+"""
+source = "design_review_b"
+confidence = "canonical"
+phase = "design"
+dependencies = ["routing_002"]
+
+# --- G1: Archive Failure Handling ---
+[[decisions]]
+id = "arch_008"
+timestamp = "2025-01-24T12:00:00Z"
+category = "architectural"
+constraint = "Archive operation failure triggers BLOCKED state requiring human intervention"
+rationale = """
+Safe, conservative approach ensures no data loss. Archiving is required for
+audit trail; continuing without it would violate protocol guarantees.
+Human can resolve disk issues and resume.
+"""
+source = "design_review_b"
+confidence = "canonical"
+phase = "design"
+dependencies = ["arch_005", "block_001"]
+
+# --- G2: Topological Injection Order ---
+[[decisions]]
+id = "inject_006"
+timestamp = "2025-01-24T12:00:00Z"
+category = "injection"
+constraint = "Functions injected in topological order based on call graph; leaf functions first, then dependents"
+rationale = """
+Ensures tests can run in isolation as each function is injected. Dependency
+analysis performed on Lattice call graph. Cycles handled by injecting
+cycle members as a batch. More efficient than two-pass or stub approaches.
+"""
+source = "design_review_b"
+confidence = "canonical"
+phase = "design"
+dependencies = ["inject_001"]
+
+# --- G3: Claim-Contract Linkage ---
+[[decisions]]
+id = "contract_003"
+timestamp = "2025-01-24T12:00:00Z"
+category = "contracts"
+constraint = "Micro-contracts include CLAIM_REF comments linking to spec claim IDs"
+rationale = """
+Explicit traceability between spec claims and code contracts. Format:
+'/// CLAIM_REF: claim_id'. Enables claim-based re-injection scoping and
+verification that all claims have corresponding contracts.
+"""
+source = "design_review_b"
+confidence = "canonical"
+phase = "design"
+dependencies = ["contract_001", "test_004"]
+
+# --- G4: Performance Claim Verification ---
+[[decisions]]
+id = "test_005"
+timestamp = "2025-01-24T12:00:00Z"
+category = "testing"
+constraint = "Performance claims verified via empirical scaling tests at multiple input sizes; >20% variance from expected complexity triggers failure"
+rationale = """
+Practical approach to complexity verification. For O(1) claims, run at
+n=10,100,1000,10000; time should be constant within 20% variance.
+For O(n), time should scale linearly. Not a formal proof but catches
+obvious violations automatically.
+"""
+source = "design_review_b"
+confidence = "canonical"
+phase = "design"
+dependencies = ["test_001"]
+
+# --- G5: Security Scanner Pipeline ---
+[[decisions]]
+id = "security_001"
+timestamp = "2025-01-24T12:00:00Z"
+category = "security"
+constraint = "Security verification uses static analysis tools per language: Rust (cargo-audit, clippy security lints), TypeScript (npm audit, eslint-plugin-security), Python (bandit, safety), Go (gosec, govulncheck)"
+rationale = """
+Industry-standard tools provide automated, deterministic security scanning.
+Run after Injection, before Mesoscopic. Findings classified by severity;
+high/critical findings trigger BLOCKED state for review.
+"""
+source = "design_review_b"
+confidence = "canonical"
+phase = "design"
+dependencies = []
+
+# --- G6: Minimal Block Notification ---
+[[decisions]]
+id = "block_005"
+timestamp = "2025-01-24T12:00:00Z"
+category = "blocking"
+constraint = "Block notifications are minimal: 'Criticality blocked. Run criticality status for details.'"
+rationale = """
+Simple notification that works across all channels (Slack, email, etc.).
+Full context available via CLI which is always authoritative. Avoids
+notification template maintenance and keeps messages short.
+"""
+source = "design_review_b"
+confidence = "canonical"
+phase = "design"
+dependencies = ["block_004"]

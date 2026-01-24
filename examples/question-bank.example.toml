@@ -1,0 +1,476 @@
+# Example Interview Question Bank
+# This defines the structured questions used during Ignition interviews.
+# The interviewer draws from this bank and adapts based on context.
+
+version = "1.0.0"
+
+# =============================================================================
+# PHASE 1: DISCOVERY (Required)
+# =============================================================================
+
+[phases.discovery]
+description = "Understand the problem, users, and core requirements"
+required = true
+delegation_eligible = false
+
+phase_summary_template = """
+Here's what I understand about your project:
+• Problem: {problem_statement}
+• Target users: {target_users}
+• Success looks like: {success_criteria}
+• Core features: {core_features}
+
+Is this correct?
+"""
+
+# --- Problem Topic ---
+
+[phases.discovery.topics.problem]
+required = true
+
+[phases.discovery.topics.problem.primary]
+id = "discovery_problem_001"
+text = "What problem are you trying to solve?"
+type = "open"
+allows_freeform = true
+extract_as = ["problem"]
+examples = [
+    "Our current payment system is too slow and can't scale",
+    "Users need a way to collaborate on documents in real-time",
+    "We're manually processing orders that should be automated"
+]
+
+[[phases.discovery.topics.problem.follow_ups]]
+id = "discovery_problem_002"
+text = "Who experiences this problem most acutely?"
+type = "open"
+extract_as = ["user_persona"]
+
+[[phases.discovery.topics.problem.follow_ups]]
+id = "discovery_problem_003"
+text = "What do they currently do to work around it?"
+type = "open"
+extract_as = ["problem"]
+
+[[phases.discovery.topics.problem.follow_ups]]
+id = "discovery_problem_004"
+text = "What's the cost of the problem remaining unsolved?"
+type = "open"
+extract_as = ["success_criterion"]
+
+# --- Users Topic ---
+
+[phases.discovery.topics.users]
+required = true
+
+[phases.discovery.topics.users.primary]
+id = "discovery_users_001"
+text = "Who will use this system?"
+type = "open"
+allows_freeform = true
+extract_as = ["user_persona"]
+
+[[phases.discovery.topics.users.follow_ups]]
+id = "discovery_users_002"
+text = "Are there different types of users with different needs?"
+type = "open"
+extract_as = ["user_persona"]
+
+[[phases.discovery.topics.users.follow_ups]]
+id = "discovery_users_003"
+text = "What's their technical sophistication?"
+type = "multiple_choice"
+extract_as = ["user_persona"]
+
+[[phases.discovery.topics.users.follow_ups.options]]
+id = "non_technical"
+text = "Non-technical"
+description = "Business users, general public"
+
+[[phases.discovery.topics.users.follow_ups.options]]
+id = "technical"
+text = "Technical"
+description = "Power users, IT staff"
+
+[[phases.discovery.topics.users.follow_ups.options]]
+id = "developer"
+text = "Developers"
+description = "Will interact via API or code"
+
+[[phases.discovery.topics.users.follow_ups.options]]
+id = "mixed"
+text = "Mixed"
+description = "Different user types with different levels"
+
+# --- Success Topic ---
+
+[phases.discovery.topics.success]
+required = true
+
+[phases.discovery.topics.success.primary]
+id = "discovery_success_001"
+text = "How will you know if this project succeeds?"
+type = "open"
+allows_freeform = true
+extract_as = ["success_criterion"]
+examples = [
+    "Processing 10,000 transactions per second",
+    "Users can complete the workflow in under 2 minutes",
+    "Zero data loss, 99.99% uptime"
+]
+
+[[phases.discovery.topics.success.follow_ups]]
+id = "discovery_success_002"
+text = "What metrics matter most?"
+type = "open"
+extract_as = ["success_criterion", "constraint_performance"]
+
+[[phases.discovery.topics.success.follow_ups]]
+id = "discovery_success_003"
+text = "What's the minimum viable outcome?"
+type = "open"
+extract_as = ["success_criterion"]
+
+# --- Features Topic ---
+
+[phases.discovery.topics.features]
+required = true
+
+[phases.discovery.topics.features.primary]
+id = "discovery_features_001"
+text = "What must the system do on day one? Walk me through a typical workflow."
+type = "open"
+allows_freeform = true
+extract_as = ["feature_core"]
+examples = [
+    "User logs in, sees dashboard, creates a new project, invites team members",
+    "API receives transaction, validates it, processes payment, sends confirmation"
+]
+
+[[phases.discovery.topics.features.follow_ups]]
+id = "discovery_features_002"
+text = "What's the most critical path through the system?"
+type = "open"
+extract_as = ["feature_core"]
+
+[[phases.discovery.topics.features.follow_ups]]
+id = "discovery_features_003"
+text = "What features would be nice to have but aren't essential for launch?"
+type = "open"
+extract_as = ["feature_bolt_on"]
+
+# =============================================================================
+# PHASE 2: ARCHITECTURE (Required)
+# =============================================================================
+
+[phases.architecture]
+description = "Determine technical approach and classify features"
+required = true
+delegation_eligible = false
+
+phase_summary_template = """
+Architecture summary:
+• Language: {language}
+• Platform: {platform}
+• Core features: {core_features}
+• Foundational (built into architecture): {foundational_features}
+• Bolt-on (add later): {bolt_on_features}
+• External integrations: {integrations}
+
+Is this correct?
+"""
+
+# --- Language Topic ---
+
+[phases.architecture.topics.language]
+required = true
+
+[phases.architecture.topics.language.primary]
+id = "architecture_language_001"
+text = "Do you have a preferred programming language?"
+type = "multiple_choice"
+allows_freeform = true
+extract_as = ["language_choice"]
+
+[[phases.architecture.topics.language.primary.options]]
+id = "rust"
+text = "Rust"
+description = "Performance, memory safety, strong type system"
+
+[[phases.architecture.topics.language.primary.options]]
+id = "typescript"
+text = "TypeScript"
+description = "Productivity, large ecosystem, full-stack capability"
+
+[[phases.architecture.topics.language.primary.options]]
+id = "python"
+text = "Python"
+description = "Rapid development, ML/data science integration"
+
+[[phases.architecture.topics.language.primary.options]]
+id = "go"
+text = "Go"
+description = "Simplicity, excellent concurrency, fast compilation"
+
+[[phases.architecture.topics.language.primary.options]]
+id = "other"
+text = "Other (specify)"
+description = "Java, C++, etc."
+
+[[phases.architecture.topics.language.primary.options]]
+id = "no_preference"
+text = "No preference"
+description = "Recommend based on requirements"
+
+# --- Feature Classification Topic ---
+
+[phases.architecture.topics.feature_classification]
+required = true
+
+[phases.architecture.topics.feature_classification.primary]
+id = "architecture_classification_001"
+text = "You mentioned {feature}. This will affect {impact}. Should we architect for it now (foundational) or treat it as a future refactor (bolt-on)?"
+type = "multiple_choice"
+context = "Asked for each non-core feature mentioned"
+allows_freeform = true
+extract_as = ["feature_foundational", "feature_bolt_on"]
+
+[[phases.architecture.topics.feature_classification.primary.options]]
+id = "foundational"
+text = "Architect for it now"
+description = "Build support into the data model and core APIs"
+
+[[phases.architecture.topics.feature_classification.primary.options]]
+id = "bolt_on"
+text = "Add later"
+description = "Can retrofit without major changes"
+
+[[phases.architecture.topics.feature_classification.primary.options]]
+id = "unsure"
+text = "I'm not sure, what do you recommend?"
+description = "Get Architect's recommendation"
+
+# --- Integrations Topic ---
+
+[phases.architecture.topics.integrations]
+required = true
+
+[phases.architecture.topics.integrations.primary]
+id = "architecture_integrations_001"
+text = "What external systems will this need to integrate with?"
+type = "open"
+allows_freeform = true
+extract_as = ["integration"]
+examples = [
+    "Payment gateway (Stripe), email service (SendGrid), authentication (OAuth providers)",
+    "Internal CRM API, legacy database, third-party inventory system"
+]
+
+# =============================================================================
+# PHASE 3: CONSTRAINTS (Optional Depth)
+# =============================================================================
+
+[phases.constraints]
+description = "Define performance, security, and compliance requirements"
+required = false
+delegation_eligible = true
+
+delegation_prompt = """
+We've covered the core requirements. I can continue with detailed questions
+about performance, security, and compliance requirements, or I can proceed
+with sensible defaults based on what you've told me.
+
+Which would you prefer?
+"""
+
+# --- Performance Topic ---
+
+[phases.constraints.topics.performance]
+required = false
+delegation_eligible = true
+
+[phases.constraints.topics.performance.primary]
+id = "constraints_performance_001"
+text = """What are your performance requirements?
+
+• Expected requests per second?
+• Acceptable latency (p50, p99)?
+• Data volume expectations?"""
+type = "open"
+allows_freeform = true
+extract_as = ["constraint_performance"]
+examples = [
+    "1000 requests/second, p99 under 100ms, 10GB daily data",
+    "Low volume but strict latency requirements",
+    "High volume, latency less critical"
+]
+
+# --- Security Topic ---
+
+[phases.constraints.topics.security]
+required = false
+delegation_eligible = true
+
+[phases.constraints.topics.security.primary]
+id = "constraints_security_001"
+text = "What security requirements apply?"
+type = "multiple_choice"
+allows_multiple = true
+allows_freeform = true
+extract_as = ["constraint_security"]
+
+[[phases.constraints.topics.security.primary.options]]
+id = "standard"
+text = "Standard web security"
+description = "HTTPS, authentication, input validation"
+
+[[phases.constraints.topics.security.primary.options]]
+id = "sensitive"
+text = "Handles sensitive data"
+description = "PII, financial data, health records"
+
+[[phases.constraints.topics.security.primary.options]]
+id = "regulated"
+text = "Regulatory compliance"
+description = "SOC2, HIPAA, PCI-DSS, GDPR"
+
+[[phases.constraints.topics.security.primary.options]]
+id = "custom"
+text = "Custom requirements"
+description = "Specify your own"
+
+# --- Compliance Topic ---
+
+[phases.constraints.topics.compliance]
+required = false
+delegation_eligible = true
+
+[phases.constraints.topics.compliance.primary]
+id = "constraints_compliance_001"
+text = "Are there any regulatory or compliance requirements?"
+type = "open"
+allows_freeform = true
+extract_as = ["constraint_compliance"]
+examples = [
+    "Must be HIPAA compliant for health data",
+    "PCI-DSS for payment processing",
+    "No specific regulations, but need audit trail"
+]
+
+# =============================================================================
+# PHASE 4: DESIGN PREFERENCES (Optional Depth)
+# =============================================================================
+
+[phases.design_preferences]
+description = "Capture preferences for implementation details"
+required = false
+delegation_eligible = true
+
+delegation_prompt = """
+We've covered the main requirements. I can ask about your preferences for:
+• Error handling approach
+• Logging and observability
+• Testing strategy
+• API style
+
+Or I can use sensible defaults. Which would you prefer?
+"""
+
+# --- Error Handling Topic ---
+
+[phases.design_preferences.topics.error_handling]
+required = false
+delegation_eligible = true
+
+[phases.design_preferences.topics.error_handling.primary]
+id = "preferences_errors_001"
+text = "How should the system handle errors?"
+type = "multiple_choice"
+allows_freeform = true
+extract_as = ["preference"]
+
+[[phases.design_preferences.topics.error_handling.primary.options]]
+id = "fail_fast"
+text = "Fail fast"
+description = "Surface errors immediately, no silent failures"
+
+[[phases.design_preferences.topics.error_handling.primary.options]]
+id = "resilient"
+text = "Resilient"
+description = "Retry and recover when possible"
+
+[[phases.design_preferences.topics.error_handling.primary.options]]
+id = "user_friendly"
+text = "User-friendly"
+description = "Show friendly messages, hide technical details"
+
+[[phases.design_preferences.topics.error_handling.primary.options]]
+id = "delegate"
+text = "Use your judgment"
+description = "Apply sensible defaults"
+
+# --- API Style Topic ---
+
+[phases.design_preferences.topics.api_style]
+required = false
+delegation_eligible = true
+
+[phases.design_preferences.topics.api_style.primary]
+id = "preferences_api_001"
+text = "What API style do you prefer?"
+type = "multiple_choice"
+allows_freeform = true
+extract_as = ["preference"]
+
+[[phases.design_preferences.topics.api_style.primary.options]]
+id = "rest"
+text = "REST"
+description = "Standard HTTP APIs, wide compatibility"
+
+[[phases.design_preferences.topics.api_style.primary.options]]
+id = "graphql"
+text = "GraphQL"
+description = "Flexible queries, good for complex data needs"
+
+[[phases.design_preferences.topics.api_style.primary.options]]
+id = "grpc"
+text = "gRPC"
+description = "High performance, strong typing, good for microservices"
+
+[[phases.design_preferences.topics.api_style.primary.options]]
+id = "delegate"
+text = "Use your judgment"
+description = "Recommend based on use case"
+
+# --- Testing Topic ---
+
+[phases.design_preferences.topics.testing]
+required = false
+delegation_eligible = true
+
+[phases.design_preferences.topics.testing.primary]
+id = "preferences_testing_001"
+text = "What's your testing philosophy?"
+type = "multiple_choice"
+allows_freeform = true
+extract_as = ["preference"]
+
+[[phases.design_preferences.topics.testing.primary.options]]
+id = "comprehensive"
+text = "Comprehensive"
+description = "High coverage, property tests, integration tests"
+
+[[phases.design_preferences.topics.testing.primary.options]]
+id = "critical_paths"
+text = "Critical paths only"
+description = "Focus on core functionality, skip edge cases"
+
+[[phases.design_preferences.topics.testing.primary.options]]
+id = "tdd"
+text = "Test-driven"
+description = "Write tests first, implement to pass"
+
+[[phases.design_preferences.topics.testing.primary.options]]
+id = "delegate"
+text = "Use your judgment"
+description = "Apply appropriate testing based on risk"

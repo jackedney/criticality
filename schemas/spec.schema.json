@@ -1,0 +1,363 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://criticality.dev/schemas/spec.schema.json",
+  "title": "Criticality Specification",
+  "description": "Schema for the spec.toml artifact produced by the Ignition phase",
+  "type": "object",
+  "required": ["meta", "system"],
+  "properties": {
+    "meta": {
+      "type": "object",
+      "description": "Metadata about the specification",
+      "required": ["version", "created"],
+      "properties": {
+        "version": {
+          "type": "string",
+          "description": "Semantic version of this specification",
+          "pattern": "^\\d+\\.\\d+\\.\\d+$"
+        },
+        "created": {
+          "type": "string",
+          "format": "date-time",
+          "description": "ISO 8601 timestamp of creation"
+        },
+        "domain": {
+          "type": "string",
+          "description": "Domain category (e.g., fintech, healthcare, e-commerce)"
+        },
+        "authors": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "List of specification authors"
+        }
+      }
+    },
+    "system": {
+      "type": "object",
+      "description": "System-level metadata",
+      "required": ["name"],
+      "properties": {
+        "name": {
+          "type": "string",
+          "description": "System name (kebab-case recommended)",
+          "pattern": "^[a-z][a-z0-9-]*$"
+        },
+        "description": {
+          "type": "string",
+          "description": "Brief description of the system's purpose"
+        },
+        "language": {
+          "type": "string",
+          "enum": ["rust", "typescript", "python", "go", "java", "cpp"],
+          "description": "Primary implementation language"
+        }
+      }
+    },
+    "boundaries": {
+      "type": "object",
+      "description": "System boundary definitions",
+      "properties": {
+        "external_systems": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "External systems this system interacts with"
+        },
+        "trust_boundaries": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Points where trust level changes (e.g., user-input, external-api)"
+        }
+      }
+    },
+    "enums": {
+      "type": "object",
+      "description": "Enumeration type definitions",
+      "additionalProperties": {
+        "$ref": "#/definitions/Enum"
+      }
+    },
+    "data_models": {
+      "type": "object",
+      "description": "Domain data model definitions",
+      "additionalProperties": {
+        "$ref": "#/definitions/DataModel"
+      }
+    },
+    "interfaces": {
+      "type": "object",
+      "description": "Service interface definitions",
+      "additionalProperties": {
+        "$ref": "#/definitions/Interface"
+      }
+    },
+    "constraints": {
+      "type": "object",
+      "description": "System constraints by category",
+      "properties": {
+        "functional": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Functional requirements and invariants"
+        },
+        "non_functional": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Performance, scalability, and other NFRs"
+        },
+        "security": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Security requirements"
+        }
+      }
+    },
+    "claims": {
+      "type": "object",
+      "description": "Testable claims extracted for property testing",
+      "additionalProperties": {
+        "$ref": "#/definitions/Claim"
+      }
+    },
+    "witnesses": {
+      "type": "object",
+      "description": "Type witness definitions",
+      "additionalProperties": {
+        "$ref": "#/definitions/Witness"
+      }
+    }
+  },
+  "definitions": {
+    "Enum": {
+      "type": "object",
+      "description": "An enumeration type",
+      "required": ["variants"],
+      "properties": {
+        "description": {
+          "type": "string"
+        },
+        "variants": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Enum variant names"
+        }
+      }
+    },
+    "DataModel": {
+      "type": "object",
+      "description": "A domain data model (struct/class)",
+      "required": ["fields"],
+      "properties": {
+        "description": {
+          "type": "string"
+        },
+        "fields": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/Field"
+          }
+        },
+        "invariants": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Invariants that must hold for valid instances"
+        }
+      }
+    },
+    "Field": {
+      "type": "object",
+      "required": ["name", "type"],
+      "properties": {
+        "name": {
+          "type": "string",
+          "description": "Field name"
+        },
+        "type": {
+          "type": "string",
+          "description": "Field type (may reference witnesses)"
+        },
+        "constraints": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Field-level constraints"
+        },
+        "description": {
+          "type": "string"
+        }
+      }
+    },
+    "Interface": {
+      "type": "object",
+      "description": "A service interface (trait/interface)",
+      "required": ["methods"],
+      "properties": {
+        "description": {
+          "type": "string"
+        },
+        "methods": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/Method"
+          }
+        }
+      }
+    },
+    "Method": {
+      "type": "object",
+      "required": ["name", "returns"],
+      "properties": {
+        "name": {
+          "type": "string",
+          "description": "Method name"
+        },
+        "params": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Parameter list as 'name: Type' strings"
+        },
+        "returns": {
+          "type": "string",
+          "description": "Return type"
+        },
+        "description": {
+          "type": "string"
+        },
+        "contracts": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "REQUIRES/ENSURES/etc contract clauses"
+        }
+      }
+    },
+    "Claim": {
+      "type": "object",
+      "description": "A testable claim for property testing",
+      "required": ["text", "type"],
+      "properties": {
+        "text": {
+          "type": "string",
+          "description": "Natural language claim"
+        },
+        "type": {
+          "type": "string",
+          "enum": ["invariant", "behavioral", "negative", "temporal", "concurrent", "performance"],
+          "description": "Claim category"
+        },
+        "testable": {
+          "type": "boolean",
+          "default": true,
+          "description": "Whether this claim can be automatically tested"
+        },
+        "subject": {
+          "type": "string",
+          "description": "For invariants: what the invariant is about"
+        },
+        "predicate": {
+          "type": "string",
+          "description": "For invariants: the condition"
+        },
+        "trigger": {
+          "type": "string",
+          "description": "For behavioral: what triggers the behavior"
+        },
+        "outcome": {
+          "type": "string",
+          "description": "For behavioral: expected outcome"
+        },
+        "action": {
+          "type": "string",
+          "description": "For negative: the forbidden action"
+        },
+        "forbidden_outcome": {
+          "type": "string",
+          "description": "For negative: what must not happen"
+        },
+        "setup": {
+          "type": "string",
+          "description": "For temporal: initial setup"
+        },
+        "invariant": {
+          "type": "string",
+          "description": "For temporal: what holds during the period"
+        },
+        "termination": {
+          "type": "string",
+          "description": "For temporal: what ends the period"
+        },
+        "operation": {
+          "type": "string",
+          "description": "For concurrent/performance: the operation"
+        },
+        "complexity": {
+          "type": "string",
+          "description": "For performance: expected complexity"
+        },
+        "requires_mocking": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "External dependencies that need mocking"
+        }
+      }
+    },
+    "Witness": {
+      "type": "object",
+      "description": "Type witness definition",
+      "required": ["name", "invariants"],
+      "properties": {
+        "name": {
+          "type": "string",
+          "description": "Witness type name"
+        },
+        "description": {
+          "type": "string"
+        },
+        "base_type": {
+          "type": "string",
+          "description": "Underlying type (e.g., Vec<T>)"
+        },
+        "type_params": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "name": { "type": "string" },
+              "bounds": {
+                "type": "array",
+                "items": { "type": "string" }
+              }
+            }
+          },
+          "description": "Generic type parameters"
+        },
+        "invariants": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "id": { "type": "string" },
+              "description": { "type": "string" },
+              "formal": { "type": "string" },
+              "testable": { "type": "boolean" }
+            }
+          },
+          "description": "Invariants this witness guarantees"
+        },
+        "constructors": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "name": { "type": "string" },
+              "description": { "type": "string" },
+              "trust_level": {
+                "type": "string",
+                "enum": ["safe", "unsafe"]
+              },
+              "precondition": { "type": "string" }
+            }
+          },
+          "description": "Available constructors"
+        }
+      }
+    }
+  }
+}

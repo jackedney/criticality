@@ -1,0 +1,269 @@
+# Example Specification Artifact
+# This file is produced by the Ignition phase and consumed by all subsequent phases.
+# It represents a complete, internally consistent specification of a payment processing system.
+
+[meta]
+version = "1.0.0"
+created = "2025-01-23T10:00:00Z"
+domain = "fintech"
+authors = ["architect@example.com"]
+
+[system]
+name = "payment-processor"
+description = "Real-time payment processing system with fraud detection integration"
+language = "rust"
+
+# =============================================================================
+# SYSTEM BOUNDARIES
+# =============================================================================
+
+[boundaries]
+external_systems = [
+    "bank-gateway",        # External banking API for actual fund transfers
+    "fraud-detection",     # ML-based fraud scoring service
+    "notification-service", # Email/SMS notification delivery
+    "audit-log-service",   # Compliance audit trail
+]
+
+trust_boundaries = [
+    "user-input",              # All user-provided data
+    "external-api-responses",  # Responses from external systems
+    "webhook-callbacks",       # Async callbacks from external systems
+]
+
+# =============================================================================
+# ENUMERATIONS
+# =============================================================================
+
+[enums.AccountStatus]
+description = "Status of a payment account"
+variants = ["Active", "Frozen", "Closed"]
+
+[enums.TransactionStatus]
+description = "Status of a payment transaction"
+variants = ["Pending", "Approved", "Rejected", "Cancelled"]
+
+[enums.Currency]
+description = "Supported currency codes"
+variants = ["USD", "EUR", "GBP", "JPY"]
+
+# =============================================================================
+# DATA MODELS
+# =============================================================================
+
+[data_models.Account]
+description = "A user's payment account"
+fields = [
+    { name = "id", type = "AccountId", constraints = ["unique", "immutable"] },
+    { name = "user_id", type = "UserId", constraints = ["immutable"] },
+    { name = "balance", type = "NonNegativeDecimal", constraints = [] },
+    { name = "currency", type = "Currency", constraints = ["immutable"] },
+    { name = "status", type = "AccountStatus", constraints = [] },
+    { name = "created_at", type = "Timestamp", constraints = ["immutable"] },
+    { name = "updated_at", type = "Timestamp", constraints = [] },
+]
+invariants = [
+    "balance is always non-negative",
+    "status transitions: Active -> Frozen -> Closed (one-way)",
+]
+
+[data_models.Transaction]
+description = "A payment transaction between accounts"
+fields = [
+    { name = "id", type = "TransactionId", constraints = ["unique", "immutable"] },
+    { name = "from_account", type = "AccountId", constraints = ["immutable"] },
+    { name = "to_account", type = "AccountId", constraints = ["immutable"] },
+    { name = "amount", type = "PositiveDecimal", constraints = ["immutable"] },
+    { name = "currency", type = "Currency", constraints = ["immutable"] },
+    { name = "status", type = "TransactionStatus", constraints = [] },
+    { name = "fraud_score", type = "Option<FraudScore>", constraints = [] },
+    { name = "created_at", type = "Timestamp", constraints = ["immutable"] },
+    { name = "completed_at", type = "Option<Timestamp>", constraints = [] },
+]
+invariants = [
+    "from_account != to_account",
+    "status transitions: Pending -> (Approved | Rejected | Cancelled)",
+    "completed_at is set iff status is terminal",
+]
+
+[data_models.FraudScore]
+description = "Fraud detection result"
+fields = [
+    { name = "score", type = "f64", constraints = ["0.0 <= score <= 1.0"] },
+    { name = "reasons", type = "Vec<FraudReason>", constraints = [] },
+    { name = "computed_at", type = "Timestamp", constraints = ["immutable"] },
+]
+
+# =============================================================================
+# INTERFACES
+# =============================================================================
+
+[interfaces.PaymentService]
+description = "Core payment processing service"
+methods = [
+    { name = "create_account", params = ["user_id: UserId", "currency: Currency"], returns = "Result<Account, CreateAccountError>" },
+    { name = "get_account", params = ["account_id: AccountId"], returns = "Result<Account, AccountNotFound>" },
+    { name = "deposit", params = ["account_id: AccountId", "amount: PositiveDecimal"], returns = "Result<Transaction, DepositError>" },
+    { name = "withdraw", params = ["account_id: AccountId", "amount: PositiveDecimal"], returns = "Result<Transaction, WithdrawError>" },
+    { name = "transfer", params = ["from: AccountId", "to: AccountId", "amount: PositiveDecimal"], returns = "Result<Transaction, TransferError>" },
+    { name = "get_balance", params = ["account_id: AccountId"], returns = "Result<NonNegativeDecimal, AccountNotFound>" },
+]
+
+[interfaces.FraudService]
+description = "Fraud detection integration"
+methods = [
+    { name = "score_transaction", params = ["transaction: &Transaction"], returns = "Result<FraudScore, FraudServiceError>" },
+    { name = "is_suspicious", params = ["score: &FraudScore"], returns = "bool" },
+]
+
+[interfaces.TransactionRepository]
+description = "Transaction persistence"
+methods = [
+    { name = "save", params = ["transaction: &Transaction"], returns = "Result<(), PersistenceError>" },
+    { name = "find_by_id", params = ["id: TransactionId"], returns = "Result<Option<Transaction>, PersistenceError>" },
+    { name = "find_by_account", params = ["account_id: AccountId", "limit: usize"], returns = "Result<Vec<Transaction>, PersistenceError>" },
+]
+
+# =============================================================================
+# CONSTRAINTS
+# =============================================================================
+
+[constraints]
+functional = [
+    "Account balance never goes negative",
+    "Sum of all account balances equals total system balance",
+    "Completed transactions are immutable",
+    "Transfer atomically decrements source and increments destination",
+    "High fraud score (>0.8) transactions require manual approval",
+    "Transactions complete within 100ms under normal conditions",
+]
+
+non_functional = [
+    "System handles 10,000 transactions per second",
+    "p99 latency < 100ms for transfers",
+    "p99 latency < 50ms for balance queries",
+    "System maintains 99.99% availability",
+    "Data replicated across 3 availability zones",
+]
+
+security = [
+    "All user input validated at system boundary",
+    "No PII in application logs",
+    "All external API calls use mTLS",
+    "Rate limiting: 100 requests/minute per user",
+    "Failed auth attempts trigger account lockout after 5 failures",
+]
+
+# =============================================================================
+# TESTABLE CLAIMS
+# =============================================================================
+
+[claims.balance_001]
+text = "Account balance never goes negative"
+type = "invariant"
+testable = true
+subject = "account.balance"
+predicate = ">= 0"
+
+[claims.balance_002]
+text = "Sum of all transactions on an account equals its current balance"
+type = "invariant"
+testable = true
+subject = "account balance consistency"
+predicate = "sum(deposits) - sum(withdrawals) == balance"
+
+[claims.transfer_001]
+text = "Successful transfer decrements source and increments destination by exact amount"
+type = "behavioral"
+testable = true
+trigger = "transfer(from, to, amount) succeeds"
+outcome = "from.balance decreased by amount AND to.balance increased by amount"
+
+[claims.transfer_002]
+text = "Failed transfer leaves both accounts unchanged"
+type = "behavioral"
+testable = true
+trigger = "transfer(from, to, amount) fails"
+outcome = "from.balance unchanged AND to.balance unchanged"
+
+[claims.fraud_001]
+text = "High fraud score transactions are not automatically approved"
+type = "negative"
+testable = true
+action = "transaction with fraud_score > 0.8"
+forbidden_outcome = "automatic approval"
+
+[claims.concurrent_001]
+text = "Concurrent transfers from same account serialize correctly"
+type = "concurrent"
+testable = true
+operation = "multiple transfers from same source account"
+invariant = "final balance equals initial minus sum of successful transfers"
+
+[claims.performance_001]
+text = "Transfer completes in O(1) time"
+type = "performance"
+testable = true
+operation = "transfer"
+complexity = "O(1)"
+
+# =============================================================================
+# TYPE WITNESSES
+# =============================================================================
+
+[witnesses.NonNegativeDecimal]
+name = "NonNegativeDecimal"
+description = "A decimal value guaranteed to be >= 0"
+base_type = "Decimal"
+invariants = [
+    { id = "non_negative", description = "value >= 0", formal = "self.0 >= 0", testable = true }
+]
+constructors = [
+    { name = "new", trust_level = "safe", precondition = "value >= 0", description = "Creates from value, returns error if negative" },
+    { name = "zero", trust_level = "safe", description = "Creates zero value" },
+]
+
+[witnesses.PositiveDecimal]
+name = "PositiveDecimal"
+description = "A decimal value guaranteed to be > 0"
+base_type = "Decimal"
+invariants = [
+    { id = "positive", description = "value > 0", formal = "self.0 > 0", testable = true }
+]
+constructors = [
+    { name = "new", trust_level = "safe", precondition = "value > 0", description = "Creates from value, returns error if not positive" },
+]
+
+[witnesses.AccountId]
+name = "AccountId"
+description = "A valid account identifier"
+base_type = "Uuid"
+invariants = [
+    { id = "valid_uuid", description = "is a valid UUID v4", formal = "is_valid_uuid_v4(self.0)", testable = true }
+]
+constructors = [
+    { name = "new", trust_level = "safe", description = "Generates new random UUID" },
+    { name = "parse", trust_level = "safe", precondition = "valid UUID string", description = "Parses from string" },
+]
+
+[witnesses.TransactionId]
+name = "TransactionId"
+description = "A valid transaction identifier"
+base_type = "Uuid"
+invariants = [
+    { id = "valid_uuid", description = "is a valid UUID v4", formal = "is_valid_uuid_v4(self.0)", testable = true }
+]
+constructors = [
+    { name = "new", trust_level = "safe", description = "Generates new random UUID" },
+]
+
+[witnesses.FraudScore]
+name = "FraudScoreValue"
+description = "A fraud score between 0 and 1"
+base_type = "f64"
+invariants = [
+    { id = "bounded", description = "0.0 <= value <= 1.0", formal = "0.0 <= self.0 <= 1.0", testable = true }
+]
+constructors = [
+    { name = "new", trust_level = "safe", precondition = "0.0 <= value <= 1.0", description = "Creates from value, clamps to bounds" },
+]

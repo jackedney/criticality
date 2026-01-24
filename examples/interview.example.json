@@ -1,0 +1,510 @@
+{
+  "project_id": "payment-processor",
+  "status": "awaiting_response",
+  "created_at": "2025-01-24T09:00:00Z",
+  "last_activity_at": "2025-01-24T09:45:00Z",
+  "current_phase": "constraints",
+  "current_question_id": "constraints_performance_001",
+  "phases_completed": ["discovery", "architecture"],
+  "delegated_phases": [],
+  "delegation_notes": {},
+  "turns": [
+    {
+      "id": "turn_001",
+      "timestamp": "2025-01-24T09:00:00Z",
+      "speaker": "interviewer",
+      "phase": "discovery",
+      "content": "What problem are you trying to solve?",
+      "question_type": "open",
+      "question_id": "discovery_problem_001",
+      "allows_freeform": true,
+      "extracted_facts": []
+    },
+    {
+      "id": "turn_002",
+      "timestamp": "2025-01-24T09:02:00Z",
+      "speaker": "user",
+      "phase": "discovery",
+      "content": "We need a payment processing system for B2B transactions. Our current system is slow and can't handle the volume we're seeing. We process about 5000 transactions per day now but expect to grow to 50000 within a year.",
+      "extracted_facts": [
+        {
+          "id": "fact_001",
+          "category": "problem",
+          "content": "Current payment system is slow and cannot handle transaction volume",
+          "confidence": "explicit",
+          "source_turn_id": "turn_002"
+        },
+        {
+          "id": "fact_002",
+          "category": "constraint_performance",
+          "content": "Must handle 50,000 transactions per day within one year",
+          "confidence": "explicit",
+          "source_turn_id": "turn_002"
+        },
+        {
+          "id": "fact_003",
+          "category": "user_persona",
+          "content": "B2B transaction processing",
+          "confidence": "explicit",
+          "source_turn_id": "turn_002"
+        }
+      ]
+    },
+    {
+      "id": "turn_003",
+      "timestamp": "2025-01-24T09:03:00Z",
+      "speaker": "interviewer",
+      "phase": "discovery",
+      "content": "Who will use this system?",
+      "question_type": "open",
+      "question_id": "discovery_users_001",
+      "allows_freeform": true,
+      "extracted_facts": []
+    },
+    {
+      "id": "turn_004",
+      "timestamp": "2025-01-24T09:05:00Z",
+      "speaker": "user",
+      "phase": "discovery",
+      "content": "Primarily our internal finance team for managing accounts and reviewing transactions. We also need an API for our partner companies to initiate transfers programmatically.",
+      "extracted_facts": [
+        {
+          "id": "fact_004",
+          "category": "user_persona",
+          "content": "Internal finance team - manage accounts, review transactions",
+          "confidence": "explicit",
+          "source_turn_id": "turn_004"
+        },
+        {
+          "id": "fact_005",
+          "category": "user_persona",
+          "content": "Partner companies - API access for programmatic transfers",
+          "confidence": "explicit",
+          "source_turn_id": "turn_004"
+        },
+        {
+          "id": "fact_006",
+          "category": "integration",
+          "content": "External API for partner companies",
+          "confidence": "explicit",
+          "source_turn_id": "turn_004"
+        }
+      ]
+    },
+    {
+      "id": "turn_005",
+      "timestamp": "2025-01-24T09:06:00Z",
+      "speaker": "interviewer",
+      "phase": "discovery",
+      "content": "How will you know if this project succeeds?",
+      "question_type": "open",
+      "question_id": "discovery_success_001",
+      "allows_freeform": true,
+      "extracted_facts": []
+    },
+    {
+      "id": "turn_006",
+      "timestamp": "2025-01-24T09:08:00Z",
+      "speaker": "user",
+      "phase": "discovery",
+      "content": "Three things: 1) We can process transactions in under 100ms, 2) Zero data loss or inconsistency in account balances, 3) 99.99% uptime",
+      "extracted_facts": [
+        {
+          "id": "fact_007",
+          "category": "success_criterion",
+          "content": "Transaction processing under 100ms",
+          "confidence": "explicit",
+          "source_turn_id": "turn_006"
+        },
+        {
+          "id": "fact_008",
+          "category": "success_criterion",
+          "content": "Zero data loss or balance inconsistency",
+          "confidence": "explicit",
+          "source_turn_id": "turn_006"
+        },
+        {
+          "id": "fact_009",
+          "category": "success_criterion",
+          "content": "99.99% uptime",
+          "confidence": "explicit",
+          "source_turn_id": "turn_006"
+        }
+      ]
+    },
+    {
+      "id": "turn_007",
+      "timestamp": "2025-01-24T09:10:00Z",
+      "speaker": "interviewer",
+      "phase": "discovery",
+      "content": "What must the system do on day one? Walk me through a typical workflow.",
+      "question_type": "open",
+      "question_id": "discovery_features_001",
+      "allows_freeform": true,
+      "extracted_facts": []
+    },
+    {
+      "id": "turn_008",
+      "timestamp": "2025-01-24T09:15:00Z",
+      "speaker": "user",
+      "phase": "discovery",
+      "content": "Core workflow: Create accounts for businesses, deposit funds into accounts, transfer between accounts, withdraw to external bank accounts. We also need fraud detection - flag suspicious transactions for manual review. Later we want multi-currency support and detailed analytics dashboards.",
+      "extracted_facts": [
+        {
+          "id": "fact_010",
+          "category": "feature_core",
+          "content": "Account management (create, view)",
+          "confidence": "explicit",
+          "source_turn_id": "turn_008"
+        },
+        {
+          "id": "fact_011",
+          "category": "feature_core",
+          "content": "Deposit funds into accounts",
+          "confidence": "explicit",
+          "source_turn_id": "turn_008"
+        },
+        {
+          "id": "fact_012",
+          "category": "feature_core",
+          "content": "Transfer between accounts",
+          "confidence": "explicit",
+          "source_turn_id": "turn_008"
+        },
+        {
+          "id": "fact_013",
+          "category": "feature_core",
+          "content": "Withdraw to external bank accounts",
+          "confidence": "explicit",
+          "source_turn_id": "turn_008"
+        },
+        {
+          "id": "fact_014",
+          "category": "feature_core",
+          "content": "Fraud detection - flag suspicious transactions",
+          "confidence": "explicit",
+          "source_turn_id": "turn_008"
+        },
+        {
+          "id": "fact_015",
+          "category": "feature_bolt_on",
+          "content": "Multi-currency support",
+          "confidence": "inferred",
+          "source_turn_id": "turn_008"
+        },
+        {
+          "id": "fact_016",
+          "category": "feature_bolt_on",
+          "content": "Analytics dashboards",
+          "confidence": "inferred",
+          "source_turn_id": "turn_008"
+        }
+      ]
+    },
+    {
+      "id": "turn_009",
+      "timestamp": "2025-01-24T09:17:00Z",
+      "speaker": "interviewer",
+      "phase": "architecture",
+      "content": "You mentioned multi-currency support as a future feature. This will affect database schema, account models, and transfer logic. Should we architect for it now (foundational) or treat it as a future refactor (bolt-on)?",
+      "question_type": "multiple_choice",
+      "question_id": "architecture_classification_001",
+      "options": [
+        {
+          "id": "foundational",
+          "text": "Architect for it now (affects design)",
+          "description": "Add currency field to accounts, support multi-currency transfers from day one structurally"
+        },
+        {
+          "id": "bolt_on",
+          "text": "Add later (no core impact)",
+          "description": "Single currency now, refactor when needed"
+        },
+        {
+          "id": "unsure",
+          "text": "I'm not sure, what do you recommend?"
+        }
+      ],
+      "allows_freeform": true,
+      "extracted_facts": []
+    },
+    {
+      "id": "turn_010",
+      "timestamp": "2025-01-24T09:19:00Z",
+      "speaker": "user",
+      "phase": "architecture",
+      "content": "foundational",
+      "selected_option": "foundational",
+      "extracted_facts": [
+        {
+          "id": "fact_017",
+          "category": "feature_foundational",
+          "content": "Multi-currency support (affects account model and transfer logic)",
+          "confidence": "explicit",
+          "source_turn_id": "turn_010",
+          "clarified_by_turn_id": "turn_010"
+        }
+      ]
+    },
+    {
+      "id": "turn_011",
+      "timestamp": "2025-01-24T09:20:00Z",
+      "speaker": "interviewer",
+      "phase": "architecture",
+      "content": "Do you have a preferred programming language?",
+      "question_type": "multiple_choice",
+      "question_id": "architecture_language_001",
+      "options": [
+        {
+          "id": "rust",
+          "text": "Rust",
+          "description": "Performance, memory safety, strong type system"
+        },
+        {
+          "id": "typescript",
+          "text": "TypeScript",
+          "description": "Productivity, large ecosystem, full-stack capability"
+        },
+        {
+          "id": "python",
+          "text": "Python",
+          "description": "Rapid development, ML/data science integration"
+        },
+        {
+          "id": "go",
+          "text": "Go",
+          "description": "Simplicity, excellent concurrency, fast compilation"
+        },
+        {
+          "id": "other",
+          "text": "Other (specify)"
+        },
+        {
+          "id": "no_preference",
+          "text": "No preference, recommend based on requirements"
+        }
+      ],
+      "allows_freeform": true,
+      "extracted_facts": []
+    },
+    {
+      "id": "turn_012",
+      "timestamp": "2025-01-24T09:22:00Z",
+      "speaker": "user",
+      "phase": "architecture",
+      "content": "rust",
+      "selected_option": "rust",
+      "freeform_response": "We need the performance and safety guarantees for financial transactions",
+      "extracted_facts": [
+        {
+          "id": "fact_018",
+          "category": "language_choice",
+          "content": "Rust - chosen for performance and safety guarantees in financial context",
+          "confidence": "explicit",
+          "source_turn_id": "turn_012"
+        }
+      ]
+    },
+    {
+      "id": "turn_013",
+      "timestamp": "2025-01-24T09:25:00Z",
+      "speaker": "interviewer",
+      "phase": "architecture",
+      "content": "Here's what I understand about the architecture so far:\n\n• Language: Rust\n• Core features: Account management, deposits, transfers, withdrawals, fraud detection\n• Foundational: Multi-currency support (built into data model)\n• Bolt-on: Analytics dashboards\n• External integrations: Bank gateway (withdrawals), Partner API\n\nIs this correct?",
+      "question_type": "confirmation",
+      "question_id": "architecture_summary_001",
+      "allows_freeform": true,
+      "extracted_facts": []
+    },
+    {
+      "id": "turn_014",
+      "timestamp": "2025-01-24T09:27:00Z",
+      "speaker": "user",
+      "phase": "architecture",
+      "content": "Yes, and we'll also need to integrate with an external fraud detection ML service - we don't want to build that ourselves.",
+      "extracted_facts": [
+        {
+          "id": "fact_019",
+          "category": "integration",
+          "content": "External fraud detection ML service",
+          "confidence": "explicit",
+          "source_turn_id": "turn_014"
+        }
+      ]
+    },
+    {
+      "id": "turn_015",
+      "timestamp": "2025-01-24T09:30:00Z",
+      "speaker": "interviewer",
+      "phase": "constraints",
+      "content": "Now let's discuss constraints. We've covered the basic requirements. I can continue with detailed questions about performance, security, and compliance requirements, or I can proceed with sensible defaults based on what you've told me. Which would you prefer?",
+      "question_type": "delegation_offer",
+      "question_id": "constraints_delegation_001",
+      "options": [
+        {
+          "id": "continue",
+          "text": "Continue",
+          "description": "Ask me about detailed constraints"
+        },
+        {
+          "id": "delegate",
+          "text": "Use your judgment",
+          "description": "Proceed with sensible defaults for a financial system"
+        },
+        {
+          "id": "delegate_with_notes",
+          "text": "Use your judgment, but...",
+          "description": "Proceed with defaults, but I have some specific requirements"
+        }
+      ],
+      "allows_freeform": true,
+      "extracted_facts": []
+    },
+    {
+      "id": "turn_016",
+      "timestamp": "2025-01-24T09:32:00Z",
+      "speaker": "user",
+      "phase": "constraints",
+      "content": "continue",
+      "selected_option": "continue",
+      "extracted_facts": []
+    },
+    {
+      "id": "turn_017",
+      "timestamp": "2025-01-24T09:35:00Z",
+      "speaker": "interviewer",
+      "phase": "constraints",
+      "content": "What are your performance requirements?\n\n• Expected requests per second?\n• Acceptable latency (p50, p99)?\n• Data volume expectations?",
+      "question_type": "open",
+      "question_id": "constraints_performance_001",
+      "allows_freeform": true,
+      "examples": [
+        "1000 requests/second, p99 under 100ms, 10GB daily data",
+        "Low volume but strict latency requirements",
+        "High volume, latency less critical"
+      ],
+      "extracted_facts": []
+    }
+  ],
+  "extracted_requirements": {
+    "problem_statement": "Current payment processing system is too slow and cannot scale to handle growing B2B transaction volume (from 5,000 to 50,000 transactions/day within one year)",
+    "target_users": [
+      {
+        "persona": "Internal Finance Team",
+        "description": "Manage accounts and review transactions",
+        "technical_level": "non_technical"
+      },
+      {
+        "persona": "Partner Companies",
+        "description": "Programmatic API access for initiating transfers",
+        "technical_level": "developer"
+      }
+    ],
+    "success_criteria": [
+      {
+        "criterion": "Transaction processing latency",
+        "measurable": true,
+        "metric": "< 100ms per transaction"
+      },
+      {
+        "criterion": "Data integrity",
+        "measurable": true,
+        "metric": "Zero data loss, zero balance inconsistency"
+      },
+      {
+        "criterion": "Availability",
+        "measurable": true,
+        "metric": "99.99% uptime"
+      }
+    ],
+    "features": {
+      "core": [
+        {
+          "id": "f001",
+          "name": "Account Management",
+          "description": "Create and view business accounts",
+          "source_turn_id": "turn_008"
+        },
+        {
+          "id": "f002",
+          "name": "Deposits",
+          "description": "Deposit funds into accounts",
+          "source_turn_id": "turn_008"
+        },
+        {
+          "id": "f003",
+          "name": "Transfers",
+          "description": "Transfer funds between accounts",
+          "source_turn_id": "turn_008"
+        },
+        {
+          "id": "f004",
+          "name": "Withdrawals",
+          "description": "Withdraw to external bank accounts",
+          "source_turn_id": "turn_008"
+        },
+        {
+          "id": "f005",
+          "name": "Fraud Detection",
+          "description": "Flag suspicious transactions for manual review",
+          "source_turn_id": "turn_008"
+        }
+      ],
+      "foundational": [
+        {
+          "id": "f010",
+          "name": "Multi-currency Support",
+          "description": "Support multiple currencies in accounts and transfers",
+          "rationale": "Affects account model and transfer logic - must be built into data model",
+          "source_turn_id": "turn_010"
+        }
+      ],
+      "bolt_on": [
+        {
+          "id": "f020",
+          "name": "Analytics Dashboards",
+          "description": "Detailed transaction analytics and reporting",
+          "rationale": "Pure presentation layer, no core impact",
+          "source_turn_id": "turn_008"
+        }
+      ]
+    },
+    "constraints": {
+      "technical": [],
+      "performance": {
+        "throughput": "50,000 transactions/day (growth target)",
+        "latency_p50": null,
+        "latency_p99": "< 100ms",
+        "data_volume": null,
+        "notes": "Performance details pending - currently being discussed"
+      },
+      "security": [],
+      "compliance": []
+    },
+    "preferences": {},
+    "integrations": [
+      {
+        "name": "Bank Gateway",
+        "type": "api",
+        "description": "External banking API for withdrawals",
+        "required": true
+      },
+      {
+        "name": "Partner API",
+        "type": "api",
+        "description": "API for partner companies to initiate transfers",
+        "required": true
+      },
+      {
+        "name": "Fraud Detection Service",
+        "type": "third_party_service",
+        "description": "External ML-based fraud scoring",
+        "required": true
+      }
+    ],
+    "language": "rust",
+    "platform": null
+  },
+  "proposal_versions": [],
+  "approval_record": null
+}

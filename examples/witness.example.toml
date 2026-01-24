@@ -1,0 +1,279 @@
+# Example Universal Witness Definitions
+# This file defines type witnesses in language-agnostic form.
+# The witness compiler generates language-specific code from these definitions.
+
+# =============================================================================
+# SORTED VECTOR
+# =============================================================================
+
+[[witnesses]]
+name = "SortedVec"
+description = "A vector whose elements are guaranteed to be sorted in ascending order"
+
+[witnesses.base]
+generic = true
+inner_type = "Vec<T>"
+
+[[witnesses.base.type_params]]
+name = "T"
+bounds = ["Ord", "Clone"]
+
+[[witnesses.invariants]]
+id = "sorted"
+description = "Elements are in ascending order"
+formal = "forall i, j: 0 <= i < j < len implies self[i] <= self[j]"
+testable = true
+
+[[witnesses.invariants]]
+id = "no_duplicates"
+description = "No duplicate elements exist"
+formal = "forall i, j: i != j implies self[i] != self[j]"
+testable = true
+optional = true  # Some use cases allow duplicates
+
+[[witnesses.constructors]]
+name = "empty"
+description = "Create an empty sorted vector"
+params = []
+trust_level = "safe"
+complexity = "O(1)"
+
+[[witnesses.constructors]]
+name = "from_sorted"
+description = "Wrap a pre-sorted vector (caller asserts invariant)"
+params = ["inner: Vec<T>"]
+precondition = "inner is sorted ascending"
+trust_level = "unsafe"
+complexity = "O(1)"
+
+[[witnesses.constructors]]
+name = "from_unsorted"
+description = "Sort the input to establish invariant"
+params = ["inner: Vec<T>"]
+trust_level = "safe"
+side_effect = "sorts input"
+complexity = "O(n log n)"
+
+[[witnesses.constructors]]
+name = "singleton"
+description = "Create a sorted vector with a single element"
+params = ["element: T"]
+trust_level = "safe"
+complexity = "O(1)"
+
+[[witnesses.preserving_operations]]
+name = "insert"
+description = "Insert element in sorted position"
+params = ["element: T"]
+returns = "usize"  # Returns insertion index
+preserves = ["sorted"]
+complexity = "O(n)"
+
+[[witnesses.preserving_operations]]
+name = "merge"
+description = "Merge two sorted vectors"
+params = ["other: SortedVec<T>"]
+returns = "SortedVec<T>"
+preserves = ["sorted"]
+complexity = "O(n + m)"
+
+[[witnesses.preserving_operations]]
+name = "remove"
+description = "Remove element at index"
+params = ["index: usize"]
+returns = "Option<T>"
+preserves = ["sorted"]
+complexity = "O(n)"
+
+[[witnesses.preserving_operations]]
+name = "binary_search"
+description = "Search for element using binary search"
+params = ["element: &T"]
+returns = "Result<usize, usize>"  # Ok(index) or Err(insertion_point)
+preserves = ["sorted"]
+complexity = "O(log n)"
+
+[[witnesses.preserving_operations]]
+name = "dedup"
+description = "Remove consecutive duplicates (establishes no_duplicates)"
+params = []
+preserves = ["sorted", "no_duplicates"]
+complexity = "O(n)"
+
+[[witnesses.unwrap_operations]]
+name = "into_inner"
+description = "Consume and return the underlying vector"
+returns = "Vec<T>"
+note = "Caller receives sorted data but type system no longer tracks this"
+
+[[witnesses.unwrap_operations]]
+name = "as_slice"
+description = "View as a slice"
+returns = "&[T]"
+note = "Slice is guaranteed sorted while reference is live"
+
+[witnesses.language_overrides.rust]
+additional_derives = ["Debug", "Clone", "PartialEq", "Eq", "Hash"]
+imports = ["use std::cmp::Ordering;"]
+
+[witnesses.language_overrides.typescript]
+imports = ["// Note: Comparison uses default < operator"]
+
+[witnesses.language_overrides.python]
+imports = [
+    "from functools import total_ordering",
+    "from typing import TypeVar, Generic, List, Iterator"
+]
+
+[witnesses.language_overrides.go]
+imports = [
+    "golang.org/x/exp/constraints",
+    "golang.org/x/exp/slices"
+]
+
+# =============================================================================
+# NON-EMPTY VECTOR
+# =============================================================================
+
+[[witnesses]]
+name = "NonEmptyVec"
+description = "A vector guaranteed to contain at least one element"
+
+[witnesses.base]
+generic = true
+inner_type = "Vec<T>"
+
+[[witnesses.base.type_params]]
+name = "T"
+
+[[witnesses.invariants]]
+id = "non_empty"
+description = "Contains at least one element"
+formal = "len(self) >= 1"
+testable = true
+
+[[witnesses.constructors]]
+name = "new"
+description = "Create from a non-empty vector"
+params = ["inner: Vec<T>"]
+precondition = "inner.len() >= 1"
+trust_level = "safe"  # Returns Result/Option on failure
+complexity = "O(1)"
+
+[[witnesses.constructors]]
+name = "singleton"
+description = "Create with a single element"
+params = ["element: T"]
+trust_level = "safe"
+complexity = "O(1)"
+
+[[witnesses.constructors]]
+name = "from_first_and_rest"
+description = "Create from first element and remaining elements"
+params = ["first: T", "rest: Vec<T>"]
+trust_level = "safe"
+complexity = "O(1)"
+
+[[witnesses.preserving_operations]]
+name = "push"
+description = "Add element to the end"
+params = ["element: T"]
+preserves = ["non_empty"]
+complexity = "O(1) amortized"
+
+[[witnesses.preserving_operations]]
+name = "first"
+description = "Get first element (always exists)"
+params = []
+returns = "&T"  # Not Option<&T> because guaranteed non-empty
+preserves = ["non_empty"]
+complexity = "O(1)"
+
+[[witnesses.preserving_operations]]
+name = "last"
+description = "Get last element (always exists)"
+params = []
+returns = "&T"
+preserves = ["non_empty"]
+complexity = "O(1)"
+
+[[witnesses.unwrap_operations]]
+name = "into_inner"
+description = "Consume and return the underlying vector"
+returns = "Vec<T>"
+note = "Returned vector guaranteed non-empty but type doesn't reflect this"
+
+[[witnesses.unwrap_operations]]
+name = "pop"
+description = "Remove and return last element if more than one exists"
+returns = "Option<T>"
+note = "Returns None if would make vector empty, preserving invariant"
+
+# =============================================================================
+# BOUNDED STRING
+# =============================================================================
+
+[[witnesses]]
+name = "BoundedString"
+description = "A string with configurable length bounds"
+
+[witnesses.base]
+generic = false
+inner_type = "String"
+
+[[witnesses.invariants]]
+id = "min_length"
+description = "String has minimum length"
+formal = "len(self) >= MIN"
+testable = true
+
+[[witnesses.invariants]]
+id = "max_length"
+description = "String has maximum length"
+formal = "len(self) <= MAX"
+testable = true
+
+[[witnesses.constructors]]
+name = "new"
+description = "Create from string, validating bounds"
+params = ["s: String", "min: usize", "max: usize"]
+precondition = "min <= s.len() <= max"
+trust_level = "safe"
+complexity = "O(1)"
+
+[[witnesses.constructors]]
+name = "truncate"
+description = "Create from string, truncating if too long"
+params = ["s: String", "min: usize", "max: usize"]
+precondition = "s.len() >= min"
+trust_level = "safe"
+side_effect = "may truncate input"
+complexity = "O(n)"
+
+[[witnesses.preserving_operations]]
+name = "as_str"
+description = "View as string slice"
+params = []
+returns = "&str"
+preserves = ["min_length", "max_length"]
+complexity = "O(1)"
+
+[[witnesses.unwrap_operations]]
+name = "into_inner"
+description = "Consume and return the underlying string"
+returns = "String"
+
+[witnesses.language_overrides.rust]
+type_definition = "pub struct BoundedString<const MIN: usize, const MAX: usize>(String);"
+
+[witnesses.language_overrides.typescript]
+type_definition = "type BoundedString<Min extends number, Max extends number> = string & { __boundedString: { min: Min, max: Max } };"
+
+[witnesses.language_overrides.python]
+type_definition = """
+@dataclass(frozen=True)
+class BoundedString:
+    _inner: str
+    _min: int
+    _max: int
+"""
