@@ -1115,3 +1115,62 @@ Run summary: /Users/jackedney/criticality/.ralph/runs/run-20260124-213521-33625-
   - Flexible parsing handles multiple content field names for different providers
   - Following ClaudeCodeClient patterns ensures consistent API surface
 ---
+
+## 2026-01-24 22:32 - US-023: Add model request/response logging
+Thread:
+Run: 20260124-213521-33625 (iteration 8)
+Run log: /Users/jackedney/criticality/.ralph/runs/run-20260124-213521-33625-iter-8.log
+Run summary: /Users/jackedney/criticality/.ralph/runs/run-20260124-213521-33625-iter-8.md
+- Guardrails reviewed: yes
+- No-commit run: false
+- Commit: e6b5656 feat(US-023): Implement model request/response logging
+- Post-commit status: clean (remaining files are PRD and ralph temp files)
+- Verification:
+  - Command: npm run typecheck -> PASS
+  - Command: npm run lint -> PASS
+  - Command: npm run test -> PASS (751 tests passed - 700 existing + 51 new logging tests)
+- Files changed:
+  - src/router/logging.ts (new - ModelLogger class and logging utilities)
+  - src/router/logging.test.ts (new - 51 tests for logging functionality)
+  - src/router/index.ts (updated - exports for logging module)
+- What was implemented:
+  - Created ModelLogger class with configurable log levels:
+    - 'none': No logging output (produces no entries)
+    - 'summary': Log timestamp, model alias, prompt hash, token count, latency
+    - 'full': Log everything including full prompts and responses
+  - Request logging:
+    - Timestamp (ISO 8601)
+    - Model alias (architect, auditor, structurer, worker, fallback)
+    - Prompt hash (SHA-256 truncated to 16 hex chars)
+    - Request ID (optional, for correlation)
+    - Full prompt and system prompt (only in 'full' level)
+  - Response logging:
+    - Timestamp (ISO 8601)
+    - Token count (prompt/completion/total)
+    - Latency (milliseconds)
+    - Model ID and provider
+    - Full response content (only in 'full' level)
+  - Error logging:
+    - Error kind, message, retryable status
+  - File-based logging:
+    - Writes to dedicated log file as JSONL (one JSON object per line)
+    - Auto-creates log directory if needed
+    - Appends entries atomically
+  - Utility functions:
+    - computePromptHash() for SHA-256 prompt hashing
+    - readLogFile() for parsing log files
+    - getLogStats() for entry type counts
+  - All acceptance criteria verified:
+    - [x] Log request timestamp, model alias, prompt hash
+    - [x] Log response timestamp, token count, latency
+    - [x] Configurable log level: none, summary, full
+    - [x] Write logs to dedicated model-interactions log file
+    - [x] Example: model request with log level 'summary' logs timestamp and token count (tested)
+    - [x] Negative case: log level 'none' produces no log output (tested)
+- **Learnings for future iterations:**
+  - JSONL format (one JSON object per line) is ideal for log files - easy to append and parse
+  - SHA-256 truncated to 16 chars provides sufficient uniqueness for prompt identification
+  - Injectable `now()` function enables deterministic testing of timestamps
+  - Property-based tests verify invariants across all log levels and model aliases
+  - exactOptionalPropertyTypes requires careful conditional object building
+---
