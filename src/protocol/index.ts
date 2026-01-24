@@ -86,3 +86,23 @@ export {
   hasTimeout,
   getTimeoutDeadline,
 } from './blocking.js';
+
+export {
+  // Persistence types
+  type PersistedStateData,
+  type PersistedSubstateData,
+  type StatePersistenceErrorType,
+  type SaveStateOptions,
+  type ProtocolStateSnapshot,
+  // Persistence constants
+  PERSISTED_STATE_VERSION,
+  // Persistence error class
+  StatePersistenceError,
+  // Persistence functions
+  serializeState,
+  deserializeState,
+  saveState,
+  loadState,
+  stateFileExists,
+  createInitialStateSnapshot,
+} from './persistence.js';

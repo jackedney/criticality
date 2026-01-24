@@ -746,3 +746,115 @@ Run summary: /Users/jackedney/criticality/.ralph/runs/run-20260124-173246-37766-
   - TransitionResult discriminated union enables safe error handling
   - String template keys like "CompositionAudit->Ignition" for failure artifact lookup
 ---
+
+## 2026-01-24 - US-017: Implement blocking state for human intervention
+Thread:
+Run: 20260124-173246-37766 (iteration 17)
+Run log: /Users/jackedney/criticality/.ralph/runs/run-20260124-173246-37766-iter-17.log
+Run summary: /Users/jackedney/criticality/.ralph/runs/run-20260124-173246-37766-iter-17.md
+- Guardrails reviewed: yes
+- No-commit run: false
+- Commit: 1e5548b feat(US-017): Implement blocking state for human intervention
+- Post-commit status: clean (remaining files are PRD and ralph temp files)
+- Verification:
+  - Command: npm run typecheck -> PASS
+  - Command: npm run lint -> PASS (after auto-fix)
+  - Command: npm run test -> PASS (496 tests passed - 457 existing + 39 new blocking tests)
+  - Command: npm run build -> PASS
+- Files changed:
+  - src/protocol/blocking.ts (new - blocking state management)
+  - src/protocol/blocking.test.ts (new - 39 tests for blocking functionality)
+  - src/protocol/index.ts (updated - exports for blocking module)
+- What was implemented:
+  - Enter blocking state from any phase (except Complete):
+    - enterBlocking(currentState, options) creates blocking substate
+    - BlockingRecord tracks query, options, timeoutMs, enteredAt
+    - INVALID_PHASE error for Complete phase
+    - ALREADY_BLOCKING error if already in blocking substate
+  - Blocking records query and available options:
+    - BlockingRecord with queryId, phase, query, options?, timeoutMs?
+    - generateBlockingQueryId() creates unique IDs (blocking_NNN format)
+  - Resolution unblocks and records to ledger:
+    - resolveBlocking() returns state to Active substate
+    - Creates decision in ledger with source 'human_resolution'
+    - Maps protocol phases to ledger phases
+    - BlockingResolution tracks selectedOption, rationale, resolvedAt
+    - NOT_BLOCKING error if not in blocking substate
+    - QUERY_MISMATCH error if record doesn't match current state
+  - Timeout tracking for blocked states:
+    - checkTimeout(record) returns timeout status and elapsed time
+    - hasTimeout(record) checks if timeout is configured
+    - getRemainingTimeout(record) returns remaining time or null
+    - getTimeoutDeadline(record) returns deadline timestamp
+    - handleTimeout() with strategies: escalate, default, fail
+    - Escalate: re-enters blocking with escalation flag
+    - Default: resolves with default option
+    - Fail: transitions to failed substate
+  - All acceptance criteria verified:
+    - [x] Any phase can enter blocking state
+    - [x] Blocking records query and available options
+    - [x] Resolution unblocks and records decision to ledger
+    - [x] Track timeout for blocked states
+    - [x] Example: enter blocking state with query 'Approve architecture?' (tested)
+    - [x] Example: resolve blocking state records human decision (tested)
+    - [x] Negative case: timeout on blocked state triggers appropriate handling (tested)
+- **Learnings for future iterations:**
+  - exactOptionalPropertyTypes requires conditionally building objects to avoid undefined values
+  - Protocol phases must map to ledger phases for decision recording
+  - Timeout handling strategies (escalate, default, fail) cover different workflow needs
+  - BlockingRecord separate from BlockingSubstate enables tracking without state coupling
+---
+
+## 2026-01-24 21:47 - US-018: Implement protocol state persistence
+Thread:
+Run: 20260124-213521-33625 (iteration 2)
+Run log: /Users/jackedney/criticality/.ralph/runs/run-20260124-213521-33625-iter-2.log
+Run summary: /Users/jackedney/criticality/.ralph/runs/run-20260124-213521-33625-iter-2.md
+- Guardrails reviewed: yes
+- No-commit run: false
+- Commit: cb53159 feat(US-018): Implement protocol state persistence
+- Post-commit status: clean (remaining files are PRD and ralph temp files)
+- Verification:
+  - Command: npm run typecheck -> PASS
+  - Command: npm run lint -> PASS (after auto-fix)
+  - Command: npm run test -> PASS (547 tests passed - 496 existing + 51 new persistence tests)
+- Files changed:
+  - src/protocol/persistence.ts (new - state persistence module)
+  - src/protocol/persistence.test.ts (new - 51 tests for persistence)
+  - src/protocol/index.ts (updated - exports for persistence module)
+- What was implemented:
+  - State serialization:
+    - serializeState(snapshot, options) converts ProtocolStateSnapshot to JSON
+    - Includes version, persistedAt timestamp, phase, substate, artifacts, blockingQueries
+    - Pretty-print by default with configurable indentation
+  - State deserialization:
+    - deserializeState(json) parses and validates JSON to ProtocolStateSnapshot
+    - Validates version semver format
+    - Validates phase is valid ProtocolPhase
+    - Validates substate kind and required fields per substate type
+    - Validates artifacts array and blockingQueries structure
+  - Atomic writes to prevent corruption:
+    - saveState() uses write-to-temp-then-rename pattern
+    - Temp file cleaned up on failure
+    - loadState() handles missing, empty, and corrupted files
+  - State snapshot structure:
+    - ProtocolStateSnapshot: state, artifacts, blockingQueries
+    - PersistedStateData: version, persistedAt, phase, substate, artifacts, blockingQueries
+  - Error handling:
+    - StatePersistenceError with errorType field (parse_error, schema_error, file_error, validation_error, corruption_error)
+    - Descriptive messages with details and cause chain
+  - Helper functions:
+    - stateFileExists() checks if state file exists
+    - createInitialStateSnapshot() creates initial Ignition state
+  - All acceptance criteria verified:
+    - [x] Serialize state after each transition
+    - [x] State includes current phase, artifacts, blocking queries
+    - [x] Atomic writes prevent corruption
+    - [x] Example: state persisted after transition to Lattice phase (tested)
+    - [x] Negative case: partial write does not corrupt state file (tested)
+- **Learnings for future iterations:**
+  - Same atomic write pattern from ledger persistence works for state persistence
+  - ProtocolStateSnapshot separates state from metadata (artifacts, blockingQueries)
+  - Substate deserialization requires validating kind-specific required fields
+  - exactOptionalPropertyTypes pattern consistent with other modules
+---
