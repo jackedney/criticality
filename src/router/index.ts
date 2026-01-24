@@ -64,3 +64,24 @@ export {
   createOpenCodeClient,
   type OpenCodeClientOptions,
 } from './opencode-client.js';
+
+// Model interaction logging
+export {
+  // Types
+  type ModelLogLevel,
+  type ModelRequestLogEntry,
+  type ModelResponseLogEntry,
+  type ModelErrorLogEntry,
+  type ModelLogEntry,
+  type ModelLoggerOptions,
+  // Constants
+  MODEL_LOG_LEVELS,
+  // Functions
+  isValidModelLogLevel,
+  computePromptHash,
+  createModelLogger,
+  readLogFile,
+  getLogStats,
+  // Class
+  ModelLogger,
+} from './logging.js';
