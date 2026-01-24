@@ -478,3 +478,118 @@ Run summary: /Users/jackedney/criticality/.ralph/runs/run-20260124-173246-37766-
   - Testing with explicit try/catch blocks helps verify error properties beyond just error type
   - SupersedeOptions with optional forceOverrideCanonical follows TypeScript optional property patterns
 ---
+
+## 2026-01-24 18:40 - US-012: Implement Decision Ledger cascade (dependency tracking)
+Thread:
+Run: 20260124-173246-37766 (iteration 12)
+Run log: /Users/jackedney/criticality/.ralph/runs/run-20260124-173246-37766-iter-12.log
+Run summary: /Users/jackedney/criticality/.ralph/runs/run-20260124-173246-37766-iter-12.md
+- Guardrails reviewed: yes
+- No-commit run: false
+- Commit: 3117a01 feat(US-012): Implement Decision Ledger cascade (dependency tracking)
+- Post-commit status: clean (remaining files are PRD and ralph temp files)
+- Verification:
+  - Command: npm run typecheck -> PASS
+  - Command: npm run lint -> PASS
+  - Command: npm run test -> PASS (294 tests passed - 257 existing + 37 new cascade tests)
+  - Command: npm run build -> PASS
+- Files changed:
+  - src/ledger/ledger.ts (dependency validation, circular detection, invalidate with cascade, getDependents, getDependencies)
+  - src/ledger/ledger.test.ts (37 new tests for cascade functionality)
+  - src/ledger/index.ts (exports for new error types and interfaces)
+- What was implemented:
+  - Dependency validation on append:
+    - Validates all dependency IDs exist in ledger before appending
+    - DependencyNotFoundError thrown for missing dependencies
+    - skipDependencyValidation option for loading persisted data
+  - Circular dependency detection:
+    - DFS-based cycle detection with path tracking
+    - CircularDependencyError thrown with cycle path array
+    - Prevents cycles at append time
+  - Cascade invalidation:
+    - invalidate() method marks decision and all dependents as invalidated
+    - BFS traversal finds all transitive dependents
+    - Optional cascade: false to invalidate single decision
+    - forceInvalidateCanonical flag for canonical decisions
+  - Cascade report generation:
+    - CascadeReport with sourceDecisionId, affectedDecisions, totalInvalidated, timestamp
+    - CascadeAffectedDecision with id, constraint, dependencyPath, depth
+    - Detailed paths showing how each affected decision relates to source
+  - New interfaces/types:
+    - CircularDependencyError (with cycle: string[])
+    - DependencyNotFoundError (with dependencyId, decisionId)
+    - CascadeReport and CascadeAffectedDecision interfaces
+    - InvalidateOptions (cascade, forceInvalidateCanonical)
+    - AppendOptions (skipDependencyValidation)
+  - Helper methods:
+    - getDependents(decisionId) - returns decisions depending on given ID
+    - getDependencies(decisionId) - returns decisions the given ID depends on
+  - All acceptance criteria verified and passing:
+    - [x] Record dependencies on append
+    - [x] Invalidating a decision cascades to dependents
+    - [x] Detect and prevent circular dependencies
+    - [x] Generate cascade report showing affected decisions
+    - [x] Example: invalidate decision A cascades to dependent decisions B and C (tested)
+    - [x] Example: cascade report lists all affected decisions (tested)
+    - [x] Negative case: creating circular dependency A->B->A returns error (tested)
+- **Learnings for future iterations:**
+  - BFS traversal with depth tracking enables proper cascade report generation
+  - DFS with path tracking provides clear cycle information for error messages
+  - Complex dependency graphs (diamond patterns) require deduplication in traversal
+  - skipDependencyValidation option necessary for loading persisted data with existing dependencies
+  - Existing tests may break when adding dependency validation - need to update them to create dependencies first
+---
+
+## 2026-01-24 18:46 - US-013: Implement Decision Ledger serialization/deserialization
+Thread:
+Run: 20260124-173246-37766 (iteration 13)
+Run log: /Users/jackedney/criticality/.ralph/runs/run-20260124-173246-37766-iter-13.log
+Run summary: /Users/jackedney/criticality/.ralph/runs/run-20260124-173246-37766-iter-13.md
+- Guardrails reviewed: yes
+- No-commit run: false
+- Commit: 959d2ef feat(US-013): Implement Decision Ledger serialization/deserialization
+- Post-commit status: clean (remaining files are PRD and ralph temp files)
+- Verification:
+  - Command: npm run typecheck -> PASS
+  - Command: npm run lint -> PASS
+  - Command: npm run test -> PASS (337 tests passed - 294 existing + 43 new persistence tests)
+- Files changed:
+  - src/ledger/persistence.ts (new file - persistence module)
+  - src/ledger/persistence.test.ts (new file - 43 tests)
+  - src/ledger/index.ts (exports for new functions and types)
+  - package.json (added @types/node dependency)
+  - package-lock.json (updated)
+- What was implemented:
+  - Serialization:
+    - serialize(ledger, options): Convert Ledger to JSON string
+    - Pretty-print by default with configurable indentation
+    - Outputs JSON matching ledger.schema.json structure
+  - Deserialization:
+    - deserialize(json, options): Parse JSON to Ledger instance
+    - Validates top-level structure (meta, decisions)
+    - Validates meta fields (version semver pattern, required fields)
+    - Delegates decision validation to fromData()
+  - File operations:
+    - saveLedger(ledger, filePath, options): Atomic file write
+    - Uses write-to-temp-then-rename pattern to prevent corruption
+    - loadLedger(filePath, options): Read and validate ledger from file
+    - Handles missing files, empty files, corrupted JSON
+  - Error handling:
+    - LedgerSerializationError with typed errorType field
+    - Error types: parse_error, schema_error, file_error, validation_error, corruption_error
+    - Descriptive error messages with details and cause chain
+    - SerializationErrorType exported as type alias
+  - All acceptance criteria verified and passing:
+    - [x] Serialize ledger to JSON matching ledger.schema.json
+    - [x] Deserialize and validate on load
+    - [x] Handle corrupted files gracefully with clear error
+    - [x] Atomic writes prevent partial corruption
+    - [x] Example: save and reload ledger preserves all decisions (tested)
+    - [x] Negative case: loading corrupted JSON returns descriptive error (tested)
+- **Learnings for future iterations:**
+  - exactOptionalPropertyTypes requires explicit undefined in type definitions
+  - Type assertions through unknown needed for strict JSON parsing
+  - Node.js type imports require @types/node as devDependency
+  - Atomic write pattern: write temp file, then rename (atomic on most filesystems)
+  - Wrapping errors with context (file path) while preserving original errorType
+---
