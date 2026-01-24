@@ -858,3 +858,57 @@ Run summary: /Users/jackedney/criticality/.ralph/runs/run-20260124-213521-33625-
   - Substate deserialization requires validating kind-specific required fields
   - exactOptionalPropertyTypes pattern consistent with other modules
 ---
+
+## 2026-01-24 21:57 - US-019: Add checkpoint/resume capability
+Thread:
+Run: 20260124-213521-33625 (iteration 3)
+Run log: /Users/jackedney/criticality/.ralph/runs/run-20260124-213521-33625-iter-3.log
+Run summary: /Users/jackedney/criticality/.ralph/runs/run-20260124-213521-33625-iter-3.md
+- Guardrails reviewed: yes
+- No-commit run: false
+- Commit: fc2fd9a feat(US-019): Add checkpoint/resume capability
+- Post-commit status: clean (remaining files are PRD and ralph temp files)
+- Verification:
+  - Command: npm run typecheck -> PASS
+  - Command: npm run lint -> PASS (after auto-fix)
+  - Command: npm run test -> PASS (600 tests passed - 547 existing + 53 new checkpoint tests)
+- Files changed:
+  - src/protocol/checkpoint.ts (new - checkpoint/resume module)
+  - src/protocol/checkpoint.test.ts (new - 53 tests for checkpoint/resume)
+  - src/protocol/index.ts (updated - exports for checkpoint module)
+- What was implemented:
+  - State detection on startup:
+    - detectExistingState(options) checks for state file and returns modification time
+    - StateDetectionResult with found boolean and file metadata
+  - State integrity validation:
+    - validateStateIntegrity(snapshot, persistedAt, options) performs comprehensive validation
+    - Validates phase, substate structure, required artifacts, blocking queries
+    - Checks for staleness with configurable maxAgeMs threshold
+    - StateValidationResult with errors and warnings arrays
+    - Warning codes: STALE_STATE, UNKNOWN_ARTIFACTS, OLD_VERSION, BLOCKING_TIMEOUT_EXPIRED
+    - Error codes: INVALID_VERSION, INVALID_PHASE, INVALID_SUBSTATE, MISSING_ARTIFACTS, CORRUPTED_STRUCTURE, FUTURE_VERSION
+  - Resume from exact position:
+    - resumeFromCheckpoint(filePath, options) loads and validates state
+    - Returns success with snapshot and validation, or failure with reason and recovery action
+    - Preserves all state including blocking substates, failed substates, artifacts, blocking queries
+  - Graceful handling of stale/corrupted state:
+    - getStartupState(filePath, options) high-level startup decision function
+    - Returns resumed state or fresh state with recoveryPerformed flag
+    - Corrupted/invalid state triggers clean start (CLEAN_START recovery action)
+    - Stale state configurable with allowStaleState option (warn by default)
+  - Helper functions:
+    - isStateCorrupted() quick corruption check
+    - validatePersistedStructure() validates raw persisted data structure
+  - All acceptance criteria verified:
+    - [x] Detect existing state on startup
+    - [x] Validate state integrity before resuming
+    - [x] Resume from exact position
+    - [x] Handle stale or corrupted state gracefully
+    - [x] Example: restart after crash resumes from last checkpoint (tested)
+    - [x] Negative case: corrupted state file triggers recovery or clean start (tested)
+- **Learnings for future iterations:**
+  - Non-existent file is not corrupted - semantic distinction important for isStateCorrupted
+  - Version comparison for forward/backward compatibility with semver parsing
+  - Required artifacts vary by phase - validation must check phase-specific requirements
+  - BFS traversal pattern for building artifact requirement sets from phase index
+---
