@@ -1,7 +1,7 @@
 /**
- * Configuration module for criticality.toml parsing.
+ * Configuration module for criticality.toml parsing and validation.
  *
- * Provides typed configuration parsing with sensible defaults.
+ * Provides typed configuration parsing with sensible defaults and semantic validation.
  *
  * @packageDocumentation
  */
@@ -22,3 +22,17 @@ export {
   DEFAULT_PATHS,
   DEFAULT_THRESHOLDS,
 } from './defaults.js';
+export {
+  ConfigValidationError,
+  validateConfig,
+  assertConfigValid,
+  isRecognizedModel,
+  RECOGNIZED_MODELS,
+} from './validator.js';
+export type {
+  PathChecker,
+  PathCheckResult,
+  ValidationError,
+  ValidationResult,
+  ValidateConfigOptions,
+} from './validator.js';
