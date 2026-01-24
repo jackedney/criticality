@@ -39,3 +39,17 @@ export type {
   CascadeReport,
   CascadeAffectedDecision,
 } from './ledger.js';
+
+export {
+  LedgerSerializationError,
+  serialize,
+  deserialize,
+  saveLedger,
+  loadLedger,
+} from './persistence.js';
+
+export type {
+  LoadLedgerOptions,
+  SaveLedgerOptions,
+  SerializationErrorType,
+} from './persistence.js';
