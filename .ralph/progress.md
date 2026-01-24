@@ -378,3 +378,56 @@ Run summary: /Users/jackedney/criticality/.ralph/runs/run-20260124-173246-37766-
   - Environment records should be passed as parameters for testability
   - Boolean coercion should accept common truthy/falsy patterns (yes/no, on/off, 1/0)
 ---
+
+## 2026-01-24 18:27 - US-010: Implement Decision Ledger append operations
+Thread:
+Run: 20260124-173246-37766 (iteration 10)
+Run log: /Users/jackedney/criticality/.ralph/runs/run-20260124-173246-37766-iter-10.log
+Run summary: /Users/jackedney/criticality/.ralph/runs/run-20260124-173246-37766-iter-10.md
+- Guardrails reviewed: yes
+- No-commit run: false
+- Commit: d4716d1 feat(US-010): Implement Decision Ledger append operations
+- Post-commit status: clean (remaining files are PRD and ralph temp files)
+- Verification:
+  - Command: npm run typecheck -> PASS
+  - Command: npm run lint -> PASS
+  - Command: npm run test -> PASS (231 tests passed - 174 existing + 57 new ledger tests)
+  - Command: npm run build -> PASS
+- Files changed:
+  - src/ledger/types.ts (Decision, DecisionCategory, DecisionSource, ConfidenceLevel, DecisionStatus, DecisionPhase, DecisionInput, LedgerMeta, LedgerData)
+  - src/ledger/ledger.ts (Ledger class, LedgerValidationError, DuplicateDecisionIdError, fromData)
+  - src/ledger/index.ts (module exports)
+  - src/ledger/ledger.test.ts (57 tests including property-based tests)
+- What was implemented:
+  - Created Decision type matching ledger.schema.json:
+    - Required: id, timestamp, category, constraint, source, confidence, status, phase
+    - Optional: rationale, dependencies, supersedes, superseded_by, failure_context, contradiction_resolved, human_query_id
+    - Category enum: architectural, phase_structure, injection, ledger, type_witnesses, contracts, models, blocking, testing, orchestrator, language_support, data_model, interface, constraint, security
+    - Source enum: user_explicit, design_principle, original_design, discussion, design_choice, design_review, injection_failure, auditor_contradiction, composition_audit, mesoscopic_failure, human_resolution
+    - Confidence enum: canonical, delegated, inferred, provisional, suspended, blocking
+    - Phase enum: design, ignition, lattice, composition_audit, injection, mesoscopic, mass_defect
+  - Created Ledger class with append method:
+    - Auto-generates unique IDs in format category_NNN (e.g., "architectural_001")
+    - Maintains separate ID counters per category
+    - Auto-sets timestamp on append using injectable now() function
+    - Sets status to "active" by default
+    - Schema validation on append (validates category, source, confidence, phase, constraint non-empty)
+  - Implemented duplicate ID detection and rejection:
+    - DuplicateDecisionIdError thrown when appendWithId is called with existing ID
+    - Uses Set for O(1) ID existence checks
+  - Created fromData() factory function to restore ledger from persisted data
+  - All acceptance criteria verified and passing:
+    - [x] Create Decision type matching ledger.schema.json
+    - [x] Create Ledger class with append method
+    - [x] Auto-generate unique IDs for new decisions
+    - [x] Auto-set timestamps on append
+    - [x] Schema validation on append
+    - [x] Detect and reject duplicate IDs
+    - [x] Example: append decision returns decision with generated ID and timestamp (tested)
+    - [x] Negative case: append decision with invalid schema returns validation error (tested)
+- **Learnings for future iterations:**
+  - exactOptionalPropertyTypes requires special handling when building objects from optional Decision fields
+  - Private field access via bracket notation (ledger['meta']) doesn't survive linting with dot-notation rule
+  - Injectable now() function enables deterministic testing of timestamp behavior
+  - Property-based tests with category/source/confidence arbitraries ensure comprehensive coverage
+---
