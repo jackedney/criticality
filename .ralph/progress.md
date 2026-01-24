@@ -1030,3 +1030,31 @@ Run summary: /Users/jackedney/criticality/.ralph/runs/run-20260124-213521-33625-
   - Mock async generators need explicit return type annotations for TypeScript
   - Tests calling functions twice need separate mock setups or promise capture
 ---
+
+## 2026-01-24 22:18 - US-021: Implement Claude Code client (Verification)
+Thread:
+Run: 20260124-213521-33625 (iteration 6)
+Run log: /Users/jackedney/criticality/.ralph/runs/run-20260124-213521-33625-iter-6.log
+Run summary: /Users/jackedney/criticality/.ralph/runs/run-20260124-213521-33625-iter-6.md
+- Guardrails reviewed: yes
+- No-commit run: false
+- Commit: none (story already completed in iteration 5 as d1144ef)
+- Post-commit status: clean (remaining files are PRD status updates and ralph temp files)
+- Verification:
+  - Command: npm run typecheck -> PASS
+  - Command: npm run lint -> PASS
+  - Command: npm run test -> PASS (661 tests passed)
+- Files changed: none (verification only)
+- What was implemented: Verification run - story was already completed in iteration 5
+- Acceptance criteria re-verified:
+  - [x] Install execa for subprocess management (verified in package.json)
+  - [x] Spawn Claude Code subprocess with appropriate flags (verified in claude-code-client.ts)
+  - [x] Pass prompts and receive responses (verified via tests)
+  - [x] Handle streaming output (verified via tests)
+  - [x] Capture usage/cost information if available (verified via tests)
+  - [x] Example: send prompt to Claude via CLI and receive response (verified via tests)
+  - [x] Negative case: Claude Code not installed returns clear error (verified via tests)
+- **Learnings for future iterations:**
+  - When story is already complete from prior iteration, verification runs confirm quality gates still pass
+  - PRD status updates are handled by the ralph loop, not by the agent
+---
