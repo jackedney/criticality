@@ -22,7 +22,9 @@
     "lint:fix": "eslint src/ --fix",
     "format": "prettier --write src/",
     "format:check": "prettier --check src/",
-    "test": "echo 'Testing not yet configured'",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:coverage": "vitest run --coverage",
     "prepare": "husky"
   },
   "keywords": [
@@ -42,13 +44,16 @@
     "@eslint/js": "^9.39.2",
     "@typescript-eslint/eslint-plugin": "^8.53.1",
     "@typescript-eslint/parser": "^8.53.1",
+    "@vitest/coverage-v8": "^4.0.18",
     "eslint": "^9.39.2",
     "eslint-config-prettier": "^10.1.8",
     "eslint-plugin-prettier": "^5.5.5",
+    "fast-check": "^4.5.3",
     "husky": "^9.1.7",
     "lint-staged": "^16.2.7",
     "prettier": "^3.8.1",
     "typescript": "^5.7.3",
-    "typescript-eslint": "^8.53.1"
+    "typescript-eslint": "^8.53.1",
+    "vitest": "^4.0.18"
   }
 }

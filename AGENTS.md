@@ -27,9 +27,23 @@ npm run format
 # Check formatting without writing
 npm run format:check
 
-# Run tests (not yet configured - US-004)
+# Run tests
 npm run test
+
+# Run tests in watch mode
+npm run test:watch
+
+# Run tests with coverage
+npm run test:coverage
 ```
+
+## Testing
+
+The project uses Vitest for unit and integration testing with fast-check for property-based testing:
+- Test files go in `src/` with `.test.ts` or `.spec.ts` extension
+- Coverage reporting via `@vitest/coverage-v8`
+- Coverage threshold: 80% for lines, functions, branches, and statements
+- Property-based testing available via fast-check
 
 ## Linting & Formatting
 
