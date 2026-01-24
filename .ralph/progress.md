@@ -1417,3 +1417,57 @@ Run summary: /Users/jackedney/criticality/.ralph/runs/run-20260124-213521-33625-
   - When story is already committed, verification iterations confirm quality gates still pass
   - Console warnings in CLI tools are acceptable (no-console lint rule) for debug output
 ---
+
+## 2026-01-24 23:27 - US-028: Implement criticality-toolchain-server (MCP)
+Thread:
+Run: 20260124-213521-33625 (iteration 14)
+Run log: /Users/jackedney/criticality/.ralph/runs/run-20260124-213521-33625-iter-14.log
+Run summary: /Users/jackedney/criticality/.ralph/runs/run-20260124-213521-33625-iter-14.md
+- Guardrails reviewed: yes
+- No-commit run: false
+- Commit: bd25560 feat(US-028): Implement criticality-toolchain-server MCP
+- Post-commit status: clean (remaining files are PRD and ralph temp files)
+- Verification:
+  - Command: npm run typecheck -> PASS
+  - Command: npm run lint -> PASS (5 warnings for console.log in CLI/debug code)
+  - Command: npm run test -> PASS (969 tests passed - 942 existing + 27 new toolchain tests)
+- Files changed:
+  - src/servers/toolchain/types.ts (new - type definitions for toolchain server)
+  - src/servers/toolchain/server.ts (new - MCP server implementation)
+  - src/servers/toolchain/server.test.ts (new - 27 tests for toolchain server)
+  - src/servers/toolchain/index.ts (new - module exports)
+  - src/servers/toolchain/cli.ts (new - CLI entry point)
+- What was implemented:
+  - verify_structure tool:
+    - Runs tsc --noEmit for TypeScript, cargo check for Rust
+    - Returns structured VerifyStructureResult with errors array
+    - Parses compiler output to extract file, line, column, code, message, severity
+    - Language auto-detection from tsconfig.json, Cargo.toml, etc.
+  - run_function_test tool:
+    - Runs vitest for TypeScript, cargo test for Rust, pytest for Python, go test for Go
+    - Returns structured RunFunctionTestResult with tests array, coverage info
+    - Parses test runner JSON output
+    - Supports testName filter and coverage option
+  - check_complexity tool:
+    - Analyzes cyclomatic complexity using heuristic control flow analysis
+    - Returns structured CheckComplexityResult with summary and violations
+    - Configurable threshold (default 10)
+    - Detailed mode includes per-function metrics
+  - Server configuration:
+    - ToolchainServerConfig with projectRoot, debug, timeout options
+    - Uses execa for command execution with timeout support
+    - ToolchainNotInstalledError, ToolExecutionError, OutputParseError custom errors
+- All acceptance criteria verified:
+  - [x] Create servers/toolchain/ package structure
+  - [x] Implement verify_structure tool (runs tsc/cargo check)
+  - [x] Implement run_function_test tool (runs isolated tests)
+  - [x] Implement check_complexity tool (returns metrics)
+  - [x] Ensure tools return structured JSON (success, errors, coverage)
+  - [x] Example: run_function_test returns JSON object with test results (tested)
+  - [x] Negative case: build failure returns structured error list, not just exit code 1 (tested)
+- **Learnings for future iterations:**
+  - TypeScript errors format: file(line,col): error TSxxxx: message - parsed with regex
+  - Tests in temp directories need TypeScript installed to run tsc - use real project for integration tests
+  - exactOptionalPropertyTypes requires explicit undefined checks when setting optional properties
+  - execa returns stdout/stderr as possibly undefined - check typeof for type safety
+---
