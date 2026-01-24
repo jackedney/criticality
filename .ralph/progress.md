@@ -1337,3 +1337,83 @@ Run summary: /Users/jackedney/criticality/.ralph/runs/run-20260124-213521-33625-
   - Signature complexity formula weights generics and lifetimes higher (x2) because they require more reasoning capability
   - Property-based tests confirm deterministic behavior (same inputs always produce same outputs)
 ---
+
+## 2026-01-24 - US-027: Implement criticality-artifact-server (MCP)
+Thread:
+Run: continuation session
+- Guardrails reviewed: yes
+- No-commit run: false
+- Commit: 557e411 feat(US-027): Implement criticality-artifact-server MCP
+- Post-commit status: clean (remaining files are PRD and ralph temp files)
+- Verification:
+  - Command: npm run typecheck -> PASS
+  - Command: npm run lint -> PASS
+  - Command: npm run test -> PASS (942 tests - 918 existing + 24 new artifact server tests)
+- Files changed:
+  - src/servers/artifact/types.ts (new - type definitions and scoping error classes)
+  - src/servers/artifact/server.ts (new - MCP server with 4 tools)
+  - src/servers/artifact/server.test.ts (new - 24 comprehensive tests)
+  - src/servers/artifact/index.ts (new - package exports)
+  - src/servers/artifact/cli.ts (new - CLI entry point)
+  - package.json (added @modelcontextprotocol/sdk, ajv dependencies)
+  - package-lock.json (updated dependencies)
+- What was implemented:
+  - MCP server providing read/write access ONLY to protocol artifacts:
+    - ALLOWED_ARTIFACT_FILES: DECISIONS.toml, spec.toml
+    - ALLOWED_ARTIFACT_DIRS: examples/, schemas/
+    - ArtifactScopingError for denied access attempts
+  - Four MCP tools:
+    - read_spec_section: Read specific sections from spec.toml
+    - append_decision: Append decisions to DECISIONS.toml with auto-ID generation
+    - get_type_witness: Read type witness files from examples/
+    - validate_schema: Validate TOML against JSON schema using Ajv
+  - Strict file scoping enforcement:
+    - validateArtifactPath() checks all paths against allowlist
+    - Prevents traversal outside artifact files
+    - Clear error messages for denied access
+  - Used low-level MCP SDK Server class with setRequestHandler for manual request handling
+  - Tests use InMemoryTransport.createLinkedPair() and Client for proper MCP protocol testing
+- All acceptance criteria verified:
+  - [x] Create servers/artifact/ package structure
+  - [x] Implement read_spec_section tool
+  - [x] Implement append_decision tool with schema validation
+  - [x] Implement get_type_witness tool
+  - [x] Implement validate_schema tool
+  - [x] Verify server starts and responds to MCP requests (tested)
+  - [x] Verify server refuses non-artifact files (tested - ArtifactScopingError)
+  - [x] Run quality gates (npm run typecheck, lint, test)
+  - [x] Commit changes
+- **Learnings for future iterations:**
+  - MCP SDK low-level Server class requires setRequestHandler for ListToolsRequestSchema and CallToolRequestSchema
+  - InMemoryTransport.createLinkedPair() is the correct pattern for testing MCP server-client pairs
+  - client.callTool returns complex union type - cast through unknown for test helper functions
+  - Ajv format validation warnings may affect test outcomes - test for both success and error cases
+  - @typescript-eslint/strict-boolean-expressions requires explicit === true for nullable booleans
+---
+
+## 2026-01-24 23:15 - US-027: Implement criticality-artifact-server (MCP) - Verification
+Thread:
+Run: 20260124-213521-33625 (iteration 13)
+Run log: /Users/jackedney/criticality/.ralph/runs/run-20260124-213521-33625-iter-13.log
+Run summary: /Users/jackedney/criticality/.ralph/runs/run-20260124-213521-33625-iter-13.md
+- Guardrails reviewed: yes
+- No-commit run: false
+- Commit: 557e411 feat(US-027): Implement criticality-artifact-server MCP (already committed in prior iteration)
+- Post-commit status: clean (remaining files are PRD, docs, and ralph temp files)
+- Verification:
+  - Command: npm run typecheck -> PASS
+  - Command: npm run lint -> PASS (4 warnings for console.log in CLI/debug code)
+  - Command: npm run test -> PASS (942 tests passed)
+- Files changed: none (verification iteration only)
+- What was implemented: Story was completed in prior iteration (commit 557e411). This iteration verified all acceptance criteria:
+  - [x] Create servers/artifact/ package structure - verified at src/servers/artifact/
+  - [x] Implement read_spec_section tool - verified in server.ts:139-160, 350-378
+  - [x] Implement append_decision tool with schema validation - verified in server.ts:162-249, 383-428
+  - [x] Implement get_type_witness tool - verified in server.ts:251-266, 434-484
+  - [x] Verify server starts and responds to MCP requests - verified via InMemoryTransport tests
+  - [x] Verify server refuses to serve non-artifact files (strict scoping) - verified via ALLOWED_ARTIFACT_FILES
+  - [x] Example: append_decision tool successfully adds entry to DECISIONS.toml - verified in test at line 264-277
+- **Learnings for future iterations:**
+  - When story is already committed, verification iterations confirm quality gates still pass
+  - Console warnings in CLI tools are acceptable (no-console lint rule) for debug output
+---
