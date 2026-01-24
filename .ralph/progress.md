@@ -593,3 +593,99 @@ Run summary: /Users/jackedney/criticality/.ralph/runs/run-20260124-173246-37766-
   - Atomic write pattern: write temp file, then rename (atomic on most filesystems)
   - Wrapping errors with context (file path) while preserving original errorType
 ---
+
+## 2026-01-24 - US-014: Add Decision Ledger query interface
+Thread:
+Run: 20260124-173246-37766 (iteration 14)
+Run log: /Users/jackedney/criticality/.ralph/runs/run-20260124-173246-37766-iter-14.log
+Run summary: /Users/jackedney/criticality/.ralph/runs/run-20260124-173246-37766-iter-14.md
+- Guardrails reviewed: yes
+- No-commit run: false
+- Commit: 8aed41f feat(US-014): Implement Decision Ledger query interface
+- Post-commit status: clean (remaining files are PRD and ralph temp files)
+- Verification:
+  - Command: npm run typecheck -> PASS
+  - Command: npm run lint -> PASS
+  - Command: npm run test -> PASS (365 tests passed - 337 existing + 28 new query tests)
+- Files changed:
+  - src/ledger/types.ts (added DecisionFilter, DecisionFilterKey, HistoryQueryOptions, DependencyGraphQueryOptions, DependencyGraphResult)
+  - src/ledger/ledger.ts (added InvalidFilterKeyError, VALID_FILTER_KEYS, query methods)
+  - src/ledger/index.ts (exports for new types and error class)
+  - src/ledger/ledger.test.ts (28 new tests for query functionality)
+- What was implemented:
+  - Filter decisions by multiple criteria:
+    - DecisionFilter interface with category, phase, status, confidence fields
+    - All filters combined with AND logic
+    - query(filter) method returns matching decisions
+    - InvalidFilterKeyError for invalid filter keys
+  - Get active decisions only:
+    - getActiveDecisions() method returns decisions with status === 'active'
+    - Excludes superseded and invalidated decisions
+  - Get decision history:
+    - getHistory(options) method with includeSuperseded and includeInvalidated options
+    - Both options default to true (full history)
+    - Can exclude superseded or invalidated entries as needed
+  - Get decisions by dependency graph:
+    - getDecisionsByDependencyGraph(decisionId, options) method
+    - Returns DependencyGraphResult with direct dependencies/dependents
+    - Optional transitive traversal via includeTransitiveDependencies/includeTransitiveDependents
+    - BFS traversal for transitive relationships
+  - All acceptance criteria verified and passing:
+    - [x] Filter decisions by category, phase, status, and confidence level
+    - [x] Get active decisions only (excluding superseded)
+    - [x] Get decision history including superseded entries
+    - [x] Get decisions by dependency graph
+    - [x] Example: query by category returns matching decisions (tested)
+    - [x] Example: getActiveDecisions excludes superseded (tested)
+    - [x] Negative case: invalid filter key returns clear error (tested)
+- **Learnings for future iterations:**
+  - ValidFilterKey type union provides compile-time safety for filter validation
+  - BFS traversal with visited set prevents infinite loops in transitive graph queries
+  - Tests with superseded decisions need careful setup to avoid matching replacement decisions
+  - VALID_FILTER_KEYS as const array enables both runtime validation and type narrowing
+---
+
+## 2026-01-24 - US-015: Define ProtocolState enum
+Thread:
+Run: 20260124-173246-37766 (iteration 15)
+Run log: /Users/jackedney/criticality/.ralph/runs/run-20260124-173246-37766-iter-15.log
+Run summary: /Users/jackedney/criticality/.ralph/runs/run-20260124-173246-37766-iter-15.md
+- Guardrails reviewed: yes
+- No-commit run: false
+- Commit: aa47f9f feat(US-015): Define ProtocolState enum and types
+- Post-commit status: clean
+- Verification:
+  - Command: npm run typecheck -> PASS
+  - Command: npm run lint -> PASS (after auto-fix)
+  - Command: npm run test -> PASS (394 tests passed - 365 existing + 29 new protocol tests)
+  - Command: npm run build -> PASS
+- Files changed:
+  - src/protocol/types.ts (new - ProtocolPhase, ProtocolSubstate variants, ProtocolState)
+  - src/protocol/types.test.ts (new - 29 tests for protocol state types)
+  - src/protocol/index.ts (new - module exports)
+- What was implemented:
+  - ProtocolPhase type covering all phases:
+    - Ignition, Lattice, CompositionAudit, Injection, Mesoscopic, MassDefect, Complete
+    - PROTOCOL_PHASES constant array for iteration/validation
+  - ProtocolSubstate discriminated union with 3 variants:
+    - ActiveSubstate: { kind: 'Active' }
+    - BlockingSubstate: { kind: 'Blocking', query, options?, blockedAt, timeoutMs? }
+    - FailedSubstate: { kind: 'Failed', error, code?, failedAt, recoverable, context? }
+  - ProtocolState type combining phase and substate
+  - Type guards: isActiveSubstate, isBlockingSubstate, isFailedSubstate
+  - Factory functions: createActiveSubstate, createBlockingSubstate, createFailedSubstate,
+    createProtocolState, createActiveState
+  - Utility functions: isValidPhase, getPhaseIndex, isTerminalState, canTransition
+  - All acceptance criteria verified:
+    - [x] Create enum covering all phases
+    - [x] Add Blocking substate for any phase (with query field)
+    - [x] Add Failed substate with failure context
+    - [x] Define ProtocolState type combining phase and substate
+    - [x] Example: ProtocolState can represent 'Ignition' phase in 'Active' substate (tested)
+    - [x] Example: ProtocolState can represent 'Lattice' phase in 'Blocking' substate with query (tested)
+- **Learnings for future iterations:**
+  - exactOptionalPropertyTypes requires conditional property assignment, not undefined values
+  - Discriminated unions with 'kind' field enable exhaustive type narrowing in switch statements
+  - Factory functions with explicit type narrowing avoid exactOptionalPropertyTypes issues
+  - readonly properties on interfaces enforce immutability at the type level
+---

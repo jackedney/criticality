@@ -333,7 +333,7 @@
     {
       "id": "US-013",
       "title": "Implement Decision Ledger serialization/deserialization",
-      "status": "in_progress",
+      "status": "done",
       "dependsOn": [
         "US-012"
       ],
@@ -347,13 +347,13 @@
         "Negative case: loading corrupted JSON returns descriptive error"
       ],
       "startedAt": "2026-01-24T18:40:41.691919+00:00",
-      "completedAt": null,
-      "updatedAt": "2026-01-24T18:40:41.692142+00:00"
+      "completedAt": "2026-01-24T18:47:13.894457+00:00",
+      "updatedAt": "2026-01-24T18:47:13.894273+00:00"
     },
     {
       "id": "US-014",
       "title": "Add Decision Ledger query interface",
-      "status": "open",
+      "status": "done",
       "dependsOn": [
         "US-013"
       ],
@@ -368,12 +368,15 @@
         "Get decisions by dependency graph",
         "Example: query by category 'architecture' returns only architecture decisions",
         "Negative case: query with invalid filter key returns error"
-      ]
+      ],
+      "startedAt": "2026-01-24T18:47:15.983874+00:00",
+      "completedAt": "2026-01-24T18:53:44.821590+00:00",
+      "updatedAt": "2026-01-24T18:53:44.821400+00:00"
     },
     {
       "id": "US-015",
       "title": "Define ProtocolState enum",
-      "status": "open",
+      "status": "in_progress",
       "dependsOn": [
         "US-004"
       ],
@@ -385,7 +388,10 @@
         "Define ProtocolState type combining phase and substate",
         "Example: ProtocolState can represent 'Ignition' phase in 'Active' substate",
         "Example: ProtocolState can represent 'Lattice' phase in 'Blocking' substate with query"
-      ]
+      ],
+      "startedAt": "2026-01-24T18:53:46.926732+00:00",
+      "completedAt": null,
+      "updatedAt": "2026-01-24T18:53:46.926937+00:00"
     },
     {
       "id": "US-016",
