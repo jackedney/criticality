@@ -44,3 +44,4 @@ coverage/
 # Logs
 *.log
 logs/
+\n# Local agent and ralph metadata\n.agents/\n.ralph/\n.serena/\n
