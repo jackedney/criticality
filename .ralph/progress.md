@@ -1288,3 +1288,52 @@ Run summary: /Users/jackedney/criticality/.ralph/runs/run-20260124-213521-33625-
   - Upgrade path: worker -> structurer -> architect -> fallback
   - DEFAULT_MODEL_LIMITS matches minimax-m2, so partial matching tests need models with different limits
 ---
+
+## 2026-01-24T22:52:00Z - US-026: Implement Deterministic Model Routing Logic
+Thread:
+Run: 20260124-213521-33625 (iteration 11)
+Run log: /Users/jackedney/criticality/.ralph/runs/run-20260124-213521-33625-iter-11.log
+Run summary: /Users/jackedney/criticality/.ralph/runs/run-20260124-213521-33625-iter-11.md
+- Guardrails reviewed: yes
+- No-commit run: false
+- Commit: a03070d feat(US-026): Implement deterministic model routing logic
+- Post-commit status: clean (remaining files are temp/PRD)
+- Verification:
+  - Command: `npm run typecheck` -> PASS
+  - Command: `npm run lint` -> PASS
+  - Command: `npm run test` -> PASS (918 tests, 58 new routing tests)
+- Files changed:
+  - src/router/routing.ts (new - deterministic routing logic)
+  - src/router/routing.test.ts (new - 58 tests)
+  - src/router/index.ts (updated - exports routing module)
+- What was implemented:
+  - Implemented signatureComplexity calculation per SPECIFICATION.md formula:
+    - genericParams * 2 + unionMembers + lifetimeParams * 2 + nestedTypeDepth + paramCount * 0.5
+  - Implemented pre-emption rules:
+    - Rule 1: estimatedInputTokens > 12000 → upgrade to structurer (for worker tasks)
+    - Rule 2: signatureComplexity > 5 → upgrade to structurer (for worker tasks)
+  - Input token threshold upgrades (> 12k tokens) for implement/transform tasks
+  - All routing logic is purely deterministic (no LLM decision making):
+    - TaskType enum determines base model: implement/transform → worker, audit → auditor, synthesize → architect, structure → structurer
+    - determineRouting() applies rules in priority order
+    - createRoutingSignals() extracts signals from ModelRouterRequest
+    - routeRequest() convenience function combines all steps
+  - Example: Complex signature (complexity > 5) triggers upgrade from worker to structurer (test: "upgrades to structurer when complexity > 5 for implement task")
+  - Negative case: Simple signature stays on worker model (test: "negative case: simple signature stays on worker model")
+  - Types exported:
+    - TaskType, SignatureComplexityParams, RoutingSignals, RoutingThresholds, RoutingDecision
+  - Constants exported:
+    - TASK_TYPES, DEFAULT_SIGNATURE_PARAMS, DEFAULT_ROUTING_SIGNALS, DEFAULT_ROUTING_THRESHOLDS, TASK_TYPE_TO_BASE_MODEL
+  - All acceptance criteria verified:
+    - [x] Implement signatureComplexity calculation
+    - [x] Implement pre-emption rules (e.g., complexity > 5 upgrades model)
+    - [x] Implement input token threshold upgrades (e.g., > 12k tokens)
+    - [x] Routing logic is purely deterministic (no LLM decision making)
+    - [x] Example: Complex signature triggers upgrade from worker to structurer model
+    - [x] Negative case: Simple signature stays on worker model
+- **Learnings for future iterations:**
+  - Pre-emptive upgrades only apply to worker tasks (implement, transform) - other task types already use more capable models
+  - Rules are evaluated in order; token threshold takes priority over complexity threshold
+  - Signature complexity formula weights generics and lifetimes higher (x2) because they require more reasoning capability
+  - Property-based tests confirm deterministic behavior (same inputs always produce same outputs)
+---

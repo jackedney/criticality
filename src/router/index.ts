@@ -146,3 +146,33 @@ export {
   getSectionPriority,
   sortByTruncationPriority,
 } from './context.js';
+
+// Deterministic model routing logic
+export {
+  // Types
+  type TaskType,
+  type SignatureComplexityParams,
+  type RoutingSignals,
+  type RoutingThresholds,
+  type RoutingDecision,
+  // Constants
+  TASK_TYPES,
+  DEFAULT_SIGNATURE_PARAMS,
+  DEFAULT_ROUTING_SIGNALS,
+  DEFAULT_ROUTING_THRESHOLDS,
+  TASK_TYPE_TO_BASE_MODEL,
+  // Type guards
+  isValidTaskType,
+  // Core routing functions
+  calculateSignatureComplexity,
+  getBaseModel,
+  determineRouting,
+  createRoutingSignals,
+  applyRoutingDecision,
+  routeRequest,
+  // Utility functions
+  isWorkerTask,
+  canPreemptivelyUpgrade,
+  validateRoutingThresholds,
+  validateSignatureParams,
+} from './routing.js';
