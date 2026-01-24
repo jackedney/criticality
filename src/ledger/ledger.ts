@@ -122,6 +122,78 @@ export class InvalidSupersedeError extends Error {
 }
 
 /**
+ * Error class for circular dependency errors.
+ */
+export class CircularDependencyError extends Error {
+  /** The cycle path that was detected. */
+  public readonly cycle: string[];
+
+  /**
+   * Creates a new CircularDependencyError.
+   *
+   * @param cycle - The IDs forming the circular dependency (e.g., ['A', 'B', 'A']).
+   */
+  constructor(cycle: string[]) {
+    super(`Circular dependency detected: ${cycle.join(' -> ')}`);
+    this.name = 'CircularDependencyError';
+    this.cycle = cycle;
+  }
+}
+
+/**
+ * Error class for dependency not found errors.
+ */
+export class DependencyNotFoundError extends Error {
+  /** The dependency ID that was not found. */
+  public readonly dependencyId: string;
+  /** The decision ID that has the missing dependency. */
+  public readonly decisionId: string;
+
+  /**
+   * Creates a new DependencyNotFoundError.
+   *
+   * @param dependencyId - The dependency ID that was not found.
+   * @param decisionId - The decision ID that references the missing dependency.
+   */
+  constructor(dependencyId: string, decisionId: string) {
+    super(
+      `Dependency '${dependencyId}' not found in ledger (referenced by decision '${decisionId}')`
+    );
+    this.name = 'DependencyNotFoundError';
+    this.dependencyId = dependencyId;
+    this.decisionId = decisionId;
+  }
+}
+
+/**
+ * Report of a cascade invalidation operation.
+ */
+export interface CascadeReport {
+  /** The original decision that was invalidated. */
+  sourceDecisionId: string;
+  /** All decisions affected by the cascade (including source). */
+  affectedDecisions: CascadeAffectedDecision[];
+  /** Total number of decisions invalidated. */
+  totalInvalidated: number;
+  /** Timestamp of the cascade operation. */
+  timestamp: string;
+}
+
+/**
+ * Information about a decision affected by cascade invalidation.
+ */
+export interface CascadeAffectedDecision {
+  /** The decision ID. */
+  id: string;
+  /** The constraint text of the decision. */
+  constraint: string;
+  /** The dependency chain from source to this decision. */
+  dependencyPath: string[];
+  /** Depth in the dependency tree (0 = source). */
+  depth: number;
+}
+
+/**
  * Options for superseding a decision.
  */
 export interface SupersedeOptions {
@@ -130,6 +202,34 @@ export interface SupersedeOptions {
    * Required when superseding a decision with confidence 'canonical'.
    */
   forceOverrideCanonical?: boolean;
+}
+
+/**
+ * Options for invalidating a decision.
+ */
+export interface InvalidateOptions {
+  /**
+   * Cascade invalidation to all dependent decisions.
+   * Default is true - dependents will be invalidated.
+   */
+  cascade?: boolean;
+  /**
+   * Force invalidation of canonical decisions.
+   * Required when invalidating a decision with confidence 'canonical'.
+   */
+  forceInvalidateCanonical?: boolean;
+}
+
+/**
+ * Options for appending a decision.
+ */
+export interface AppendOptions {
+  /**
+   * Skip validation of dependency IDs.
+   * If false (default), all dependency IDs must exist in the ledger.
+   * If true, dependency IDs are not validated.
+   */
+  skipDependencyValidation?: boolean;
 }
 
 /**
@@ -283,10 +383,14 @@ export class Ledger {
    *
    * Auto-generates a unique ID and sets the timestamp.
    * Validates the decision against the schema.
+   * Validates dependencies exist and do not create circular references.
    *
    * @param input - Decision input without ID, timestamp, or status.
+   * @param options - Optional settings for the append operation.
    * @returns The complete decision with generated ID and timestamp.
    * @throws LedgerValidationError if the input fails schema validation.
+   * @throws DependencyNotFoundError if a dependency ID does not exist.
+   * @throws CircularDependencyError if dependencies would create a cycle.
    *
    * @example
    * ```typescript
@@ -299,7 +403,7 @@ export class Ledger {
    * });
    * ```
    */
-  append(input: DecisionInput): Decision {
+  append(input: DecisionInput, options?: AppendOptions): Decision {
     // Validate input
     const errors = this.validateDecisionInput(input);
     if (errors.length > 0) {
@@ -310,12 +414,29 @@ export class Ledger {
       );
     }
 
-    // Generate ID
+    // Generate ID (needed for circular dependency check)
     const id = this.generateId(input.category);
 
     // Check for duplicate (should not happen with auto-generation, but guard anyway)
     if (this.existingIds.has(id)) {
       throw new DuplicateDecisionIdError(id);
+    }
+
+    // Validate dependencies if provided and not skipped
+    if (
+      input.dependencies !== undefined &&
+      input.dependencies.length > 0 &&
+      options?.skipDependencyValidation !== true
+    ) {
+      // Check all dependencies exist
+      for (const depId of input.dependencies) {
+        if (!this.existingIds.has(depId)) {
+          throw new DependencyNotFoundError(depId, id);
+        }
+      }
+
+      // Check for circular dependencies
+      this.checkCircularDependency(id, input.dependencies);
     }
 
     // Create the decision
@@ -733,6 +854,261 @@ export class Ledger {
     errors.push(...inputErrors);
 
     return errors;
+  }
+
+  /**
+   * Checks for circular dependencies in the dependency graph.
+   *
+   * @param newId - The ID of the new decision being added.
+   * @param dependencies - The dependencies of the new decision.
+   * @throws CircularDependencyError if adding these dependencies would create a cycle.
+   */
+  private checkCircularDependency(newId: string, dependencies: string[]): void {
+    // Build a dependency graph including the new decision
+    const visited = new Set<string>();
+    const recursionStack = new Set<string>();
+    const path: string[] = [];
+
+    // DFS to detect cycles starting from each dependency
+    const hasCycle = (nodeId: string): string[] | null => {
+      if (recursionStack.has(nodeId)) {
+        // Found a cycle - build the cycle path
+        const cycleStart = path.indexOf(nodeId);
+        return [...path.slice(cycleStart), nodeId];
+      }
+
+      if (visited.has(nodeId)) {
+        return null;
+      }
+
+      visited.add(nodeId);
+      recursionStack.add(nodeId);
+      path.push(nodeId);
+
+      const node = this.decisions.find((d) => d.id === nodeId);
+      if (node?.dependencies !== undefined) {
+        for (const depId of node.dependencies) {
+          const cycle = hasCycle(depId);
+          if (cycle !== null) {
+            return cycle;
+          }
+        }
+      }
+
+      path.pop();
+      recursionStack.delete(nodeId);
+      return null;
+    };
+
+    // Check if adding newId with these dependencies creates a cycle
+    // Start by checking if any dependency transitively depends on newId (which would create a cycle)
+    // Since newId doesn't exist yet, we simulate it by checking if any dependency can reach newId
+    // through the existing graph. But since newId doesn't exist, we check if any dependency
+    // could eventually be pointed to by newId's dependencies.
+
+    // Actually, for a new node: A cycle exists if newId depends on X and X (transitively) depends on newId
+    // Since newId doesn't exist in the graph yet, X cannot depend on newId.
+    // So for a brand new node, there's no cycle possible with existing nodes.
+
+    // However, if the same ID is being re-added (which our code prevents), or if
+    // the dependencies include the newId itself, that would be a cycle.
+    if (dependencies.includes(newId)) {
+      throw new CircularDependencyError([newId, newId]);
+    }
+
+    // For loading existing data, check if any dependency path leads back to a node
+    // that depends on something in our path. This is a general cycle detection.
+    for (const depId of dependencies) {
+      visited.clear();
+      recursionStack.clear();
+      path.length = 0;
+      path.push(newId);
+      recursionStack.add(newId);
+
+      const cycle = hasCycle(depId);
+      if (cycle !== null) {
+        throw new CircularDependencyError([newId, ...cycle]);
+      }
+    }
+  }
+
+  /**
+   * Gets all decisions that depend on the given decision ID.
+   *
+   * @param decisionId - The decision ID to find dependents for.
+   * @returns Array of decisions that have this ID in their dependencies.
+   */
+  getDependents(decisionId: string): Decision[] {
+    return this.decisions.filter((d) => d.dependencies?.includes(decisionId) === true);
+  }
+
+  /**
+   * Gets all decisions that the given decision depends on (direct dependencies).
+   *
+   * @param decisionId - The decision ID to find dependencies for.
+   * @returns Array of decisions that this decision depends on.
+   */
+  getDependencies(decisionId: string): Decision[] {
+    const decision = this.getById(decisionId);
+    if (decision?.dependencies === undefined) {
+      return [];
+    }
+    return decision.dependencies
+      .map((depId) => this.getById(depId))
+      .filter((d): d is Decision => d !== undefined);
+  }
+
+  /**
+   * Gets all decisions that transitively depend on the given decision ID.
+   * Uses breadth-first search to traverse the dependency tree.
+   *
+   * @param decisionId - The decision ID to find transitive dependents for.
+   * @returns Array of objects containing the decision and its depth from the source.
+   */
+  private getTransitiveDependents(
+    decisionId: string
+  ): { decision: Decision; depth: number; path: string[] }[] {
+    const result: { decision: Decision; depth: number; path: string[] }[] = [];
+    const visited = new Set<string>();
+    const queue: { id: string; depth: number; path: string[] }[] = [
+      { id: decisionId, depth: 0, path: [decisionId] },
+    ];
+
+    while (queue.length > 0) {
+      const current = queue.shift();
+      if (current === undefined) {
+        break;
+      }
+
+      const dependents = this.getDependents(current.id);
+      for (const dep of dependents) {
+        if (!visited.has(dep.id)) {
+          visited.add(dep.id);
+          const newPath = [...current.path, dep.id];
+          result.push({ decision: dep, depth: current.depth + 1, path: newPath });
+          queue.push({ id: dep.id, depth: current.depth + 1, path: newPath });
+        }
+      }
+    }
+
+    return result;
+  }
+
+  /**
+   * Invalidates a decision and optionally cascades to all dependent decisions.
+   *
+   * This method:
+   * - Marks the decision as invalidated (status = 'invalidated')
+   * - If cascade is enabled (default), also invalidates all decisions that depend on it
+   * - Generates a cascade report showing all affected decisions
+   * - Preserves the original entries (append-only invariant)
+   *
+   * Canonical decisions (confidence = 'canonical') require explicit override
+   * via the forceInvalidateCanonical option.
+   *
+   * @param decisionId - ID of the decision to invalidate.
+   * @param options - Invalidate options including cascade and forceInvalidateCanonical.
+   * @returns CascadeReport showing all affected decisions.
+   * @throws DecisionNotFoundError if the decision doesn't exist.
+   * @throws InvalidSupersedeError if the decision is already invalidated or superseded.
+   * @throws CanonicalOverrideError if trying to invalidate a canonical decision without explicit flag.
+   *
+   * @example
+   * ```typescript
+   * // Invalidate decision A and cascade to dependents B and C
+   * const report = ledger.invalidate('architectural_001');
+   * console.log(report.totalInvalidated); // 3 (A, B, C)
+   *
+   * // Invalidate without cascade
+   * const report = ledger.invalidate('architectural_001', { cascade: false });
+   *
+   * // Invalidate a canonical decision (requires explicit flag)
+   * const report = ledger.invalidate('architectural_001', {
+   *   forceInvalidateCanonical: true,
+   * });
+   * ```
+   */
+  invalidate(decisionId: string, options?: InvalidateOptions): CascadeReport {
+    // Find the decision
+    const decisionIndex = this.decisions.findIndex((d) => d.id === decisionId);
+    if (decisionIndex === -1) {
+      throw new DecisionNotFoundError(decisionId);
+    }
+
+    const decision = this.decisions[decisionIndex];
+    if (decision === undefined) {
+      throw new DecisionNotFoundError(decisionId);
+    }
+
+    // Check if already invalidated or superseded
+    if (decision.status === 'invalidated') {
+      throw new InvalidSupersedeError(decisionId, 'decision is already invalidated');
+    }
+    if (decision.status === 'superseded') {
+      throw new InvalidSupersedeError(decisionId, 'decision is already superseded');
+    }
+
+    // Check confidence level - canonical requires explicit override
+    if (decision.confidence === 'canonical' && options?.forceInvalidateCanonical !== true) {
+      throw new CanonicalOverrideError(decisionId);
+    }
+
+    const timestamp = this.now().toISOString();
+    const cascade = options?.cascade !== false; // Default to true
+    const affectedDecisions: CascadeAffectedDecision[] = [];
+
+    // Add the source decision to the affected list
+    affectedDecisions.push({
+      id: decision.id,
+      constraint: decision.constraint,
+      dependencyPath: [decision.id],
+      depth: 0,
+    });
+
+    // Invalidate the source decision
+    const updatedDecision: Decision = {
+      ...decision,
+      status: 'invalidated',
+    };
+    this.decisions[decisionIndex] = updatedDecision;
+
+    // If cascade is enabled, invalidate all dependents
+    if (cascade) {
+      const transitiveDependents = this.getTransitiveDependents(decisionId);
+
+      for (const { decision: dependent, depth, path } of transitiveDependents) {
+        // Find the index of this dependent
+        const depIndex = this.decisions.findIndex((d) => d.id === dependent.id);
+        if (depIndex !== -1) {
+          const depDecision = this.decisions[depIndex];
+          // Only invalidate if still active
+          if (depDecision?.status === 'active') {
+            const updatedDep: Decision = {
+              ...depDecision,
+              status: 'invalidated',
+            };
+            this.decisions[depIndex] = updatedDep;
+
+            affectedDecisions.push({
+              id: dependent.id,
+              constraint: dependent.constraint,
+              dependencyPath: path,
+              depth,
+            });
+          }
+        }
+      }
+    }
+
+    // Update last_modified
+    this.meta.last_modified = timestamp;
+
+    return {
+      sourceDecisionId: decisionId,
+      affectedDecisions,
+      totalInvalidated: affectedDecisions.length,
+      timestamp,
+    };
   }
 }
 

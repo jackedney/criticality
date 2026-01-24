@@ -25,7 +25,17 @@ export {
   CanonicalOverrideError,
   DecisionNotFoundError,
   InvalidSupersedeError,
+  CircularDependencyError,
+  DependencyNotFoundError,
   fromData,
 } from './ledger.js';
 
-export type { LedgerError, LedgerOptions, SupersedeOptions } from './ledger.js';
+export type {
+  LedgerError,
+  LedgerOptions,
+  SupersedeOptions,
+  InvalidateOptions,
+  AppendOptions,
+  CascadeReport,
+  CascadeAffectedDecision,
+} from './ledger.js';
