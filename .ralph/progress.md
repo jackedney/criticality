@@ -288,3 +288,49 @@ Run summary: /Users/jackedney/criticality/.ralph/runs/run-20260124-173246-37766-
   - Schema has deep nesting (witnesses.invariants, witnesses.constructors, etc.) - recursive validation helpers keep code clean
   - Property-based tests with date generation (fc.date()) work well for ISO timestamps
 ---
+
+## 2026-01-24 18:13 - US-008: Create configuration validation (semantic)
+Thread:
+Run: 20260124-173246-37766 (iteration 8)
+Run log: /Users/jackedney/criticality/.ralph/runs/run-20260124-173246-37766-iter-8.log
+Run summary: /Users/jackedney/criticality/.ralph/runs/run-20260124-173246-37766-iter-8.md
+- Guardrails reviewed: yes
+- No-commit run: false
+- Commit: 9220457 feat(US-008): Implement semantic configuration validation
+- Post-commit status: clean (remaining files are PRD and ralph temp files)
+- Verification:
+  - Command: npm run typecheck -> PASS
+  - Command: npm run lint -> PASS
+  - Command: npm run test -> PASS (119 tests passed - 77 existing + 42 new validator tests)
+- Files changed:
+  - src/config/validator.ts (validateConfig, assertConfigValid, isRecognizedModel, RECOGNIZED_MODELS, ConfigValidationError)
+  - src/config/validator.test.ts (42 tests including property-based tests)
+  - src/config/index.ts (exports for validator module)
+- What was implemented:
+  - Created semantic validation for configuration values beyond type checking:
+    - Validate model names against RECOGNIZED_MODELS set (claude-*, kimi-*, minimax-*, gpt-*)
+    - Validate paths via injectable PathChecker function (decoupled from Node.js fs module)
+    - Validate thresholds are within valid ranges:
+      - performance_variance_threshold: must be in range (0, 1]
+      - max_retry_attempts: positive integer up to 100
+      - context_token_upgrade: positive integer up to 1,000,000
+      - retry_base_delay_ms: positive integer up to 3,600,000 (1 hour)
+      - signature_complexity_upgrade: positive integer up to 100
+  - ConfigValidationError class with errors array for detailed validation failures
+  - ValidationResult interface with valid boolean and errors array
+  - PathChecker function type for injectable path validation (enables testing without fs)
+  - allowUnrecognizedModels option for extensibility with custom models
+  - All acceptance criteria verified and passing:
+    - [x] Validate model names are recognized model identifiers
+    - [x] Validate paths exist where required (via injectable PathChecker)
+    - [x] Validate thresholds are in valid ranges
+    - [x] Return clear error messages for validation failures
+    - [x] Example: config with valid model name 'claude-3-opus' passes validation (tested)
+    - [x] Negative case: config with unknown model name 'gpt-99' returns validation error (tested)
+    - [x] Negative case: config with threshold > 1.0 returns range error (tested)
+- **Learnings for future iterations:**
+  - Project doesn't include @types/node, so avoid using Node.js built-ins directly
+  - Injectable PathChecker function pattern enables testing without filesystem access
+  - Property-based tests need to filter TOML escape sequences (backslash) in string generation
+  - Using ReadonlySet for RECOGNIZED_MODELS prevents accidental modification
+---
