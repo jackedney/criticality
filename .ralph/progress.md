@@ -240,3 +240,51 @@ Run summary: /Users/jackedney/criticality/.ralph/runs/run-20260124-173246-37766-
   - @iarna/toml provides excellent error messages with line/column positions
   - Using dot notation instead of bracket notation for known properties keeps ESLint happy
 ---
+
+## 2026-01-24 18:05 - US-007: Implement spec.toml parser
+Thread:
+Run: 20260124-173246-37766 (iteration 7)
+Run log: /Users/jackedney/criticality/.ralph/runs/run-20260124-173246-37766-iter-7.log
+Run summary: /Users/jackedney/criticality/.ralph/runs/run-20260124-173246-37766-iter-7.md
+- Guardrails reviewed: yes
+- No-commit run: false
+- Commit: 806d310 feat(US-007): Implement spec.toml parser
+- Post-commit status: clean
+- Verification:
+  - Command: npm run typecheck -> PASS
+  - Command: npm run lint -> PASS
+  - Command: npm run test -> PASS (77 tests passed - 35 existing + 42 new spec tests)
+  - Command: npm run build -> PASS
+- Files changed:
+  - src/spec/types.ts (Spec, SpecMeta, SpecSystem, SpecBoundaries, SpecEnum, SpecField, SpecDataModel, SpecMethod, SpecInterface, SpecConstraints, SpecClaim, SpecWitness, and related types)
+  - src/spec/parser.ts (parseSpec, SpecParseError, validation functions)
+  - src/spec/index.ts (module exports)
+  - src/spec/parser.test.ts (42 tests including property-based tests)
+- What was implemented:
+  - Created typed Spec interface matching spec.schema.json:
+    - Required: meta (version, created), system (name)
+    - Optional: domain, authors, description, language, boundaries, enums, data_models, interfaces, constraints, claims, witnesses
+  - Implemented parseSpec() function that:
+    - Parses valid TOML to typed Spec object
+    - Returns descriptive SpecParseError for invalid TOML syntax
+    - Validates required fields (meta.version, meta.created, system.name)
+    - Validates format constraints:
+      - Semantic version format (^\\d+\\.\\d+\\.\\d+$)
+      - System name kebab-case format (^[a-z][a-z0-9-]*$)
+      - Language enum (rust, typescript, python, go, java, cpp)
+      - Claim type enum (invariant, behavioral, negative, temporal, concurrent, performance)
+      - Trust level enum (safe, unsafe)
+    - Validates nested structures (enums.variants, data_models.fields, interfaces.methods, claims, witnesses)
+  - All acceptance criteria verified and passing:
+    - [x] Create typed Spec interface matching spec.schema.json
+    - [x] Parse all fields defined in spec.schema.json
+    - [x] Validate against schema constraints
+    - [x] Return typed Spec object on success
+    - [x] Example: valid spec.toml matching schema parses successfully (tested)
+    - [x] Negative case: spec.toml missing required field returns validation error (tested)
+- **Learnings for future iterations:**
+  - @iarna/toml validates homogeneous arrays at parse time (mixed types cause TOML syntax error)
+  - Following existing parser pattern (criticality-parser.ts) enabled consistent code structure
+  - Schema has deep nesting (witnesses.invariants, witnesses.constructors, etc.) - recursive validation helpers keep code clean
+  - Property-based tests with date generation (fc.date()) work well for ISO timestamps
+---
