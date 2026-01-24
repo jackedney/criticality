@@ -15,12 +15,29 @@ npm run typecheck
 # Verify strict mode catches implicit any
 npm run typecheck:strict-test
 
-# Run linter (not yet configured - US-003)
+# Run linter
 npm run lint
+
+# Run linter with auto-fix
+npm run lint:fix
+
+# Format code with Prettier
+npm run format
+
+# Check formatting without writing
+npm run format:check
 
 # Run tests (not yet configured - US-004)
 npm run test
 ```
+
+## Linting & Formatting
+
+The project uses ESLint with TypeScript support and Prettier for formatting:
+- ESLint configured with strict TypeScript rules
+- Prettier configured for consistent code style
+- Pre-commit hook via Husky runs lint-staged on staged files
+- Staged `.ts` files are automatically linted and formatted
 
 ## Project Structure
 

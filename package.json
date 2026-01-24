@@ -18,8 +18,12 @@
     "build": "tsc",
     "typecheck": "tsc --noEmit",
     "typecheck:strict-test": "tsc --project test-fixtures/tsconfig.json && echo 'ERROR: Implicit any should have failed!' && exit 1 || echo 'Correctly caught implicit any error'",
-    "lint": "echo 'Linting not yet configured'",
-    "test": "echo 'Testing not yet configured'"
+    "lint": "eslint src/",
+    "lint:fix": "eslint src/ --fix",
+    "format": "prettier --write src/",
+    "format:check": "prettier --check src/",
+    "test": "echo 'Testing not yet configured'",
+    "prepare": "husky"
   },
   "keywords": [
     "autonomous",
@@ -28,7 +32,23 @@
     "orchestration"
   ],
   "license": "MIT",
+  "lint-staged": {
+    "*.ts": [
+      "eslint --fix",
+      "prettier --write"
+    ]
+  },
   "devDependencies": {
-    "typescript": "^5.7.3"
+    "@eslint/js": "^9.39.2",
+    "@typescript-eslint/eslint-plugin": "^8.53.1",
+    "@typescript-eslint/parser": "^8.53.1",
+    "eslint": "^9.39.2",
+    "eslint-config-prettier": "^10.1.8",
+    "eslint-plugin-prettier": "^5.5.5",
+    "husky": "^9.1.7",
+    "lint-staged": "^16.2.7",
+    "prettier": "^3.8.1",
+    "typescript": "^5.7.3",
+    "typescript-eslint": "^8.53.1"
   }
 }
