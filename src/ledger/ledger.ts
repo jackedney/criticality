@@ -58,6 +58,81 @@ export class DuplicateDecisionIdError extends Error {
 }
 
 /**
+ * Error class for canonical override errors.
+ */
+export class CanonicalOverrideError extends Error {
+  /** The decision ID that cannot be overridden. */
+  public readonly decisionId: string;
+
+  /**
+   * Creates a new CanonicalOverrideError.
+   *
+   * @param id - The canonical decision ID.
+   */
+  constructor(id: string) {
+    super(
+      `Cannot supersede canonical decision '${id}' without explicit override flag. ` +
+        'Use { forceOverrideCanonical: true } to explicitly override.'
+    );
+    this.name = 'CanonicalOverrideError';
+    this.decisionId = id;
+  }
+}
+
+/**
+ * Error class for decision not found errors.
+ */
+export class DecisionNotFoundError extends Error {
+  /** The decision ID that was not found. */
+  public readonly decisionId: string;
+
+  /**
+   * Creates a new DecisionNotFoundError.
+   *
+   * @param id - The decision ID that was not found.
+   */
+  constructor(id: string) {
+    super(`Decision with ID '${id}' not found in the ledger`);
+    this.name = 'DecisionNotFoundError';
+    this.decisionId = id;
+  }
+}
+
+/**
+ * Error class for invalid supersede operation errors.
+ */
+export class InvalidSupersedeError extends Error {
+  /** The decision ID involved in the invalid operation. */
+  public readonly decisionId: string;
+  /** The reason the supersede is invalid. */
+  public readonly reason: string;
+
+  /**
+   * Creates a new InvalidSupersedeError.
+   *
+   * @param id - The decision ID.
+   * @param reason - The reason the supersede is invalid.
+   */
+  constructor(id: string, reason: string) {
+    super(`Cannot supersede decision '${id}': ${reason}`);
+    this.name = 'InvalidSupersedeError';
+    this.decisionId = id;
+    this.reason = reason;
+  }
+}
+
+/**
+ * Options for superseding a decision.
+ */
+export interface SupersedeOptions {
+  /**
+   * Force override of canonical decisions.
+   * Required when superseding a decision with confidence 'canonical'.
+   */
+  forceOverrideCanonical?: boolean;
+}
+
+/**
  * Individual ledger error details.
  */
 export interface LedgerError {
@@ -372,6 +447,103 @@ export class Ledger {
     return {
       meta: { ...this.meta },
       decisions: [...this.decisions],
+    };
+  }
+
+  /**
+   * Supersedes an existing decision with a new one.
+   *
+   * This method:
+   * - Marks the old decision as superseded (status = 'superseded')
+   * - Sets superseded_by on the old decision to point to the new decision
+   * - Sets supersedes on the new decision to include the old decision ID
+   * - Preserves the original entry (append-only invariant)
+   *
+   * Canonical decisions (confidence = 'canonical') require explicit override
+   * via the forceOverrideCanonical option.
+   *
+   * @param oldDecisionId - ID of the decision to supersede.
+   * @param newDecisionInput - Input for the new decision.
+   * @param options - Supersede options including forceOverrideCanonical.
+   * @returns Object containing both the old (updated) and new decisions.
+   * @throws DecisionNotFoundError if the old decision doesn't exist.
+   * @throws InvalidSupersedeError if the old decision is already superseded.
+   * @throws CanonicalOverrideError if trying to supersede a canonical decision without explicit flag.
+   * @throws LedgerValidationError if the new decision input fails validation.
+   *
+   * @example
+   * ```typescript
+   * // Supersede a provisional decision
+   * const result = ledger.supersede('architectural_001', {
+   *   category: 'architectural',
+   *   constraint: 'Use MongoDB instead of PostgreSQL',
+   *   source: 'design_review',
+   *   confidence: 'canonical',
+   *   phase: 'design',
+   * });
+   *
+   * // Supersede a canonical decision (requires explicit flag)
+   * const result = ledger.supersede('architectural_002', newInput, {
+   *   forceOverrideCanonical: true,
+   * });
+   * ```
+   */
+  supersede(
+    oldDecisionId: string,
+    newDecisionInput: DecisionInput,
+    options?: SupersedeOptions
+  ): { oldDecision: Decision; newDecision: Decision } {
+    // Find the old decision
+    const oldDecisionIndex = this.decisions.findIndex((d) => d.id === oldDecisionId);
+    if (oldDecisionIndex === -1) {
+      throw new DecisionNotFoundError(oldDecisionId);
+    }
+
+    const oldDecision = this.decisions[oldDecisionIndex];
+    if (oldDecision === undefined) {
+      throw new DecisionNotFoundError(oldDecisionId);
+    }
+
+    // Check if already superseded or invalidated
+    if (oldDecision.status === 'superseded') {
+      throw new InvalidSupersedeError(oldDecisionId, 'decision is already superseded');
+    }
+    if (oldDecision.status === 'invalidated') {
+      throw new InvalidSupersedeError(oldDecisionId, 'decision is already invalidated');
+    }
+
+    // Check confidence level - canonical requires explicit override
+    if (oldDecision.confidence === 'canonical' && options?.forceOverrideCanonical !== true) {
+      throw new CanonicalOverrideError(oldDecisionId);
+    }
+
+    // Add the old decision ID to supersedes list in the input
+    const supersedes = newDecisionInput.supersedes ?? [];
+    if (!supersedes.includes(oldDecisionId)) {
+      supersedes.push(oldDecisionId);
+    }
+
+    // Create the new decision with supersedes link
+    const inputWithSupersedes: DecisionInput = {
+      ...newDecisionInput,
+      supersedes,
+    };
+    const newDecision = this.append(inputWithSupersedes);
+
+    // Update the old decision in place (append-only: we update status, not delete)
+    // Create a new object to maintain immutability semantics
+    const updatedOldDecision: Decision = {
+      ...oldDecision,
+      status: 'superseded',
+      superseded_by: newDecision.id,
+    };
+
+    // Replace in the array
+    this.decisions[oldDecisionIndex] = updatedOldDecision;
+
+    return {
+      oldDecision: updatedOldDecision,
+      newDecision,
     };
   }
 

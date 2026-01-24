@@ -18,6 +18,14 @@ export type {
   LedgerData,
 } from './types.js';
 
-export { Ledger, LedgerValidationError, DuplicateDecisionIdError, fromData } from './ledger.js';
+export {
+  Ledger,
+  LedgerValidationError,
+  DuplicateDecisionIdError,
+  CanonicalOverrideError,
+  DecisionNotFoundError,
+  InvalidSupersedeError,
+  fromData,
+} from './ledger.js';
 
-export type { LedgerError, LedgerOptions } from './ledger.js';
+export type { LedgerError, LedgerOptions, SupersedeOptions } from './ledger.js';

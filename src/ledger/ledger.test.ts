@@ -1,6 +1,14 @@
 import { describe, expect, it, beforeEach } from 'vitest';
 import fc from 'fast-check';
-import { Ledger, LedgerValidationError, DuplicateDecisionIdError, fromData } from './index.js';
+import {
+  Ledger,
+  LedgerValidationError,
+  DuplicateDecisionIdError,
+  CanonicalOverrideError,
+  DecisionNotFoundError,
+  InvalidSupersedeError,
+  fromData,
+} from './index.js';
 import type { DecisionInput, Decision, DecisionCategory, LedgerData } from './index.js';
 
 describe('Ledger', () => {
@@ -690,6 +698,499 @@ describe('Ledger', () => {
     it('should expose duplicate ID', () => {
       const error = new DuplicateDecisionIdError('test_001');
       expect(error.duplicateId).toBe('test_001');
+    });
+  });
+
+  describe('CanonicalOverrideError', () => {
+    it('should preserve error name', () => {
+      const error = new CanonicalOverrideError('test_001');
+      expect(error.name).toBe('CanonicalOverrideError');
+    });
+
+    it('should include ID in message', () => {
+      const error = new CanonicalOverrideError('test_001');
+      expect(error.message).toContain('test_001');
+      expect(error.message).toContain('forceOverrideCanonical');
+    });
+
+    it('should expose decision ID', () => {
+      const error = new CanonicalOverrideError('test_001');
+      expect(error.decisionId).toBe('test_001');
+    });
+  });
+
+  describe('DecisionNotFoundError', () => {
+    it('should preserve error name', () => {
+      const error = new DecisionNotFoundError('test_001');
+      expect(error.name).toBe('DecisionNotFoundError');
+    });
+
+    it('should include ID in message', () => {
+      const error = new DecisionNotFoundError('test_001');
+      expect(error.message).toContain('test_001');
+    });
+
+    it('should expose decision ID', () => {
+      const error = new DecisionNotFoundError('test_001');
+      expect(error.decisionId).toBe('test_001');
+    });
+  });
+
+  describe('InvalidSupersedeError', () => {
+    it('should preserve error name', () => {
+      const error = new InvalidSupersedeError('test_001', 'already superseded');
+      expect(error.name).toBe('InvalidSupersedeError');
+    });
+
+    it('should include ID and reason in message', () => {
+      const error = new InvalidSupersedeError('test_001', 'decision is already superseded');
+      expect(error.message).toContain('test_001');
+      expect(error.message).toContain('decision is already superseded');
+    });
+
+    it('should expose decision ID and reason', () => {
+      const error = new InvalidSupersedeError('test_001', 'some reason');
+      expect(error.decisionId).toBe('test_001');
+      expect(error.reason).toBe('some reason');
+    });
+  });
+
+  describe('supersede', () => {
+    let ledger: Ledger;
+
+    beforeEach(() => {
+      ledger = new Ledger({
+        project: 'test-project',
+        now: (): Date => new Date('2024-01-20T12:00:00.000Z'),
+      });
+    });
+
+    describe('basic supersede operation', () => {
+      it('should supersede a decision and mark old as superseded', () => {
+        // Create initial decision with non-canonical confidence
+        const original = ledger.append(
+          createTestInput({
+            constraint: 'Use PostgreSQL',
+            confidence: 'provisional',
+          })
+        );
+
+        const result = ledger.supersede(original.id, {
+          category: 'architectural',
+          constraint: 'Use MongoDB instead',
+          source: 'design_review',
+          confidence: 'canonical',
+          phase: 'design',
+        });
+
+        expect(result.oldDecision.status).toBe('superseded');
+        expect(result.oldDecision.superseded_by).toBe(result.newDecision.id);
+      });
+
+      it('should link new decision to old decision via supersedes array', () => {
+        const original = ledger.append(
+          createTestInput({
+            constraint: 'Original constraint',
+            confidence: 'inferred',
+          })
+        );
+
+        const result = ledger.supersede(original.id, {
+          category: 'architectural',
+          constraint: 'New constraint',
+          source: 'design_review',
+          confidence: 'canonical',
+          phase: 'design',
+        });
+
+        expect(result.newDecision.supersedes).toContain(original.id);
+      });
+
+      it('should preserve original entry in ledger (append-only invariant)', () => {
+        const original = ledger.append(
+          createTestInput({
+            constraint: 'Original constraint',
+            confidence: 'provisional',
+          })
+        );
+        const originalId = original.id;
+
+        ledger.supersede(originalId, {
+          category: 'architectural',
+          constraint: 'New constraint',
+          source: 'design_review',
+          confidence: 'canonical',
+          phase: 'design',
+        });
+
+        // Original should still be in the ledger
+        expect(ledger.hasId(originalId)).toBe(true);
+
+        // Ledger should have both decisions
+        expect(ledger.size).toBe(2);
+
+        // Original should be marked as superseded but still exist
+        const retrievedOriginal = ledger.getById(originalId);
+        expect(retrievedOriginal).toBeDefined();
+        expect(retrievedOriginal?.constraint).toBe('Original constraint');
+        expect(retrievedOriginal?.status).toBe('superseded');
+      });
+
+      it('should include existing supersedes when adding new supersede', () => {
+        const first = ledger.append(
+          createTestInput({
+            constraint: 'First',
+            confidence: 'provisional',
+          })
+        );
+        const second = ledger.append(
+          createTestInput({
+            constraint: 'Second',
+            confidence: 'provisional',
+          })
+        );
+
+        // Supersede first decision with input that already has a supersedes entry
+        const result = ledger.supersede(first.id, {
+          category: 'architectural',
+          constraint: 'Third replaces both',
+          source: 'design_review',
+          confidence: 'canonical',
+          phase: 'design',
+          supersedes: [second.id], // Pre-existing supersedes
+        });
+
+        // New decision should supersede both
+        expect(result.newDecision.supersedes).toContain(first.id);
+        expect(result.newDecision.supersedes).toContain(second.id);
+      });
+
+      it('should not duplicate ID in supersedes if already present', () => {
+        const original = ledger.append(
+          createTestInput({
+            constraint: 'Original',
+            confidence: 'provisional',
+          })
+        );
+
+        const result = ledger.supersede(original.id, {
+          category: 'architectural',
+          constraint: 'New',
+          source: 'design_review',
+          confidence: 'canonical',
+          phase: 'design',
+          supersedes: [original.id], // Already includes the ID
+        });
+
+        // Should not have duplicate
+        const supersedesCount = result.newDecision.supersedes?.filter(
+          (id) => id === original.id
+        ).length;
+        expect(supersedesCount).toBe(1);
+      });
+    });
+
+    describe('confidence level rules', () => {
+      it('should allow superseding provisional decisions without flag', () => {
+        const original = ledger.append(
+          createTestInput({
+            constraint: 'Provisional decision',
+            confidence: 'provisional',
+          })
+        );
+
+        expect(() =>
+          ledger.supersede(original.id, {
+            category: 'architectural',
+            constraint: 'New decision',
+            source: 'design_review',
+            confidence: 'canonical',
+            phase: 'design',
+          })
+        ).not.toThrow();
+      });
+
+      it('should allow superseding inferred decisions without flag', () => {
+        const original = ledger.append(
+          createTestInput({
+            constraint: 'Inferred decision',
+            confidence: 'inferred',
+          })
+        );
+
+        expect(() =>
+          ledger.supersede(original.id, {
+            category: 'architectural',
+            constraint: 'New decision',
+            source: 'design_review',
+            confidence: 'canonical',
+            phase: 'design',
+          })
+        ).not.toThrow();
+      });
+
+      it('should allow superseding delegated decisions without flag', () => {
+        const original = ledger.append(
+          createTestInput({
+            constraint: 'Delegated decision',
+            confidence: 'delegated',
+          })
+        );
+
+        expect(() =>
+          ledger.supersede(original.id, {
+            category: 'architectural',
+            constraint: 'New decision',
+            source: 'design_review',
+            confidence: 'canonical',
+            phase: 'design',
+          })
+        ).not.toThrow();
+      });
+
+      it('should reject superseding canonical decision without explicit flag', () => {
+        const original = ledger.append(
+          createTestInput({
+            constraint: 'Canonical decision',
+            confidence: 'canonical',
+          })
+        );
+
+        expect(() =>
+          ledger.supersede(original.id, {
+            category: 'architectural',
+            constraint: 'New decision',
+            source: 'design_review',
+            confidence: 'canonical',
+            phase: 'design',
+          })
+        ).toThrow(CanonicalOverrideError);
+
+        try {
+          ledger.supersede(original.id, {
+            category: 'architectural',
+            constraint: 'New decision',
+            source: 'design_review',
+            confidence: 'canonical',
+            phase: 'design',
+          });
+        } catch (error) {
+          expect(error).toBeInstanceOf(CanonicalOverrideError);
+          expect((error as CanonicalOverrideError).decisionId).toBe(original.id);
+        }
+      });
+
+      it('should allow superseding canonical decision with explicit flag', () => {
+        const original = ledger.append(
+          createTestInput({
+            constraint: 'Canonical decision',
+            confidence: 'canonical',
+          })
+        );
+
+        const result = ledger.supersede(
+          original.id,
+          {
+            category: 'architectural',
+            constraint: 'New decision',
+            source: 'design_review',
+            confidence: 'canonical',
+            phase: 'design',
+          },
+          { forceOverrideCanonical: true }
+        );
+
+        expect(result.oldDecision.status).toBe('superseded');
+        expect(result.newDecision.supersedes).toContain(original.id);
+      });
+
+      it('should reject superseding canonical decision with forceOverrideCanonical: false', () => {
+        const original = ledger.append(
+          createTestInput({
+            constraint: 'Canonical decision',
+            confidence: 'canonical',
+          })
+        );
+
+        expect(() =>
+          ledger.supersede(
+            original.id,
+            {
+              category: 'architectural',
+              constraint: 'New decision',
+              source: 'design_review',
+              confidence: 'canonical',
+              phase: 'design',
+            },
+            { forceOverrideCanonical: false }
+          )
+        ).toThrow(CanonicalOverrideError);
+      });
+    });
+
+    describe('error cases', () => {
+      it('should throw DecisionNotFoundError for non-existent decision', () => {
+        expect(() =>
+          ledger.supersede('nonexistent_001', {
+            category: 'architectural',
+            constraint: 'New decision',
+            source: 'design_review',
+            confidence: 'canonical',
+            phase: 'design',
+          })
+        ).toThrow(DecisionNotFoundError);
+
+        try {
+          ledger.supersede('nonexistent_001', {
+            category: 'architectural',
+            constraint: 'New decision',
+            source: 'design_review',
+            confidence: 'canonical',
+            phase: 'design',
+          });
+        } catch (error) {
+          expect(error).toBeInstanceOf(DecisionNotFoundError);
+          expect((error as DecisionNotFoundError).decisionId).toBe('nonexistent_001');
+        }
+      });
+
+      it('should throw InvalidSupersedeError for already superseded decision', () => {
+        const original = ledger.append(
+          createTestInput({
+            constraint: 'Original',
+            confidence: 'provisional',
+          })
+        );
+
+        // First supersede
+        ledger.supersede(original.id, {
+          category: 'architectural',
+          constraint: 'First replacement',
+          source: 'design_review',
+          confidence: 'canonical',
+          phase: 'design',
+        });
+
+        // Try to supersede again
+        expect(() =>
+          ledger.supersede(original.id, {
+            category: 'architectural',
+            constraint: 'Second replacement',
+            source: 'design_review',
+            confidence: 'canonical',
+            phase: 'design',
+          })
+        ).toThrow(InvalidSupersedeError);
+
+        try {
+          ledger.supersede(original.id, {
+            category: 'architectural',
+            constraint: 'Second replacement',
+            source: 'design_review',
+            confidence: 'canonical',
+            phase: 'design',
+          });
+        } catch (error) {
+          expect(error).toBeInstanceOf(InvalidSupersedeError);
+          expect((error as InvalidSupersedeError).reason).toContain('already superseded');
+        }
+      });
+
+      it('should validate new decision input', () => {
+        const original = ledger.append(
+          createTestInput({
+            constraint: 'Original',
+            confidence: 'provisional',
+          })
+        );
+
+        expect(() =>
+          ledger.supersede(original.id, {
+            category: 'invalid_category' as DecisionCategory,
+            constraint: 'New decision',
+            source: 'design_review',
+            confidence: 'canonical',
+            phase: 'design',
+          })
+        ).toThrow(LedgerValidationError);
+      });
+    });
+
+    describe('ledger state after supersede', () => {
+      it('should update last_modified after supersede', () => {
+        const original = ledger.append(
+          createTestInput({
+            constraint: 'Original',
+            confidence: 'provisional',
+          })
+        );
+
+        ledger.supersede(original.id, {
+          category: 'architectural',
+          constraint: 'New decision',
+          source: 'design_review',
+          confidence: 'canonical',
+          phase: 'design',
+        });
+
+        const data = ledger.toData();
+        expect(data.meta.last_modified).toBeDefined();
+      });
+
+      it('should preserve all decision data after supersede', () => {
+        const original = ledger.append(
+          createTestInput({
+            constraint: 'Original with rationale',
+            confidence: 'provisional',
+            rationale: 'This is why',
+            dependencies: ['dep_001'],
+          })
+        );
+
+        ledger.supersede(original.id, {
+          category: 'architectural',
+          constraint: 'New decision',
+          source: 'design_review',
+          confidence: 'canonical',
+          phase: 'design',
+        });
+
+        const retrievedOriginal = ledger.getById(original.id);
+        expect(retrievedOriginal?.constraint).toBe('Original with rationale');
+        expect(retrievedOriginal?.rationale).toBe('This is why');
+        expect(retrievedOriginal?.dependencies).toEqual(['dep_001']);
+        expect(retrievedOriginal?.status).toBe('superseded');
+      });
+
+      it('should correctly export superseded decisions in toData', () => {
+        const original = ledger.append(
+          createTestInput({
+            constraint: 'Original',
+            confidence: 'provisional',
+          })
+        );
+
+        const result = ledger.supersede(original.id, {
+          category: 'architectural',
+          constraint: 'New decision',
+          source: 'design_review',
+          confidence: 'canonical',
+          phase: 'design',
+        });
+
+        const data = ledger.toData();
+
+        // Find the original decision in the exported data
+        const exportedOriginal = data.decisions.find((d) => d.id === original.id);
+        expect(exportedOriginal).toBeDefined();
+        expect(exportedOriginal?.status).toBe('superseded');
+        expect(exportedOriginal?.superseded_by).toBe(result.newDecision.id);
+
+        // Find the new decision
+        const exportedNew = data.decisions.find((d) => d.id === result.newDecision.id);
+        expect(exportedNew).toBeDefined();
+        expect(exportedNew?.supersedes).toContain(original.id);
+      });
     });
   });
 
