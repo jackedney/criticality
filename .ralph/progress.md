@@ -1058,3 +1058,60 @@ Run summary: /Users/jackedney/criticality/.ralph/runs/run-20260124-213521-33625-
   - When story is already complete from prior iteration, verification runs confirm quality gates still pass
   - PRD status updates are handled by the ralph loop, not by the agent
 ---
+
+## 2026-01-24 22:26 - US-022: Implement OpenCode client
+Thread:
+Run: 20260124-213521-33625 (iteration 7)
+Run log: /Users/jackedney/criticality/.ralph/runs/run-20260124-213521-33625-iter-7.log
+Run summary: /Users/jackedney/criticality/.ralph/runs/run-20260124-213521-33625-iter-7.md
+- Guardrails reviewed: yes
+- No-commit run: false
+- Commit: ae98036 feat(US-022): Implement OpenCode client
+- Post-commit status: clean (remaining files are PRD and ralph temp files)
+- Verification:
+  - Command: npm run typecheck -> PASS
+  - Command: npm run lint -> PASS
+  - Command: npm run test -> PASS (700 tests passed - 661 existing + 39 new OpenCode tests)
+- Files changed:
+  - src/router/opencode-client.ts (new - OpenCodeClient implementation)
+  - src/router/opencode-client.test.ts (new - 39 tests for client)
+  - src/router/index.ts (updated - exports for OpenCode client module)
+- What was implemented:
+  - OpenCodeClient class implementing ModelRouter interface:
+    - prompt(modelAlias, prompt): Simple prompt method
+    - complete(request): Full request with parameters
+    - stream(request): Streaming response with AsyncGenerator
+  - Subprocess management with execa (same as ClaudeCodeClient):
+    - Uses 'run' command for non-interactive mode
+    - Uses --format json for JSON output
+    - Uses --model provider/model format for model specification
+    - Supports custom timeout, cwd, and additional CLI flags
+  - Model alias routing to Kimi K2 and MiniMax:
+    - MODEL_PROVIDER_MAP for known model -> provider/model mappings
+    - formatModelForOpenCode() converts short names (kimi-k2) to full format (moonshot/kimi-k2)
+    - Supports: kimi-k2, kimi-k2-instruct, kimi-k2-0711, minimax-m2, minimax-m2.1, minimax-text-01
+    - Pass-through for already qualified provider/model strings
+  - Response parsing:
+    - Handles various content field names (content, result, response, text)
+    - Handles various usage field names (prompt_tokens/completion_tokens, input_tokens/output_tokens)
+    - Falls back to plain text if JSON parsing fails
+    - Multi-line JSON output support
+  - Error handling:
+    - OpenCodeNotInstalledError for missing CLI
+    - checkOpenCodeInstalled() function for pre-flight check
+    - createOpenCodeClient() factory with installation check
+    - Proper error mapping to ModelRouterError types
+  - All acceptance criteria verified:
+    - [x] Spawn OpenCode subprocess with appropriate flags
+    - [x] Route to correct model based on alias
+    - [x] Handle streaming output
+    - [x] Capture usage information if available
+    - [x] Example: send prompt to Kimi K2 via OpenCode and receive response (tested)
+    - [x] Negative case: OpenCode not installed returns clear error (tested)
+- **Learnings for future iterations:**
+  - OpenCode uses 'run' command (not -p flag) for non-interactive mode
+  - Model format is provider/model (e.g., moonshot/kimi-k2, minimax/minimax-m2.1)
+  - JSON output format differs from Claude Code - single object vs line-by-line
+  - Flexible parsing handles multiple content field names for different providers
+  - Following ClaudeCodeClient patterns ensures consistent API surface
+---
