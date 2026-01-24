@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import fc from 'fast-check';
-import { VERSION, placeholder } from './index.js';
+import { VERSION, placeholder, greet } from './index.js';
 
 describe('Criticality Protocol', () => {
   describe('VERSION', () => {
@@ -29,6 +29,18 @@ describe('Criticality Protocol', () => {
       const result1 = placeholder();
       const result2 = placeholder();
       expect(result1).toBe(result2);
+    });
+  });
+
+  describe('greet', () => {
+    it('should return greeting with the provided name', () => {
+      const result = greet('World');
+      expect(result).toBe('Hello, World!');
+    });
+
+    it('should handle empty string', () => {
+      const result = greet('');
+      expect(result).toBe('Hello, !');
     });
   });
 

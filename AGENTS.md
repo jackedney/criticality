@@ -35,6 +35,9 @@ npm run test:watch
 
 # Run tests with coverage
 npm run test:coverage
+
+# Generate API documentation
+npm run docs
 ```
 
 ## Testing
@@ -59,6 +62,14 @@ The project uses ESLint with TypeScript support and Prettier for formatting:
 - `dist/` - Compiled JavaScript output
 - `schemas/` - JSON schemas for protocol data structures
 - `test-fixtures/` - Test files for verifying TypeScript configuration
+
+## Documentation
+
+The project uses TypeDoc for API documentation generation:
+- Documentation is generated from TSDoc comments in source files
+- Run `npm run docs` to generate docs in the `docs/` directory
+- Validation is enabled to warn about undocumented exports
+- Test files (`*.test.ts`, `*.spec.ts`) are excluded from documentation
 
 ## TypeScript Configuration
 

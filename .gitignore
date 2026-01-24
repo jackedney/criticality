@@ -32,6 +32,7 @@ npm-debug.log*
 # Build outputs
 dist/
 build/
+docs/
 *.egg-info/
 
 # Local configuration
