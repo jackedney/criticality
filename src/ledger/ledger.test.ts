@@ -9,9 +9,16 @@ import {
   InvalidSupersedeError,
   CircularDependencyError,
   DependencyNotFoundError,
+  InvalidFilterKeyError,
   fromData,
 } from './index.js';
-import type { DecisionInput, Decision, DecisionCategory, LedgerData } from './index.js';
+import type {
+  DecisionInput,
+  Decision,
+  DecisionCategory,
+  LedgerData,
+  DecisionFilter,
+} from './index.js';
 
 describe('Ledger', () => {
   const createTestInput = (overrides: Partial<DecisionInput> = {}): DecisionInput => ({
@@ -2039,6 +2046,543 @@ describe('Ledger', () => {
         const uniqueIds = new Set(report.affectedDecisions.map((d) => d.id));
         expect(uniqueIds.size).toBe(4);
       });
+    });
+  });
+
+  describe('query interface', () => {
+    let ledger: Ledger;
+
+    beforeEach(() => {
+      ledger = new Ledger({
+        project: 'test-project',
+        now: (): Date => new Date('2024-01-20T12:00:00.000Z'),
+      });
+    });
+
+    describe('query by category', () => {
+      it('should filter decisions by category', () => {
+        ledger.append(createTestInput({ category: 'architectural', constraint: 'A1' }));
+        ledger.append(createTestInput({ category: 'testing', constraint: 'T1' }));
+        ledger.append(createTestInput({ category: 'architectural', constraint: 'A2' }));
+        ledger.append(createTestInput({ category: 'security', constraint: 'S1' }));
+
+        const archDecisions = ledger.query({ category: 'architectural' });
+
+        expect(archDecisions).toHaveLength(2);
+        expect(archDecisions.every((d) => d.category === 'architectural')).toBe(true);
+        expect(archDecisions.map((d) => d.constraint)).toContain('A1');
+        expect(archDecisions.map((d) => d.constraint)).toContain('A2');
+      });
+
+      it('should return empty array for category with no matches', () => {
+        ledger.append(createTestInput({ category: 'architectural', constraint: 'A1' }));
+
+        const testingDecisions = ledger.query({ category: 'testing' });
+
+        expect(testingDecisions).toEqual([]);
+      });
+    });
+
+    describe('query by phase', () => {
+      it('should filter decisions by phase', () => {
+        ledger.append(createTestInput({ phase: 'design', constraint: 'D1' }));
+        ledger.append(createTestInput({ phase: 'ignition', constraint: 'I1' }));
+        ledger.append(createTestInput({ phase: 'design', constraint: 'D2' }));
+
+        const designDecisions = ledger.query({ phase: 'design' });
+
+        expect(designDecisions).toHaveLength(2);
+        expect(designDecisions.every((d) => d.phase === 'design')).toBe(true);
+      });
+    });
+
+    describe('query by status', () => {
+      it('should filter decisions by status', () => {
+        const d1 = ledger.append(
+          createTestInput({ confidence: 'provisional', constraint: 'Original' })
+        );
+        ledger.append(createTestInput({ constraint: 'Active decision' }));
+
+        // Supersede d1 to create a superseded status
+        ledger.supersede(d1.id, createTestInput({ constraint: 'New decision' }));
+
+        const activeDecisions = ledger.query({ status: 'active' });
+        const supersededDecisions = ledger.query({ status: 'superseded' });
+
+        expect(activeDecisions).toHaveLength(2); // Active decision + New decision
+        expect(supersededDecisions).toHaveLength(1);
+        expect(supersededDecisions[0]?.constraint).toBe('Original');
+      });
+    });
+
+    describe('query by confidence', () => {
+      it('should filter decisions by confidence level', () => {
+        ledger.append(createTestInput({ confidence: 'canonical', constraint: 'C1' }));
+        ledger.append(createTestInput({ confidence: 'provisional', constraint: 'P1' }));
+        ledger.append(createTestInput({ confidence: 'canonical', constraint: 'C2' }));
+
+        const canonicalDecisions = ledger.query({ confidence: 'canonical' });
+
+        expect(canonicalDecisions).toHaveLength(2);
+        expect(canonicalDecisions.every((d) => d.confidence === 'canonical')).toBe(true);
+      });
+    });
+
+    describe('combined filters', () => {
+      it('should apply multiple filters with AND logic', () => {
+        ledger.append(
+          createTestInput({
+            category: 'architectural',
+            phase: 'design',
+            confidence: 'canonical',
+            constraint: 'Match',
+          })
+        );
+        ledger.append(
+          createTestInput({
+            category: 'architectural',
+            phase: 'ignition',
+            confidence: 'canonical',
+            constraint: 'Different phase',
+          })
+        );
+        ledger.append(
+          createTestInput({
+            category: 'testing',
+            phase: 'design',
+            confidence: 'canonical',
+            constraint: 'Different category',
+          })
+        );
+
+        const results = ledger.query({
+          category: 'architectural',
+          phase: 'design',
+        });
+
+        expect(results).toHaveLength(1);
+        expect(results[0]?.constraint).toBe('Match');
+      });
+
+      it('should filter by all four criteria simultaneously', () => {
+        ledger.append(
+          createTestInput({
+            category: 'architectural',
+            phase: 'design',
+            confidence: 'canonical',
+            constraint: 'Exact match',
+          })
+        );
+        ledger.append(
+          createTestInput({
+            category: 'architectural',
+            phase: 'design',
+            confidence: 'provisional',
+            constraint: 'Different confidence',
+          })
+        );
+
+        const d1 = ledger.append(
+          createTestInput({
+            category: 'architectural',
+            phase: 'design',
+            confidence: 'provisional',
+            constraint: 'To be superseded',
+          })
+        );
+        // Replacement uses phase: 'ignition' to distinguish it
+        ledger.supersede(d1.id, createTestInput({ constraint: 'Replacement', phase: 'ignition' }));
+
+        const results = ledger.query({
+          category: 'architectural',
+          phase: 'design',
+          confidence: 'canonical',
+          status: 'active',
+        });
+
+        expect(results).toHaveLength(1);
+        expect(results[0]?.constraint).toBe('Exact match');
+      });
+    });
+
+    describe('invalid filter key', () => {
+      it('should throw InvalidFilterKeyError for invalid filter key', () => {
+        ledger.append(createTestInput({ constraint: 'Test' }));
+
+        const invalidFilter = { invalidKey: 'value' } as unknown as DecisionFilter;
+
+        expect(() => ledger.query(invalidFilter)).toThrow(InvalidFilterKeyError);
+
+        try {
+          ledger.query(invalidFilter);
+        } catch (error) {
+          expect(error).toBeInstanceOf(InvalidFilterKeyError);
+          const filterError = error as InstanceType<typeof InvalidFilterKeyError>;
+          expect(filterError.invalidKey).toBe('invalidKey');
+          expect(filterError.validKeys).toContain('category');
+          expect(filterError.validKeys).toContain('phase');
+          expect(filterError.validKeys).toContain('status');
+          expect(filterError.validKeys).toContain('confidence');
+        }
+      });
+
+      it('should throw error listing valid filter keys', () => {
+        const invalidFilter = { unknownField: 'test' } as unknown as DecisionFilter;
+
+        expect(() => ledger.query(invalidFilter)).toThrow(
+          /Valid filter keys are: category, phase, status, confidence/
+        );
+      });
+    });
+
+    describe('empty filter', () => {
+      it('should return all decisions when filter is empty', () => {
+        ledger.append(createTestInput({ constraint: 'D1' }));
+        ledger.append(createTestInput({ constraint: 'D2' }));
+        ledger.append(createTestInput({ constraint: 'D3' }));
+
+        const results = ledger.query({});
+
+        expect(results).toHaveLength(3);
+      });
+    });
+  });
+
+  describe('getActiveDecisions', () => {
+    let ledger: Ledger;
+
+    beforeEach(() => {
+      ledger = new Ledger({
+        project: 'test-project',
+        now: (): Date => new Date('2024-01-20T12:00:00.000Z'),
+      });
+    });
+
+    it('should return only active decisions', () => {
+      ledger.append(createTestInput({ constraint: 'Active 1' }));
+      const d2 = ledger.append(
+        createTestInput({ confidence: 'provisional', constraint: 'To be superseded' })
+      );
+      ledger.append(createTestInput({ constraint: 'Active 2' }));
+
+      ledger.supersede(d2.id, createTestInput({ constraint: 'Replacement' }));
+
+      const activeDecisions = ledger.getActiveDecisions();
+
+      expect(activeDecisions).toHaveLength(3); // Active 1, Active 2, Replacement
+      expect(activeDecisions.every((d) => d.status === 'active')).toBe(true);
+      expect(activeDecisions.map((d) => d.constraint)).not.toContain('To be superseded');
+    });
+
+    it('should exclude invalidated decisions', () => {
+      const d1 = ledger.append(
+        createTestInput({ confidence: 'provisional', constraint: 'To be invalidated' })
+      );
+      ledger.append(createTestInput({ constraint: 'Active' }));
+
+      ledger.invalidate(d1.id);
+
+      const activeDecisions = ledger.getActiveDecisions();
+
+      expect(activeDecisions).toHaveLength(1);
+      expect(activeDecisions[0]?.constraint).toBe('Active');
+    });
+
+    it('should return empty array when all decisions are superseded/invalidated', () => {
+      const d1 = ledger.append(createTestInput({ confidence: 'provisional', constraint: 'D1' }));
+      ledger.supersede(d1.id, createTestInput({ confidence: 'provisional', constraint: 'D2' }));
+
+      // Invalidate D2
+      ledger.invalidate('architectural_002');
+
+      const activeDecisions = ledger.getActiveDecisions();
+
+      expect(activeDecisions).toHaveLength(0);
+    });
+  });
+
+  describe('getHistory', () => {
+    let ledger: Ledger;
+
+    beforeEach(() => {
+      ledger = new Ledger({
+        project: 'test-project',
+        now: (): Date => new Date('2024-01-20T12:00:00.000Z'),
+      });
+    });
+
+    it('should return all decisions including superseded by default', () => {
+      const d1 = ledger.append(
+        createTestInput({ confidence: 'provisional', constraint: 'Original' })
+      );
+      ledger.supersede(d1.id, createTestInput({ constraint: 'Replacement' }));
+
+      const history = ledger.getHistory();
+
+      expect(history).toHaveLength(2);
+      expect(history.map((d) => d.constraint)).toContain('Original');
+      expect(history.map((d) => d.constraint)).toContain('Replacement');
+    });
+
+    it('should return all decisions including invalidated by default', () => {
+      const d1 = ledger.append(
+        createTestInput({ confidence: 'provisional', constraint: 'To invalidate' })
+      );
+      ledger.append(createTestInput({ constraint: 'Active' }));
+      ledger.invalidate(d1.id);
+
+      const history = ledger.getHistory();
+
+      expect(history).toHaveLength(2);
+      expect(history.find((d) => d.status === 'invalidated')).toBeDefined();
+    });
+
+    it('should exclude superseded when includeSuperseded is false', () => {
+      const d1 = ledger.append(
+        createTestInput({ confidence: 'provisional', constraint: 'Original' })
+      );
+      ledger.supersede(d1.id, createTestInput({ constraint: 'Replacement' }));
+
+      const history = ledger.getHistory({ includeSuperseded: false });
+
+      expect(history).toHaveLength(1);
+      expect(history[0]?.constraint).toBe('Replacement');
+    });
+
+    it('should exclude invalidated when includeInvalidated is false', () => {
+      const d1 = ledger.append(
+        createTestInput({ confidence: 'provisional', constraint: 'To invalidate' })
+      );
+      ledger.append(createTestInput({ constraint: 'Active' }));
+      ledger.invalidate(d1.id);
+
+      const history = ledger.getHistory({ includeInvalidated: false });
+
+      expect(history).toHaveLength(1);
+      expect(history[0]?.constraint).toBe('Active');
+    });
+
+    it('should return only active when both flags are false', () => {
+      const d1 = ledger.append(
+        createTestInput({ confidence: 'provisional', constraint: 'To supersede' })
+      );
+      const d2 = ledger.append(
+        createTestInput({ confidence: 'provisional', constraint: 'To invalidate' })
+      );
+      ledger.append(createTestInput({ constraint: 'Active' }));
+
+      ledger.supersede(d1.id, createTestInput({ constraint: 'Replacement' }));
+      ledger.invalidate(d2.id);
+
+      const history = ledger.getHistory({
+        includeSuperseded: false,
+        includeInvalidated: false,
+      });
+
+      expect(history).toHaveLength(2); // Active + Replacement
+      expect(history.every((d) => d.status === 'active')).toBe(true);
+    });
+  });
+
+  describe('getDecisionsByDependencyGraph', () => {
+    let ledger: Ledger;
+
+    beforeEach(() => {
+      ledger = new Ledger({
+        project: 'test-project',
+        now: (): Date => new Date('2024-01-20T12:00:00.000Z'),
+      });
+    });
+
+    it('should return decision with direct dependencies', () => {
+      const a = ledger.append(createTestInput({ constraint: 'A' }));
+      const b = ledger.append(createTestInput({ constraint: 'B' }));
+      const c = ledger.append(
+        createTestInput({
+          constraint: 'C depends on A and B',
+          dependencies: [a.id, b.id],
+        })
+      );
+
+      const graph = ledger.getDecisionsByDependencyGraph(c.id);
+
+      expect(graph.decision.id).toBe(c.id);
+      expect(graph.directDependencies).toHaveLength(2);
+      expect(graph.directDependencies.map((d) => d.id)).toContain(a.id);
+      expect(graph.directDependencies.map((d) => d.id)).toContain(b.id);
+    });
+
+    it('should return decision with direct dependents', () => {
+      const a = ledger.append(createTestInput({ constraint: 'A' }));
+      const b = ledger.append(
+        createTestInput({
+          constraint: 'B depends on A',
+          dependencies: [a.id],
+        })
+      );
+      const c = ledger.append(
+        createTestInput({
+          constraint: 'C depends on A',
+          dependencies: [a.id],
+        })
+      );
+
+      const graph = ledger.getDecisionsByDependencyGraph(a.id);
+
+      expect(graph.decision.id).toBe(a.id);
+      expect(graph.directDependencies).toHaveLength(0);
+      expect(graph.directDependents).toHaveLength(2);
+      expect(graph.directDependents.map((d) => d.id)).toContain(b.id);
+      expect(graph.directDependents.map((d) => d.id)).toContain(c.id);
+    });
+
+    it('should throw DecisionNotFoundError for non-existent decision', () => {
+      expect(() => ledger.getDecisionsByDependencyGraph('nonexistent_001')).toThrow(
+        DecisionNotFoundError
+      );
+    });
+
+    it('should include transitive dependencies when option is true', () => {
+      // A <- B <- C (C depends on B, B depends on A)
+      const a = ledger.append(createTestInput({ constraint: 'A' }));
+      const b = ledger.append(
+        createTestInput({
+          constraint: 'B depends on A',
+          dependencies: [a.id],
+        })
+      );
+      const c = ledger.append(
+        createTestInput({
+          constraint: 'C depends on B',
+          dependencies: [b.id],
+        })
+      );
+
+      const graph = ledger.getDecisionsByDependencyGraph(c.id, {
+        includeTransitiveDependencies: true,
+      });
+
+      expect(graph.directDependencies).toHaveLength(1);
+      expect(graph.directDependencies[0]?.id).toBe(b.id);
+      expect(graph.transitiveDependencies).toBeDefined();
+      expect(graph.transitiveDependencies).toHaveLength(2);
+      expect(graph.transitiveDependencies?.map((d) => d.id)).toContain(a.id);
+      expect(graph.transitiveDependencies?.map((d) => d.id)).toContain(b.id);
+    });
+
+    it('should include transitive dependents when option is true', () => {
+      // A <- B <- C
+      const a = ledger.append(createTestInput({ constraint: 'A' }));
+      const b = ledger.append(
+        createTestInput({
+          constraint: 'B depends on A',
+          dependencies: [a.id],
+        })
+      );
+      const c = ledger.append(
+        createTestInput({
+          constraint: 'C depends on B',
+          dependencies: [b.id],
+        })
+      );
+
+      const graph = ledger.getDecisionsByDependencyGraph(a.id, {
+        includeTransitiveDependents: true,
+      });
+
+      expect(graph.directDependents).toHaveLength(1);
+      expect(graph.directDependents[0]?.id).toBe(b.id);
+      expect(graph.transitiveDependents).toBeDefined();
+      expect(graph.transitiveDependents).toHaveLength(2);
+      expect(graph.transitiveDependents?.map((d) => d.id)).toContain(b.id);
+      expect(graph.transitiveDependents?.map((d) => d.id)).toContain(c.id);
+    });
+
+    it('should not include transitive fields when options are false or omitted', () => {
+      const a = ledger.append(createTestInput({ constraint: 'A' }));
+      ledger.append(
+        createTestInput({
+          constraint: 'B depends on A',
+          dependencies: [a.id],
+        })
+      );
+
+      const graph = ledger.getDecisionsByDependencyGraph(a.id);
+
+      expect(graph.transitiveDependencies).toBeUndefined();
+      expect(graph.transitiveDependents).toBeUndefined();
+    });
+
+    it('should handle diamond dependency pattern for transitive queries', () => {
+      // Diamond: A <- B, A <- C, B <- D, C <- D
+      const a = ledger.append(createTestInput({ constraint: 'A' }));
+      const b = ledger.append(
+        createTestInput({
+          constraint: 'B depends on A',
+          dependencies: [a.id],
+        })
+      );
+      const c = ledger.append(
+        createTestInput({
+          constraint: 'C depends on A',
+          dependencies: [a.id],
+        })
+      );
+      const d = ledger.append(
+        createTestInput({
+          constraint: 'D depends on B and C',
+          dependencies: [b.id, c.id],
+        })
+      );
+
+      const graph = ledger.getDecisionsByDependencyGraph(d.id, {
+        includeTransitiveDependencies: true,
+      });
+
+      // Direct deps: B, C
+      expect(graph.directDependencies).toHaveLength(2);
+
+      // Transitive deps: should include A, B, C (no duplicates)
+      expect(graph.transitiveDependencies).toBeDefined();
+      expect(graph.transitiveDependencies).toHaveLength(3);
+
+      const transitiveIds = graph.transitiveDependencies?.map((dep) => dep.id) ?? [];
+      expect(transitiveIds).toContain(a.id);
+      expect(transitiveIds).toContain(b.id);
+      expect(transitiveIds).toContain(c.id);
+    });
+  });
+
+  describe('InvalidFilterKeyError', () => {
+    it('should preserve error name', () => {
+      const error = new InvalidFilterKeyError('badKey', [
+        'category',
+        'phase',
+        'status',
+        'confidence',
+      ]);
+      expect(error.name).toBe('InvalidFilterKeyError');
+    });
+
+    it('should include invalid key and valid keys in message', () => {
+      const error = new InvalidFilterKeyError('badKey', [
+        'category',
+        'phase',
+        'status',
+        'confidence',
+      ]);
+      expect(error.message).toContain('badKey');
+      expect(error.message).toContain('category');
+      expect(error.message).toContain('phase');
+      expect(error.message).toContain('status');
+      expect(error.message).toContain('confidence');
+    });
+
+    it('should expose invalid key and valid keys', () => {
+      const validKeys = ['category', 'phase', 'status', 'confidence'] as const;
+      const error = new InvalidFilterKeyError('badKey', validKeys);
+      expect(error.invalidKey).toBe('badKey');
+      expect(error.validKeys).toEqual(validKeys);
     });
   });
 });

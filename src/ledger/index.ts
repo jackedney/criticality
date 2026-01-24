@@ -16,6 +16,11 @@ export type {
   DecisionInput,
   LedgerMeta,
   LedgerData,
+  DecisionFilter,
+  DecisionFilterKey,
+  HistoryQueryOptions,
+  DependencyGraphQueryOptions,
+  DependencyGraphResult,
 } from './types.js';
 
 export {
@@ -27,6 +32,7 @@ export {
   InvalidSupersedeError,
   CircularDependencyError,
   DependencyNotFoundError,
+  InvalidFilterKeyError,
   fromData,
 } from './ledger.js';
 

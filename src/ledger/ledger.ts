@@ -16,6 +16,11 @@ import type {
   ConfidenceLevel,
   LedgerData,
   LedgerMeta,
+  DecisionFilter,
+  DecisionFilterKey,
+  HistoryQueryOptions,
+  DependencyGraphQueryOptions,
+  DependencyGraphResult,
 } from './types.js';
 
 /**
@@ -166,6 +171,29 @@ export class DependencyNotFoundError extends Error {
 }
 
 /**
+ * Error class for invalid filter key errors.
+ */
+export class InvalidFilterKeyError extends Error {
+  /** The invalid filter key that was provided. */
+  public readonly invalidKey: string;
+  /** Valid filter keys. */
+  public readonly validKeys: readonly DecisionFilterKey[];
+
+  /**
+   * Creates a new InvalidFilterKeyError.
+   *
+   * @param invalidKey - The invalid key that was provided.
+   * @param validKeys - Array of valid filter keys.
+   */
+  constructor(invalidKey: string, validKeys: readonly DecisionFilterKey[]) {
+    super(`Invalid filter key '${invalidKey}'. Valid filter keys are: ${validKeys.join(', ')}`);
+    this.name = 'InvalidFilterKeyError';
+    this.invalidKey = invalidKey;
+    this.validKeys = validKeys;
+  }
+}
+
+/**
  * Report of a cascade invalidation operation.
  */
 export interface CascadeReport {
@@ -306,6 +334,16 @@ const VALID_PHASES: ReadonlySet<DecisionPhase> = new Set([
   'mesoscopic',
   'mass_defect',
 ]);
+
+/**
+ * Valid filter keys for querying decisions.
+ */
+const VALID_FILTER_KEYS: readonly DecisionFilterKey[] = [
+  'category',
+  'phase',
+  'status',
+  'confidence',
+] as const;
 
 /**
  * Pattern for valid decision IDs: category_NNN (e.g., "architectural_001").
@@ -666,6 +704,198 @@ export class Ledger {
       oldDecision: updatedOldDecision,
       newDecision,
     };
+  }
+
+  /**
+   * Queries decisions based on filter criteria.
+   *
+   * Filters can be combined (AND logic). Invalid filter keys will throw an error.
+   *
+   * @param filter - Filter criteria for the query.
+   * @returns Array of decisions matching all filter criteria.
+   * @throws InvalidFilterKeyError if an invalid filter key is provided.
+   *
+   * @example
+   * ```typescript
+   * // Get all architectural decisions
+   * const archDecisions = ledger.query({ category: 'architectural' });
+   *
+   * // Get all active decisions in design phase
+   * const activeDesign = ledger.query({ status: 'active', phase: 'design' });
+   *
+   * // Get all canonical decisions
+   * const canonical = ledger.query({ confidence: 'canonical' });
+   * ```
+   */
+  query(filter: DecisionFilter): Decision[] {
+    // Validate filter keys
+    this.validateFilterKeys(filter);
+
+    return this.decisions.filter((decision) => {
+      if (filter.category !== undefined && decision.category !== filter.category) {
+        return false;
+      }
+      if (filter.phase !== undefined && decision.phase !== filter.phase) {
+        return false;
+      }
+      if (filter.status !== undefined && decision.status !== filter.status) {
+        return false;
+      }
+      if (filter.confidence !== undefined && decision.confidence !== filter.confidence) {
+        return false;
+      }
+      return true;
+    });
+  }
+
+  /**
+   * Gets all active decisions (excluding superseded and invalidated).
+   *
+   * @returns Array of decisions with status 'active'.
+   *
+   * @example
+   * ```typescript
+   * const activeDecisions = ledger.getActiveDecisions();
+   * ```
+   */
+  getActiveDecisions(): Decision[] {
+    return this.decisions.filter((d) => d.status === 'active');
+  }
+
+  /**
+   * Gets the full decision history including all superseded and invalidated entries.
+   *
+   * This method retrieves all decisions regardless of their status.
+   *
+   * @param options - Options to filter which historical entries to include.
+   * @returns Array of decisions including historical (superseded/invalidated) entries.
+   *
+   * @example
+   * ```typescript
+   * // Get all decisions including superseded and invalidated
+   * const allHistory = ledger.getHistory();
+   *
+   * // Get only active and superseded (exclude invalidated)
+   * const withoutInvalidated = ledger.getHistory({ includeInvalidated: false });
+   *
+   * // Get only active and invalidated (exclude superseded)
+   * const withoutSuperseded = ledger.getHistory({ includeSuperseded: false });
+   * ```
+   */
+  getHistory(options?: HistoryQueryOptions): Decision[] {
+    const includeSuperseded = options?.includeSuperseded !== false;
+    const includeInvalidated = options?.includeInvalidated !== false;
+
+    return this.decisions.filter((decision) => {
+      if (decision.status === 'superseded' && !includeSuperseded) {
+        return false;
+      }
+      if (decision.status === 'invalidated' && !includeInvalidated) {
+        return false;
+      }
+      return true;
+    });
+  }
+
+  /**
+   * Gets decisions organized by their dependency graph.
+   *
+   * Returns the decision along with its direct and optionally transitive
+   * dependencies and dependents.
+   *
+   * @param decisionId - The decision ID to query.
+   * @param options - Options for including transitive relationships.
+   * @returns Object containing the decision and its dependency relationships.
+   * @throws DecisionNotFoundError if the decision doesn't exist.
+   *
+   * @example
+   * ```typescript
+   * // Get direct dependencies and dependents only
+   * const graph = ledger.getDecisionsByDependencyGraph('architectural_001');
+   *
+   * // Include all transitive relationships
+   * const fullGraph = ledger.getDecisionsByDependencyGraph('architectural_001', {
+   *   includeTransitiveDependencies: true,
+   *   includeTransitiveDependents: true,
+   * });
+   * ```
+   */
+  getDecisionsByDependencyGraph(
+    decisionId: string,
+    options?: DependencyGraphQueryOptions
+  ): DependencyGraphResult {
+    const decision = this.getById(decisionId);
+    if (decision === undefined) {
+      throw new DecisionNotFoundError(decisionId);
+    }
+
+    const directDependencies = this.getDependencies(decisionId);
+    const directDependents = this.getDependents(decisionId);
+
+    const result: DependencyGraphResult = {
+      decision,
+      directDependencies,
+      directDependents,
+    };
+
+    if (options?.includeTransitiveDependencies === true) {
+      result.transitiveDependencies = this.getTransitiveDependenciesPublic(decisionId);
+    }
+
+    if (options?.includeTransitiveDependents === true) {
+      result.transitiveDependents = this.getTransitiveDependents(decisionId).map((d) => d.decision);
+    }
+
+    return result;
+  }
+
+  /**
+   * Validates that filter keys are valid.
+   *
+   * @param filter - The filter object to validate.
+   * @throws InvalidFilterKeyError if an invalid key is found.
+   */
+  private validateFilterKeys(filter: DecisionFilter): void {
+    const validKeySet = new Set<string>(VALID_FILTER_KEYS);
+    for (const key of Object.keys(filter)) {
+      if (!validKeySet.has(key)) {
+        throw new InvalidFilterKeyError(key, VALID_FILTER_KEYS);
+      }
+    }
+  }
+
+  /**
+   * Gets all decisions that the given decision transitively depends on.
+   * Uses BFS to traverse the dependency tree upwards.
+   *
+   * @param decisionId - The decision ID to find transitive dependencies for.
+   * @returns Array of all decisions this decision transitively depends on.
+   */
+  private getTransitiveDependenciesPublic(decisionId: string): Decision[] {
+    const result: Decision[] = [];
+    const visited = new Set<string>();
+    const queue = [...this.getDependencies(decisionId)];
+
+    while (queue.length > 0) {
+      const current = queue.shift();
+      if (current === undefined) {
+        break;
+      }
+
+      if (!visited.has(current.id)) {
+        visited.add(current.id);
+        result.push(current);
+
+        const deps = this.getDependencies(current.id);
+        for (const dep of deps) {
+          if (!visited.has(dep.id)) {
+            queue.push(dep);
+          }
+        }
+      }
+    }
+
+    return result;
   }
 
   /**

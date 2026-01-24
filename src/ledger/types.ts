@@ -156,3 +156,59 @@ export interface DecisionInput {
   /** For human resolutions: the query that prompted this. */
   human_query_id?: string;
 }
+
+/**
+ * Valid filter keys for querying decisions.
+ */
+export type DecisionFilterKey = 'category' | 'phase' | 'status' | 'confidence';
+
+/**
+ * Filter options for querying decisions.
+ * All filters are combined with AND logic.
+ */
+export interface DecisionFilter {
+  /** Filter by decision category. */
+  category?: DecisionCategory;
+  /** Filter by decision phase. */
+  phase?: DecisionPhase;
+  /** Filter by decision status. */
+  status?: DecisionStatus;
+  /** Filter by confidence level. */
+  confidence?: ConfidenceLevel;
+}
+
+/**
+ * Options for querying decision history.
+ */
+export interface HistoryQueryOptions {
+  /** Include decisions that have been superseded. Default: true */
+  includeSuperseded?: boolean;
+  /** Include decisions that have been invalidated. Default: true */
+  includeInvalidated?: boolean;
+}
+
+/**
+ * Options for querying decisions by dependency graph.
+ */
+export interface DependencyGraphQueryOptions {
+  /** Include all transitive dependencies (ancestors). Default: false */
+  includeTransitiveDependencies?: boolean;
+  /** Include all transitive dependents (descendants). Default: false */
+  includeTransitiveDependents?: boolean;
+}
+
+/**
+ * Result of a dependency graph query.
+ */
+export interface DependencyGraphResult {
+  /** The decision being queried. */
+  decision: Decision;
+  /** Direct dependencies (decisions this one depends on). */
+  directDependencies: Decision[];
+  /** Direct dependents (decisions that depend on this one). */
+  directDependents: Decision[];
+  /** All transitive dependencies if requested. */
+  transitiveDependencies?: Decision[];
+  /** All transitive dependents if requested. */
+  transitiveDependents?: Decision[];
+}
