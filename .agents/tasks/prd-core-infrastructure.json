@@ -1,0 +1,545 @@
+{
+  "version": 1,
+  "project": "Criticality Protocol - Phase 1: Core Infrastructure",
+  "overview": "Build the orchestrator skeleton and basic phase transitions for the Criticality Protocol - a context-shedding architecture for autonomous software synthesis.",
+  "goals": [
+    "Establish TypeScript project with strict mode and comprehensive testing",
+    "Implement configuration parsing for criticality.toml and spec.toml",
+    "Build append-only Decision Ledger with override/cascade operations",
+    "Create Protocol State Machine with phase transitions and blocking states",
+    "Implement Model Router using Claude Code and OpenCode as backends"
+  ],
+  "nonGoals": [
+    "Phase implementations (Ignition, Lattice, Injection, etc.)",
+    "AST manipulation or code generation",
+    "Human interface (CLI, notifications, dashboard)",
+    "Production hardening (observability, security, performance)"
+  ],
+  "successMetrics": [
+    "Project scaffolding complete with all tooling working",
+    "Configuration system parses and validates example files",
+    "Decision Ledger passes property tests for append-only invariants",
+    "State machine correctly enforces phase transition rules",
+    "Model router successfully routes requests through Claude Code and OpenCode"
+  ],
+  "stack": {
+    "language": "TypeScript",
+    "runtime": "Node.js >=20.0.0",
+    "moduleSystem": "ESM",
+    "testing": "Vitest + fast-check"
+  },
+  "dataModel": [
+    {
+      "entity": "Config",
+      "fields": [
+        "modelAssignments",
+        "paths",
+        "thresholds"
+      ]
+    },
+    {
+      "entity": "Spec",
+      "fields": [
+        "per spec.schema.json"
+      ]
+    },
+    {
+      "entity": "Decision",
+      "fields": [
+        "id",
+        "timestamp",
+        "category",
+        "phase",
+        "content",
+        "confidence",
+        "status",
+        "dependencies",
+        "source",
+        "failure_context"
+      ]
+    },
+    {
+      "entity": "ProtocolState",
+      "fields": [
+        "phase",
+        "substate",
+        "artifacts",
+        "blockingQueries"
+      ]
+    }
+  ],
+  "rules": [
+    "All code must compile with TypeScript strict mode",
+    "All public APIs must have TSDoc comments",
+    "Test coverage target: 80%+ for core modules",
+    "No runtime dependencies on specific model provider SDKs",
+    "Configuration files must validate against existing JSON schemas"
+  ],
+  "qualityGates": [
+    "npm run typecheck",
+    "npm run lint",
+    "npm run test"
+  ],
+  "stories": [
+    {
+      "id": "US-001",
+      "title": "Initialize TypeScript project with strict mode",
+      "status": "in_progress",
+      "dependsOn": [],
+      "description": "As a developer, I want a properly configured TypeScript project with strict mode so that we catch type errors early and have a solid foundation.",
+      "acceptanceCriteria": [
+        "Create package.json with type: module for ESM",
+        "Create tsconfig.json with strict: true, noUncheckedIndexedAccess: true, exactOptionalPropertyTypes: true",
+        "Source files compile without errors",
+        "Example: 'npm run build' completes successfully",
+        "Negative case: code with implicit any fails typecheck"
+      ],
+      "startedAt": "2026-01-24T17:32:46.913560+00:00",
+      "completedAt": null,
+      "updatedAt": "2026-01-24T17:32:46.913760+00:00"
+    },
+    {
+      "id": "US-002",
+      "title": "Set up CI/CD pipeline with GitHub Actions",
+      "status": "open",
+      "dependsOn": [
+        "US-001"
+      ],
+      "description": "As a developer, I want automated CI/CD so that code quality is enforced on every push and PR.",
+      "acceptanceCriteria": [
+        "Create .github/workflows/ci.yml",
+        "Workflow runs on push to main and all PRs",
+        "Workflow runs lint, typecheck, and test steps",
+        "Workflow fails on any lint errors, type errors, or test failures",
+        "Caches node_modules for faster runs",
+        "Example: PR with failing test blocks merge",
+        "Negative case: PR with syntax error in workflow file is detected"
+      ]
+    },
+    {
+      "id": "US-003",
+      "title": "Configure linting and formatting",
+      "status": "open",
+      "dependsOn": [
+        "US-001"
+      ],
+      "description": "As a developer, I want consistent code style enforced automatically so that the codebase remains readable and maintainable.",
+      "acceptanceCriteria": [
+        "Install and configure ESLint with @typescript-eslint/eslint-plugin",
+        "Install and configure Prettier with consistent style",
+        "Add npm scripts: 'lint', 'lint:fix', 'format'",
+        "Configure husky for pre-commit hooks",
+        "Configure lint-staged to run linter on staged files",
+        "Example: 'npm run lint' reports issues",
+        "Example: committing unformatted code auto-formats via hook",
+        "Negative case: code with eslint errors fails the lint check"
+      ]
+    },
+    {
+      "id": "US-004",
+      "title": "Set up testing infrastructure with Vitest",
+      "status": "open",
+      "dependsOn": [
+        "US-001"
+      ],
+      "description": "As a developer, I want a testing framework configured so that I can write and run tests efficiently.",
+      "acceptanceCriteria": [
+        "Install and configure Vitest for unit/integration tests",
+        "Install and configure fast-check for property-based testing",
+        "Enable coverage reporting",
+        "Add npm scripts: 'test', 'test:watch', 'test:coverage'",
+        "Create example test file that passes",
+        "Example: 'npm run test' runs tests and reports results",
+        "Example: property test with fast-check generates multiple test cases",
+        "Negative case: failing test causes npm test to exit with error code"
+      ]
+    },
+    {
+      "id": "US-005",
+      "title": "Create documentation generation with TypeDoc",
+      "status": "open",
+      "dependsOn": [
+        "US-001"
+      ],
+      "description": "As a developer, I want auto-generated API documentation so that the codebase is well-documented.",
+      "acceptanceCriteria": [
+        "Install and configure TypeDoc",
+        "Add npm script: 'docs'",
+        "TypeDoc generates docs from TSDoc comments",
+        "Docs build succeeds with no warnings on valid code",
+        "Example: function with TSDoc comment appears in generated docs",
+        "Negative case: missing required TSDoc tag generates warning"
+      ]
+    },
+    {
+      "id": "US-006",
+      "title": "Implement criticality.toml parser",
+      "status": "open",
+      "dependsOn": [
+        "US-004"
+      ],
+      "description": "As a developer, I want to parse project-level configuration from criticality.toml so that the system can be configured per-project.",
+      "acceptanceCriteria": [
+        "Install TOML parsing library",
+        "Create typed configuration interface for criticality.toml",
+        "Parse valid TOML into typed configuration object",
+        "Return descriptive errors for invalid TOML syntax",
+        "Handle missing optional fields with sensible defaults",
+        "Example: valid criticality.toml parses to Config object",
+        "Example: TOML with missing optional field uses default value",
+        "Negative case: malformed TOML returns descriptive parse error"
+      ]
+    },
+    {
+      "id": "US-007",
+      "title": "Implement spec.toml parser",
+      "status": "open",
+      "dependsOn": [
+        "US-006"
+      ],
+      "description": "As a developer, I want to parse specification artifacts from spec.toml so that the protocol can read project specifications.",
+      "acceptanceCriteria": [
+        "Create typed Spec interface matching spec.schema.json",
+        "Parse all fields defined in spec.schema.json",
+        "Validate against schema constraints",
+        "Return typed Spec object on success",
+        "Example: valid spec.toml matching schema parses successfully",
+        "Negative case: spec.toml missing required field returns validation error"
+      ]
+    },
+    {
+      "id": "US-008",
+      "title": "Create configuration validation (semantic)",
+      "status": "open",
+      "dependsOn": [
+        "US-007"
+      ],
+      "description": "As a developer, I want semantic validation of configuration values so that invalid configurations are caught early.",
+      "acceptanceCriteria": [
+        "Validate model names are recognized model identifiers",
+        "Validate paths exist where required",
+        "Validate thresholds are in valid ranges",
+        "Return clear error messages for validation failures",
+        "Example: config with valid model name 'claude-3-opus' passes validation",
+        "Negative case: config with unknown model name 'gpt-99' returns validation error",
+        "Negative case: config with threshold > 1.0 returns range error"
+      ]
+    },
+    {
+      "id": "US-009",
+      "title": "Support environment variable overrides",
+      "status": "open",
+      "dependsOn": [
+        "US-008"
+      ],
+      "description": "As a developer, I want environment variables to override config values so that configuration can be customized at runtime.",
+      "acceptanceCriteria": [
+        "CRITICALITY_* env vars override corresponding config values",
+        "Type coercion works correctly (string env var to number/boolean)",
+        "Document override precedence: env > config file > defaults",
+        "Example: CRITICALITY_MODEL=claude-3-opus overrides config file model setting",
+        "Example: CRITICALITY_THRESHOLD=0.8 coerces string to number",
+        "Negative case: invalid env var value returns coercion error"
+      ]
+    },
+    {
+      "id": "US-010",
+      "title": "Implement Decision Ledger append operations",
+      "status": "open",
+      "dependsOn": [
+        "US-004"
+      ],
+      "description": "As a developer, I want to append decisions to the ledger so that all decisions are recorded.",
+      "acceptanceCriteria": [
+        "Create Decision type matching ledger.schema.json",
+        "Create Ledger class with append method",
+        "Auto-generate unique IDs for new decisions",
+        "Auto-set timestamps on append",
+        "Schema validation on append",
+        "Detect and reject duplicate IDs",
+        "Example: append decision returns decision with generated ID and timestamp",
+        "Negative case: append decision with invalid schema returns validation error"
+      ]
+    },
+    {
+      "id": "US-011",
+      "title": "Implement Decision Ledger override/invalidate operations",
+      "status": "open",
+      "dependsOn": [
+        "US-010"
+      ],
+      "description": "As a developer, I want to mark decisions as superseded while preserving history so that decision evolution is tracked.",
+      "acceptanceCriteria": [
+        "Implement supersede method that marks old decision as superseded",
+        "Supersede links old and new entries",
+        "Original entry preserved (append-only invariant)",
+        "Respect confidence levels in override rules",
+        "Canonical decisions require explicit override flag",
+        "Example: supersede decision A with B marks A as superseded and links to B",
+        "Negative case: attempting to implicitly override canonical decision returns error"
+      ]
+    },
+    {
+      "id": "US-012",
+      "title": "Implement Decision Ledger cascade (dependency tracking)",
+      "status": "open",
+      "dependsOn": [
+        "US-011"
+      ],
+      "description": "As a developer, I want dependency tracking with cascade invalidations so that dependent decisions are properly managed.",
+      "acceptanceCriteria": [
+        "Record dependencies on append",
+        "Invalidating a decision cascades to dependents",
+        "Detect and prevent circular dependencies",
+        "Generate cascade report showing affected decisions",
+        "Example: invalidate decision A cascades to dependent decisions B and C",
+        "Example: cascade report lists all affected decisions",
+        "Negative case: creating circular dependency A->B->A returns error"
+      ]
+    },
+    {
+      "id": "US-013",
+      "title": "Implement Decision Ledger serialization/deserialization",
+      "status": "open",
+      "dependsOn": [
+        "US-012"
+      ],
+      "description": "As a developer, I want to persist and reload the ledger so that decisions survive restarts.",
+      "acceptanceCriteria": [
+        "Serialize ledger to JSON matching ledger.schema.json",
+        "Deserialize and validate on load",
+        "Handle corrupted files gracefully with clear error",
+        "Atomic writes prevent partial corruption",
+        "Example: save and reload ledger preserves all decisions",
+        "Negative case: loading corrupted JSON returns descriptive error"
+      ]
+    },
+    {
+      "id": "US-014",
+      "title": "Add Decision Ledger query interface",
+      "status": "open",
+      "dependsOn": [
+        "US-013"
+      ],
+      "description": "As a developer, I want to query decisions by various criteria so that specific decisions can be retrieved efficiently.",
+      "acceptanceCriteria": [
+        "Filter decisions by category",
+        "Filter decisions by phase",
+        "Filter decisions by status",
+        "Filter decisions by confidence level",
+        "Get active decisions only (excluding superseded)",
+        "Get decision history including superseded entries",
+        "Get decisions by dependency graph",
+        "Example: query by category 'architecture' returns only architecture decisions",
+        "Negative case: query with invalid filter key returns error"
+      ]
+    },
+    {
+      "id": "US-015",
+      "title": "Define ProtocolState enum",
+      "status": "open",
+      "dependsOn": [
+        "US-004"
+      ],
+      "description": "As a developer, I want a state representation for protocol phases so that the orchestrator state is well-defined.",
+      "acceptanceCriteria": [
+        "Create enum covering all phases: Ignition, Lattice, CompositionAudit, Injection, Mesoscopic, MassDefect, Complete",
+        "Add Blocking substate for any phase",
+        "Add Failed substate with failure context",
+        "Define ProtocolState type combining phase and substate",
+        "Example: ProtocolState can represent 'Ignition' phase in 'Active' substate",
+        "Example: ProtocolState can represent 'Lattice' phase in 'Blocking' substate with query"
+      ]
+    },
+    {
+      "id": "US-016",
+      "title": "Implement phase transitions",
+      "status": "open",
+      "dependsOn": [
+        "US-015"
+      ],
+      "description": "As a developer, I want a state machine for phase transitions so that only valid transitions are allowed.",
+      "acceptanceCriteria": [
+        "Define valid transitions per SPECIFICATION.md",
+        "Transition requires artifacts from previous phase",
+        "Transition triggers context shedding placeholder",
+        "Invalid transitions return descriptive errors",
+        "Example: transition from Ignition to Lattice succeeds with required artifacts",
+        "Negative case: transition from Ignition to Injection returns invalid transition error"
+      ]
+    },
+    {
+      "id": "US-017",
+      "title": "Implement blocking state for human intervention",
+      "status": "open",
+      "dependsOn": [
+        "US-016"
+      ],
+      "description": "As a developer, I want to handle human intervention blocking so that the protocol can pause for human input.",
+      "acceptanceCriteria": [
+        "Any phase can enter blocking state",
+        "Blocking records query and available options",
+        "Resolution unblocks and records decision to ledger",
+        "Track timeout for blocked states",
+        "Example: enter blocking state with query 'Approve architecture?'",
+        "Example: resolve blocking state records human decision",
+        "Negative case: timeout on blocked state triggers appropriate handling"
+      ]
+    },
+    {
+      "id": "US-018",
+      "title": "Implement protocol state persistence",
+      "status": "open",
+      "dependsOn": [
+        "US-017"
+      ],
+      "description": "As a developer, I want to persist protocol state to disk so that execution can resume after restart.",
+      "acceptanceCriteria": [
+        "Serialize state after each transition",
+        "State includes current phase, artifacts, blocking queries",
+        "Atomic writes prevent corruption",
+        "Example: state persisted after transition to Lattice phase",
+        "Negative case: partial write does not corrupt state file"
+      ]
+    },
+    {
+      "id": "US-019",
+      "title": "Add checkpoint/resume capability",
+      "status": "open",
+      "dependsOn": [
+        "US-018"
+      ],
+      "description": "As a developer, I want to resume protocol execution from persisted state so that work is not lost on restart.",
+      "acceptanceCriteria": [
+        "Detect existing state on startup",
+        "Validate state integrity before resuming",
+        "Resume from exact position",
+        "Handle stale or corrupted state gracefully",
+        "Example: restart after crash resumes from last checkpoint",
+        "Negative case: corrupted state file triggers recovery or clean start"
+      ]
+    },
+    {
+      "id": "US-020",
+      "title": "Define ModelRouter interface",
+      "status": "open",
+      "dependsOn": [
+        "US-004"
+      ],
+      "description": "As a developer, I want an abstract interface for model routing so that different backends can be used interchangeably.",
+      "acceptanceCriteria": [
+        "Define interface with prompt, complete, stream methods",
+        "Define request type with model alias, prompt, parameters",
+        "Define response type with content, usage, model metadata",
+        "Define error types for rate limits, auth errors, model errors",
+        "Example: ModelRouter interface can be implemented by any backend",
+        "Negative case: implementation missing required method fails type check"
+      ]
+    },
+    {
+      "id": "US-021",
+      "title": "Implement Claude Code client",
+      "status": "open",
+      "dependsOn": [
+        "US-020"
+      ],
+      "description": "As a developer, I want to route requests to Claude models via Claude Code CLI so that Claude models can be used.",
+      "acceptanceCriteria": [
+        "Install execa for subprocess management",
+        "Spawn Claude Code subprocess with appropriate flags",
+        "Pass prompts and receive responses",
+        "Handle streaming output",
+        "Capture usage/cost information if available",
+        "Example: send prompt to Claude via Claude Code CLI and receive response",
+        "Negative case: Claude Code not installed returns clear error"
+      ]
+    },
+    {
+      "id": "US-022",
+      "title": "Implement OpenCode client",
+      "status": "open",
+      "dependsOn": [
+        "US-020"
+      ],
+      "description": "As a developer, I want to route requests to Kimi K2 and MiniMax via OpenCode so that these models can be used.",
+      "acceptanceCriteria": [
+        "Spawn OpenCode subprocess with appropriate flags",
+        "Route to correct model based on alias",
+        "Handle streaming output",
+        "Capture usage information if available",
+        "Example: send prompt to Kimi K2 via OpenCode and receive response",
+        "Negative case: OpenCode not installed returns clear error"
+      ]
+    },
+    {
+      "id": "US-023",
+      "title": "Add model request/response logging",
+      "status": "open",
+      "dependsOn": [
+        "US-021",
+        "US-022"
+      ],
+      "description": "As a developer, I want all model interactions logged so that I can debug and audit the system.",
+      "acceptanceCriteria": [
+        "Log request timestamp, model alias, prompt hash",
+        "Log response timestamp, token count, latency",
+        "Configurable log level: none, summary, full",
+        "Write logs to dedicated model-interactions log file",
+        "Example: model request with log level 'summary' logs timestamp and token count",
+        "Negative case: log level 'none' produces no log output"
+      ]
+    },
+    {
+      "id": "US-024",
+      "title": "Implement retry logic with exponential backoff",
+      "status": "open",
+      "dependsOn": [
+        "US-023"
+      ],
+      "description": "As a developer, I want automatic retry for transient failures so that temporary issues don't cause failures.",
+      "acceptanceCriteria": [
+        "Retry on rate limit and transient errors",
+        "Use exponential backoff with jitter",
+        "Make max retries and base delay configurable",
+        "Do not retry on auth errors or permanent model errors",
+        "Example: rate limit error retries with increasing delay",
+        "Example: successful retry after transient failure returns response",
+        "Negative case: auth error does not retry and returns immediately"
+      ]
+    },
+    {
+      "id": "US-025",
+      "title": "Implement Context Budgeting and Truncation",
+      "status": "open",
+      "dependsOn": [
+        "US-020"
+      ],
+      "description": "As a developer, I want to handle context limits gracefully so that large prompts don't cause hard failures.",
+      "acceptanceCriteria": [
+        "Implement token counting for inputs",
+        "Define TruncationOrder (comments > examples > types)",
+        "Implement ContextOverflowStrategy (truncate, upgrade, reject)",
+        "Apply truncation when input exceeds model limits",
+        "Example: Request over limit triggers truncation of comments",
+        "Negative case: Request exceeding max limit after truncation returns rejection error"
+      ]
+    },
+    {
+      "id": "US-026",
+      "title": "Implement Deterministic Model Routing Logic",
+      "status": "open",
+      "dependsOn": [
+        "US-025"
+      ],
+      "description": "As a developer, I want to route requests based on complexity and cost rules so that we optimize for both success rate and budget.",
+      "acceptanceCriteria": [
+        "Implement signatureComplexity calculation",
+        "Implement pre-emption rules (e.g., complexity > 5 upgrades model)",
+        "Implement input token threshold upgrades (e.g., > 12k tokens)",
+        "Routing logic is purely deterministic (no LLM decision making)",
+        "Example: Complex signature triggers upgrade from worker to structurer model",
+        "Negative case: Simple signature stays on worker model"
+      ]
+    }
+  ]
+}
