@@ -106,3 +106,27 @@ export {
   stateFileExists,
   createInitialStateSnapshot,
 } from './persistence.js';
+
+export {
+  // Checkpoint types
+  type StateDetectionResult,
+  type StateValidationResult,
+  type StateValidationError,
+  type StateValidationWarning,
+  type StateValidationErrorCode,
+  type StateValidationWarningCode,
+  type DetectStateOptions,
+  type ValidateStateOptions,
+  type ResumeResult,
+  type ResumeFailureReason,
+  type RecoveryAction,
+  // Checkpoint constants
+  DEFAULT_MAX_STATE_AGE_MS,
+  // Checkpoint functions
+  detectExistingState,
+  validateStateIntegrity,
+  validatePersistedStructure,
+  resumeFromCheckpoint,
+  getStartupState,
+  isStateCorrupted,
+} from './checkpoint.js';
