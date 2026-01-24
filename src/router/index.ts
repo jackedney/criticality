@@ -85,3 +85,22 @@ export {
   // Class
   ModelLogger,
 } from './logging.js';
+
+// Retry logic with exponential backoff
+export {
+  // Types
+  type RetryConfig,
+  type RetryAttemptInfo,
+  type RetryCallback,
+  type WithRetryOptions,
+  // Constants
+  DEFAULT_RETRY_CONFIG,
+  // Functions
+  validateRetryConfig,
+  calculateBackoffDelay,
+  shouldRetry,
+  withRetry,
+  createRetrier,
+  wrapWithRetry,
+  defaultSleep,
+} from './retry.js';
