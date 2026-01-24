@@ -431,3 +431,50 @@ Run summary: /Users/jackedney/criticality/.ralph/runs/run-20260124-173246-37766-
   - Injectable now() function enables deterministic testing of timestamp behavior
   - Property-based tests with category/source/confidence arbitraries ensure comprehensive coverage
 ---
+
+## 2026-01-24 18:31 - US-011: Implement Decision Ledger override/invalidate operations
+Thread:
+Run: 20260124-173246-37766 (iteration 11)
+Run log: /Users/jackedney/criticality/.ralph/runs/run-20260124-173246-37766-iter-11.log
+Run summary: /Users/jackedney/criticality/.ralph/runs/run-20260124-173246-37766-iter-11.md
+- Guardrails reviewed: yes
+- No-commit run: false
+- Commit: 242ed71 feat(US-011): Implement Decision Ledger override/invalidate operations
+- Post-commit status: clean (remaining files are PRD and ralph temp files)
+- Verification:
+  - Command: npm run typecheck -> PASS
+  - Command: npm run lint -> PASS
+  - Command: npm run test -> PASS (257 tests passed - 231 existing + 26 new supersede tests)
+  - Command: npm run build -> PASS
+- Files changed:
+  - src/ledger/ledger.ts (supersede method, CanonicalOverrideError, DecisionNotFoundError, InvalidSupersedeError, SupersedeOptions)
+  - src/ledger/ledger.test.ts (26 new tests for supersede functionality and error types)
+  - src/ledger/index.ts (exports for new error types and SupersedeOptions)
+- What was implemented:
+  - Created supersede() method that marks old decision as superseded:
+    - Sets old decision status to 'superseded'
+    - Links old decision to new via superseded_by field
+    - Links new decision to old via supersedes array
+    - Original entry preserved (append-only invariant)
+  - Confidence level rules:
+    - Canonical decisions require explicit forceOverrideCanonical: true flag
+    - Other confidence levels (provisional, inferred, delegated, suspended, blocking) can be superseded without flag
+  - New error types:
+    - CanonicalOverrideError: Thrown when attempting to supersede canonical without explicit flag
+    - DecisionNotFoundError: Thrown when superseding non-existent decision
+    - InvalidSupersedeError: Thrown when superseding already superseded/invalidated decision
+  - SupersedeOptions interface with forceOverrideCanonical boolean
+  - All acceptance criteria verified and passing:
+    - [x] Implement supersede method that marks old decision as superseded
+    - [x] Supersede links old and new entries
+    - [x] Original entry preserved (append-only invariant)
+    - [x] Respect confidence levels in override rules
+    - [x] Canonical decisions require explicit override flag
+    - [x] Example: supersede decision A with B marks A as superseded and links to B (tested)
+    - [x] Negative case: attempting to implicitly override canonical decision returns error (tested)
+- **Learnings for future iterations:**
+  - The append-only pattern means status changes are in-place updates, not deletions
+  - Linked decisions (supersedes/superseded_by) enable bidirectional traversal
+  - Testing with explicit try/catch blocks helps verify error properties beyond just error type
+  - SupersedeOptions with optional forceOverrideCanonical follows TypeScript optional property patterns
+---
