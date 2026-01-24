@@ -1174,3 +1174,60 @@ Run summary: /Users/jackedney/criticality/.ralph/runs/run-20260124-213521-33625-
   - Property-based tests verify invariants across all log levels and model aliases
   - exactOptionalPropertyTypes requires careful conditional object building
 ---
+
+## 2026-01-24 22:38 - US-024: Implement retry logic with exponential backoff
+Thread:
+Run: 20260124-213521-33625 (iteration 9)
+Run log: /Users/jackedney/criticality/.ralph/runs/run-20260124-213521-33625-iter-9.log
+Run summary: /Users/jackedney/criticality/.ralph/runs/run-20260124-213521-33625-iter-9.md
+- Guardrails reviewed: yes
+- No-commit run: false
+- Commit: 4aec184 feat(US-024): Implement retry logic with exponential backoff
+- Post-commit status: clean (remaining files are PRD and ralph temp files)
+- Verification:
+  - Command: npm run typecheck -> PASS
+  - Command: npm run lint -> PASS
+  - Command: npm run test -> PASS (797 tests passed - 751 existing + 46 new retry tests)
+  - Command: npm run build -> PASS
+- Files changed:
+  - src/router/retry.ts (new - retry logic with exponential backoff)
+  - src/router/retry.test.ts (new - 46 tests for retry functionality)
+  - src/router/index.ts (updated - exports for retry module)
+- What was implemented:
+  - Retry configuration:
+    - RetryConfig with maxRetries, baseDelayMs, maxDelayMs, jitterFactor
+    - DEFAULT_RETRY_CONFIG (3 retries, 1000ms base, 30000ms max, 0.2 jitter)
+    - validateRetryConfig() validates and merges with defaults
+  - Exponential backoff with jitter:
+    - calculateBackoffDelay() computes delay using baseDelay * 2^attempt
+    - Caps delay at maxDelayMs to prevent excessive waits
+    - Applies jitter factor for randomized delays
+    - Respects retryAfterMs hint from RateLimitError
+  - Error classification for retry decisions:
+    - shouldRetry() uses existing isRetryableError() from types.ts
+    - Retryable: RateLimitError, TimeoutError, NetworkError, ModelError(retryable=true)
+    - Non-retryable: AuthenticationError, ValidationError, ModelError(retryable=false)
+  - Retry execution:
+    - withRetry() wraps operations with automatic retry
+    - onRetry callback for logging/monitoring retry attempts
+    - Returns success on first successful attempt
+    - Returns immediately on non-retryable errors (no retry)
+    - Creates RETRIES_EXHAUSTED error when all attempts fail
+  - Convenience functions:
+    - createRetrier() creates pre-configured retry wrapper
+    - wrapWithRetry() wraps ModelRouter methods with retry
+    - defaultSleep() provides standard setTimeout-based delay
+  - All acceptance criteria verified:
+    - [x] Retry on rate limit and transient errors
+    - [x] Use exponential backoff with jitter
+    - [x] Make max retries and base delay configurable
+    - [x] Do not retry on auth errors or permanent model errors
+    - [x] Example: rate limit error retries with increasing delay (tested)
+    - [x] Example: successful retry after transient failure returns response (tested)
+    - [x] Negative case: auth error does not retry and returns immediately (tested)
+- **Learnings for future iterations:**
+  - Injectable sleep and random functions enable deterministic testing
+  - exponentialBackoff with jitter: delay * (1 - jitter + random * 2 * jitter)
+  - exactOptionalPropertyTypes requires conditional building for error options
+  - Existing isRetryableError from types.ts enables consistent retry decisions
+---
