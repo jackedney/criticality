@@ -33,6 +33,7 @@ npm-debug.log*
 dist/
 build/
 docs/
+coverage/
 *.egg-info/
 
 # Local configuration

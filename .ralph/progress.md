@@ -146,3 +146,43 @@ Run summary: /Users/jackedney/criticality/.ralph/runs/run-20260124-173246-37766-
   - Coverage thresholds can be configured in vitest.config.ts under test.coverage.thresholds
   - Vitest uses V8 coverage provider via @vitest/coverage-v8 for fast native coverage
 ---
+
+## 2026-01-24 17:51 - US-005: Create documentation generation with TypeDoc
+Thread:
+Run: 20260124-173246-37766 (iteration 5)
+Run log: /Users/jackedney/criticality/.ralph/runs/run-20260124-173246-37766-iter-5.log
+Run summary: /Users/jackedney/criticality/.ralph/runs/run-20260124-173246-37766-iter-5.md
+- Guardrails reviewed: yes
+- No-commit run: false
+- Commit: 6969b06 feat(US-005): Set up documentation generation with TypeDoc
+- Post-commit status: clean (remaining files are PRD, ralph temp files, and coverage output)
+- Verification:
+  - Command: npm run typecheck -> PASS
+  - Command: npm run lint -> PASS
+  - Command: npm run test -> PASS (11 tests passed)
+  - Command: npm run docs -> PASS (generates docs with no warnings)
+  - Undocumented function generates warning -> PASS (verified notDocumented validation)
+- Files changed:
+  - typedoc.json (TypeDoc configuration with validation settings)
+  - package.json (added docs script)
+  - package-lock.json (updated dependencies)
+  - src/index.ts (added greet function with complete TSDoc documentation)
+  - src/index.test.ts (added tests for greet function)
+  - .gitignore (added docs/ directory)
+  - AGENTS.md (documented docs command and documentation section)
+- What was implemented:
+  - Installed and configured TypeDoc for API documentation generation
+  - Created typedoc.json with validation settings (notExported, invalidLink, notDocumented)
+  - Added npm script: docs (runs typedoc)
+  - Enhanced placeholder function with @returns and @example TSDoc tags
+  - Added greet function with complete TSDoc documentation (@param, @returns, @example)
+  - Enabled notDocumented validation to warn about missing TSDoc
+  - Verified generated docs contain TSDoc comments (checked greet.html)
+  - Added docs/ to .gitignore to exclude generated documentation
+  - All acceptance criteria verified and passing
+- **Learnings for future iterations:**
+  - TypeDoc validation.notDocumented option generates warnings for undocumented exports
+  - TypeDoc excludes test files via exclude pattern in typedoc.json
+  - Generated docs should be gitignored and regenerated on demand
+  - TSDoc @example blocks with triple-backtick code blocks render nicely in TypeDoc
+---

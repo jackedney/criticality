@@ -101,7 +101,7 @@
     {
       "id": "US-002",
       "title": "Set up CI/CD pipeline with GitHub Actions",
-      "status": "in_progress",
+      "status": "done",
       "dependsOn": [
         "US-001"
       ],
@@ -116,13 +116,13 @@
         "Negative case: PR with syntax error in workflow file is detected"
       ],
       "startedAt": "2026-01-24T17:36:32.470633+00:00",
-      "completedAt": null,
-      "updatedAt": "2026-01-24T17:36:32.470817+00:00"
+      "completedAt": "2026-01-24T17:39:33.718719+00:00",
+      "updatedAt": "2026-01-24T17:39:33.718550+00:00"
     },
     {
       "id": "US-003",
       "title": "Configure linting and formatting",
-      "status": "open",
+      "status": "done",
       "dependsOn": [
         "US-001"
       ],
@@ -136,12 +136,15 @@
         "Example: 'npm run lint' reports issues",
         "Example: committing unformatted code auto-formats via hook",
         "Negative case: code with eslint errors fails the lint check"
-      ]
+      ],
+      "startedAt": "2026-01-24T17:39:35.811219+00:00",
+      "completedAt": "2026-01-24T17:44:34.886543+00:00",
+      "updatedAt": "2026-01-24T17:44:34.886347+00:00"
     },
     {
       "id": "US-004",
       "title": "Set up testing infrastructure with Vitest",
-      "status": "open",
+      "status": "done",
       "dependsOn": [
         "US-001"
       ],
@@ -155,12 +158,15 @@
         "Example: 'npm run test' runs tests and reports results",
         "Example: property test with fast-check generates multiple test cases",
         "Negative case: failing test causes npm test to exit with error code"
-      ]
+      ],
+      "startedAt": "2026-01-24T17:44:36.985050+00:00",
+      "completedAt": "2026-01-24T17:48:43.187920+00:00",
+      "updatedAt": "2026-01-24T17:48:43.187709+00:00"
     },
     {
       "id": "US-005",
       "title": "Create documentation generation with TypeDoc",
-      "status": "open",
+      "status": "in_progress",
       "dependsOn": [
         "US-001"
       ],
@@ -172,7 +178,10 @@
         "Docs build succeeds with no warnings on valid code",
         "Example: function with TSDoc comment appears in generated docs",
         "Negative case: missing required TSDoc tag generates warning"
-      ]
+      ],
+      "startedAt": "2026-01-24T17:48:45.279423+00:00",
+      "completedAt": null,
+      "updatedAt": "2026-01-24T17:48:45.279633+00:00"
     },
     {
       "id": "US-006",
