@@ -186,3 +186,57 @@ Run summary: /Users/jackedney/criticality/.ralph/runs/run-20260124-173246-37766-
   - Generated docs should be gitignored and regenerated on demand
   - TSDoc @example blocks with triple-backtick code blocks render nicely in TypeDoc
 ---
+
+## 2026-01-24 17:58 - US-006: Implement criticality.toml parser
+Thread:
+Run: 20260124-173246-37766 (iteration 6)
+Run log: /Users/jackedney/criticality/.ralph/runs/run-20260124-173246-37766-iter-6.log
+Run summary: /Users/jackedney/criticality/.ralph/runs/run-20260124-173246-37766-iter-6.md
+- Guardrails reviewed: yes
+- No-commit run: false
+- Commit: e4c4962 feat(US-006): Implement criticality.toml parser
+- Post-commit status: clean (remaining files are PRD and ralph temp files)
+- Verification:
+  - Command: npm run typecheck -> PASS
+  - Command: npm run lint -> PASS
+  - Command: npm run test -> PASS (35 tests passed - 11 existing + 24 new config tests)
+- Files changed:
+  - package.json (added @iarna/toml dependency)
+  - package-lock.json (updated dependencies)
+  - src/config/types.ts (Config, ModelAssignments, PathConfig, ThresholdConfig, NotificationConfig interfaces)
+  - src/config/defaults.ts (DEFAULT_CONFIG and related default constants)
+  - src/config/parser.ts (parseConfig, getDefaultConfig, ConfigParseError)
+  - src/config/index.ts (module exports)
+  - src/config/parser.test.ts (24 tests including property-based tests)
+  - examples/criticality.example.toml (example config file with documentation)
+- What was implemented:
+  - Installed @iarna/toml for TOML parsing
+  - Created typed Config interface with:
+    - ModelAssignments (architect_model, auditor_model, structurer_model, worker_model, fallback_model)
+    - PathConfig (specs, archive, state, logs, ledger)
+    - ThresholdConfig (context_token_upgrade, signature_complexity_upgrade, max_retry_attempts, etc.)
+    - NotificationConfig (enabled, channel, endpoint)
+  - Implemented parseConfig() function that:
+    - Parses valid TOML to typed Config object
+    - Returns descriptive ConfigParseError for invalid TOML syntax
+    - Validates field types (string, number, boolean)
+    - Merges provided values with sensible defaults
+  - Default values based on design decisions in DECISIONS.toml:
+    - Default model assignments (claude-opus-4.5 for architect, kimi-k2 for auditor, etc.)
+    - Default thresholds (12000 context tokens, 5 complexity, 3 retries, etc.)
+    - Notifications disabled by default
+  - All acceptance criteria verified and passing:
+    - [x] Install TOML parsing library
+    - [x] Create typed configuration interface for criticality.toml
+    - [x] Parse valid TOML into typed configuration object
+    - [x] Return descriptive errors for invalid TOML syntax
+    - [x] Handle missing optional fields with sensible defaults
+    - [x] Example: valid criticality.toml parses to Config object (tested)
+    - [x] Example: TOML with missing optional field uses default value (tested)
+    - [x] Negative case: malformed TOML returns descriptive parse error (tested)
+- **Learnings for future iterations:**
+  - exactOptionalPropertyTypes requires explicit `| undefined` type annotation (not just `?`)
+  - Property-based tests with fast-check need to filter out TOML-invalid characters (backslash, quotes, newlines)
+  - @iarna/toml provides excellent error messages with line/column positions
+  - Using dot notation instead of bracket notation for known properties keeps ESLint happy
+---
