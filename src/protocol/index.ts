@@ -35,3 +35,29 @@ export {
   isTerminalState,
   canTransition,
 } from './types.js';
+
+export {
+  // Transition constants
+  FORWARD_TRANSITIONS,
+  FAILURE_TRANSITIONS,
+  REQUIRED_ARTIFACTS,
+  FAILURE_REQUIRED_ARTIFACTS,
+  // Transition types
+  type ArtifactType,
+  type TransitionArtifacts,
+  type TransitionErrorCode,
+  type TransitionError,
+  type TransitionResult,
+  type TransitionOptions,
+  // Transition utilities
+  createTransitionArtifacts,
+  isValidForwardTransition,
+  isValidFailureTransition,
+  isValidTransition,
+  getRequiredArtifacts,
+  validateArtifacts,
+  shedContext,
+  transition,
+  getValidTransitions,
+  getNextPhase,
+} from './transitions.js';
