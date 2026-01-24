@@ -7,7 +7,9 @@
     "Implement configuration parsing for criticality.toml and spec.toml",
     "Build append-only Decision Ledger with override/cascade operations",
     "Create Protocol State Machine with phase transitions and blocking states",
-    "Implement Model Router using Claude Code and OpenCode as backends"
+    "Implement Model Router using Claude Code and OpenCode as backends",
+    "Build MCP Artifact and Toolchain servers",
+    "Define Agent/Subagent architecture and access policies"
   ],
   "nonGoals": [
     "Phase implementations (Ignition, Lattice, Injection, etc.)",
@@ -376,7 +378,7 @@
     {
       "id": "US-015",
       "title": "Define ProtocolState enum",
-      "status": "in_progress",
+      "status": "done",
       "dependsOn": [
         "US-004"
       ],
@@ -390,13 +392,13 @@
         "Example: ProtocolState can represent 'Lattice' phase in 'Blocking' substate with query"
       ],
       "startedAt": "2026-01-24T18:53:46.926732+00:00",
-      "completedAt": null,
-      "updatedAt": "2026-01-24T18:53:46.926937+00:00"
+      "completedAt": "2026-01-24T18:58:27.819342+00:00",
+      "updatedAt": "2026-01-24T18:58:27.819153+00:00"
     },
     {
       "id": "US-016",
       "title": "Implement phase transitions",
-      "status": "open",
+      "status": "done",
       "dependsOn": [
         "US-015"
       ],
@@ -408,12 +410,15 @@
         "Invalid transitions return descriptive errors",
         "Example: transition from Ignition to Lattice succeeds with required artifacts",
         "Negative case: transition from Ignition to Injection returns invalid transition error"
-      ]
+      ],
+      "startedAt": "2026-01-24T18:58:29.907651+00:00",
+      "completedAt": "2026-01-24T19:03:55.448197+00:00",
+      "updatedAt": "2026-01-24T19:03:55.448029+00:00"
     },
     {
       "id": "US-017",
       "title": "Implement blocking state for human intervention",
-      "status": "open",
+      "status": "done",
       "dependsOn": [
         "US-016"
       ],
@@ -426,12 +431,15 @@
         "Example: enter blocking state with query 'Approve architecture?'",
         "Example: resolve blocking state records human decision",
         "Negative case: timeout on blocked state triggers appropriate handling"
-      ]
+      ],
+      "startedAt": "2026-01-24T21:35:21.585944+00:00",
+      "completedAt": "2026-01-24T21:43:07.743686+00:00",
+      "updatedAt": "2026-01-24T21:43:07.743478+00:00"
     },
     {
       "id": "US-018",
       "title": "Implement protocol state persistence",
-      "status": "open",
+      "status": "done",
       "dependsOn": [
         "US-017"
       ],
@@ -442,12 +450,15 @@
         "Atomic writes prevent corruption",
         "Example: state persisted after transition to Lattice phase",
         "Negative case: partial write does not corrupt state file"
-      ]
+      ],
+      "startedAt": "2026-01-24T21:43:09.843413+00:00",
+      "completedAt": "2026-01-24T21:49:13.176089+00:00",
+      "updatedAt": "2026-01-24T21:49:13.175893+00:00"
     },
     {
       "id": "US-019",
       "title": "Add checkpoint/resume capability",
-      "status": "open",
+      "status": "done",
       "dependsOn": [
         "US-018"
       ],
@@ -459,12 +470,15 @@
         "Handle stale or corrupted state gracefully",
         "Example: restart after crash resumes from last checkpoint",
         "Negative case: corrupted state file triggers recovery or clean start"
-      ]
+      ],
+      "startedAt": "2026-01-24T21:49:15.276784+00:00",
+      "completedAt": "2026-01-24T21:57:45.190980+00:00",
+      "updatedAt": "2026-01-24T21:57:45.190771+00:00"
     },
     {
       "id": "US-020",
       "title": "Define ModelRouter interface",
-      "status": "open",
+      "status": "done",
       "dependsOn": [
         "US-004"
       ],
@@ -476,12 +490,15 @@
         "Define error types for rate limits, auth errors, model errors",
         "Example: ModelRouter interface can be implemented by any backend",
         "Negative case: implementation missing required method fails type check"
-      ]
+      ],
+      "startedAt": "2026-01-24T21:57:47.296707+00:00",
+      "completedAt": "2026-01-24T22:04:14.296690+00:00",
+      "updatedAt": "2026-01-24T22:04:14.296521+00:00"
     },
     {
       "id": "US-021",
       "title": "Implement Claude Code client",
-      "status": "open",
+      "status": "done",
       "dependsOn": [
         "US-020"
       ],
@@ -494,12 +511,15 @@
         "Capture usage/cost information if available",
         "Example: send prompt to Claude via Claude Code CLI and receive response",
         "Negative case: Claude Code not installed returns clear error"
-      ]
+      ],
+      "startedAt": "2026-01-24T22:16:36.562007+00:00",
+      "completedAt": "2026-01-24T22:18:35.772044+00:00",
+      "updatedAt": "2026-01-24T22:18:35.771873+00:00"
     },
     {
       "id": "US-022",
       "title": "Implement OpenCode client",
-      "status": "open",
+      "status": "done",
       "dependsOn": [
         "US-020"
       ],
@@ -511,12 +531,15 @@
         "Capture usage information if available",
         "Example: send prompt to Kimi K2 via OpenCode and receive response",
         "Negative case: OpenCode not installed returns clear error"
-      ]
+      ],
+      "startedAt": "2026-01-24T22:18:37.864933+00:00",
+      "completedAt": "2026-01-24T22:26:46.949662+00:00",
+      "updatedAt": "2026-01-24T22:26:46.948517+00:00"
     },
     {
       "id": "US-023",
       "title": "Add model request/response logging",
-      "status": "open",
+      "status": "done",
       "dependsOn": [
         "US-021",
         "US-022"
@@ -529,12 +552,15 @@
         "Write logs to dedicated model-interactions log file",
         "Example: model request with log level 'summary' logs timestamp and token count",
         "Negative case: log level 'none' produces no log output"
-      ]
+      ],
+      "startedAt": "2026-01-24T22:26:49.976894+00:00",
+      "completedAt": "2026-01-24T22:33:06.719686+00:00",
+      "updatedAt": "2026-01-24T22:33:06.719499+00:00"
     },
     {
       "id": "US-024",
       "title": "Implement retry logic with exponential backoff",
-      "status": "open",
+      "status": "done",
       "dependsOn": [
         "US-023"
       ],
@@ -547,12 +573,15 @@
         "Example: rate limit error retries with increasing delay",
         "Example: successful retry after transient failure returns response",
         "Negative case: auth error does not retry and returns immediately"
-      ]
+      ],
+      "startedAt": "2026-01-24T22:33:08.812594+00:00",
+      "completedAt": "2026-01-24T22:38:56.812369+00:00",
+      "updatedAt": "2026-01-24T22:38:56.812191+00:00"
     },
     {
       "id": "US-025",
       "title": "Implement Context Budgeting and Truncation",
-      "status": "open",
+      "status": "done",
       "dependsOn": [
         "US-020"
       ],
@@ -564,12 +593,15 @@
         "Apply truncation when input exceeds model limits",
         "Example: Request over limit triggers truncation of comments",
         "Negative case: Request exceeding max limit after truncation returns rejection error"
-      ]
+      ],
+      "startedAt": "2026-01-24T22:38:58.894631+00:00",
+      "completedAt": "2026-01-24T22:48:00.848549+00:00",
+      "updatedAt": "2026-01-24T22:48:00.848378+00:00"
     },
     {
       "id": "US-026",
       "title": "Implement Deterministic Model Routing Logic",
-      "status": "open",
+      "status": "done",
       "dependsOn": [
         "US-025"
       ],
@@ -581,6 +613,88 @@
         "Routing logic is purely deterministic (no LLM decision making)",
         "Example: Complex signature triggers upgrade from worker to structurer model",
         "Negative case: Simple signature stays on worker model"
+      ],
+      "startedAt": "2026-01-24T22:48:02.925940+00:00",
+      "completedAt": "2026-01-24T22:53:23.107050+00:00",
+      "updatedAt": "2026-01-24T22:53:23.106849+00:00"
+    },
+    {
+      "id": "US-027",
+      "title": "Implement criticality-artifact-server (MCP)",
+      "status": "done",
+      "dependsOn": [
+        "US-001",
+        "US-006",
+        "US-007",
+        "US-010"
+      ],
+      "description": "As a developer, I want a dedicated MCP server for protocol artifacts so that agents have a single source of truth and cannot hallucinate context.",
+      "acceptanceCriteria": [
+        "Create servers/artifact/ package structure",
+        "Implement read_spec_section tool",
+        "Implement append_decision tool with schema validation",
+        "Implement get_type_witness tool",
+        "Verify server starts and responds to MCP requests",
+        "Verify server refuses to serve non-artifact files (strict scoping)",
+        "Example: append_decision tool successfully adds entry to DECISIONS.toml"
+      ],
+      "startedAt": "2026-01-24T23:10:58.419232+00:00",
+      "completedAt": "2026-01-24T23:13:44.925356+00:00",
+      "updatedAt": "2026-01-24T23:13:44.925197+00:00"
+    },
+    {
+      "id": "US-028",
+      "title": "Implement criticality-toolchain-server (MCP)",
+      "status": "in_progress",
+      "dependsOn": [
+        "US-001"
+      ],
+      "description": "As a developer, I want an MCP server wrapping build tools so that agents receive structured JSON output instead of raw stdout.",
+      "acceptanceCriteria": [
+        "Create servers/toolchain/ package structure",
+        "Implement verify_structure tool (runs tsc/cargo check)",
+        "Implement run_function_test tool (runs isolated tests)",
+        "Implement check_complexity tool (returns metrics)",
+        "Ensure tools return structured JSON (success, errors, coverage)",
+        "Example: run_function_test returns JSON object with test results",
+        "Negative case: build failure returns structured error list, not just exit code 1"
+      ],
+      "startedAt": "2026-01-24T23:24:47.056387+00:00",
+      "completedAt": null,
+      "updatedAt": "2026-01-24T23:24:47.056640+00:00"
+    },
+    {
+      "id": "US-029",
+      "title": "Define Agent Skills & Permissions registry",
+      "status": "open",
+      "dependsOn": [
+        "US-001"
+      ],
+      "description": "As an architect, I want a formal registry of agent skills so that capabilities are explicitly constrained by phase.",
+      "acceptanceCriteria": [
+        "Create SkillDefinition interface",
+        "Define all skills from Specification 8.2 (conduct_interview, implement_atomic, etc.)",
+        "Implement permission checking logic (canWrite, canRead, canNet)",
+        "Example: implement_atomic skill requires 'canWrite' permission",
+        "Negative case: requesting a skill without required permissions fails"
+      ]
+    },
+    {
+      "id": "US-030",
+      "title": "Configure Subagent Swarm access policies",
+      "status": "open",
+      "dependsOn": [
+        "US-027",
+        "US-028",
+        "US-029"
+      ],
+      "description": "As an architect, I want to define the subagent swarm topology so that the orchestrator knows which agent to spawn with which tools.",
+      "acceptanceCriteria": [
+        "Define Agent roles (Architect, Auditor, Structurer, Worker, Guardian)",
+        "Map each role to specific MCP servers and Skills",
+        "Verify Principle of Least Privilege (e.g. Worker has no internet)",
+        "Create configuration loader for agent definitions",
+        "Example: Worker agent is initialized with only filesystem and toolchain MCPs"
       ]
     }
   ]
