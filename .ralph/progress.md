@@ -334,3 +334,47 @@ Run summary: /Users/jackedney/criticality/.ralph/runs/run-20260124-173246-37766-
   - Property-based tests need to filter TOML escape sequences (backslash) in string generation
   - Using ReadonlySet for RECOGNIZED_MODELS prevents accidental modification
 ---
+
+## 2026-01-24 18:19 - US-009: Support environment variable overrides
+Thread:
+Run: 20260124-173246-37766 (iteration 9)
+Run log: /Users/jackedney/criticality/.ralph/runs/run-20260124-173246-37766-iter-9.log
+Run summary: /Users/jackedney/criticality/.ralph/runs/run-20260124-173246-37766-iter-9.md
+- Guardrails reviewed: yes
+- No-commit run: false
+- Commit: 252172b feat(US-009): Implement environment variable overrides
+- Post-commit status: clean (remaining files are PRD and ralph temp files)
+- Verification:
+  - Command: npm run typecheck -> PASS
+  - Command: npm run lint -> PASS
+  - Command: npm run test -> PASS (174 tests passed - 119 existing + 55 new env tests)
+  - Command: npm run build -> PASS
+- Files changed:
+  - src/config/env.ts (readEnvOverrides, applyEnvOverrides, getEnvVarDocumentation, EnvCoercionError)
+  - src/config/env.test.ts (55 tests including property-based tests)
+  - src/config/index.ts (exports for env module)
+- What was implemented:
+  - Created environment variable override system for CRITICALITY_* env vars:
+    - CRITICALITY_MODEL=claude-3-opus overrides config file model setting (worker_model)
+    - CRITICALITY_THRESHOLD=0.8 coerces string "0.8" to number 0.8
+    - CRITICALITY_NOTIFICATIONS_ENABLED=true coerces string to boolean
+  - Type coercion:
+    - String to number: handles integers, floats, negative numbers, whitespace trimming
+    - String to boolean: accepts true/false, 1/0, yes/no, on/off (case-insensitive)
+  - EnvCoercionError for invalid values with detailed error info (envVar, rawValue, expectedType)
+  - Documented override precedence: env > config file > defaults (in module doc comments and index.ts)
+  - Convenience shortcuts: CRITICALITY_MODEL, CRITICALITY_THRESHOLD, CRITICALITY_MAX_RETRIES
+  - Full path env vars: CRITICALITY_MODELS_WORKER_MODEL, CRITICALITY_THRESHOLDS_PERFORMANCE_VARIANCE_THRESHOLD, etc.
+  - All acceptance criteria verified and passing:
+    - [x] CRITICALITY_* env vars override corresponding config values
+    - [x] Type coercion works correctly (string env var to number/boolean)
+    - [x] Document override precedence: env > config file > defaults
+    - [x] Example: CRITICALITY_MODEL=claude-3-opus overrides config file model setting (tested)
+    - [x] Example: CRITICALITY_THRESHOLD=0.8 coerces string to number (tested)
+    - [x] Negative case: invalid env var value returns coercion error (tested)
+- **Learnings for future iterations:**
+  - Project doesn't have @types/node, so access process.env via globalThis pattern for type safety
+  - Use ??= operator instead of `if (x === undefined) x = {}` per ESLint rules
+  - Environment records should be passed as parameters for testability
+  - Boolean coercion should accept common truthy/falsy patterns (yes/no, on/off, 1/0)
+---
