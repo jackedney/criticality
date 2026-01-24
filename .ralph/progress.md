@@ -68,3 +68,42 @@ Run summary: /Users/jackedney/criticality/.ralph/runs/run-20260124-173246-37766-
   - Caching node_modules with package-lock.json hash is the standard pattern
   - setup-node@v4 has built-in npm caching via cache: 'npm' option
 ---
+
+## 2026-01-24 17:42 - US-003: Configure linting and formatting
+Thread:
+Run: 20260124-173246-37766 (iteration 3)
+Run log: /Users/jackedney/criticality/.ralph/runs/run-20260124-173246-37766-iter-3.log
+Run summary: /Users/jackedney/criticality/.ralph/runs/run-20260124-173246-37766-iter-3.md
+- Guardrails reviewed: yes
+- No-commit run: false
+- Commit: 0ca6d96 feat(US-003): Configure linting and formatting
+- Post-commit status: clean (remaining files are PRD and ralph temp files)
+- Verification:
+  - Command: npm run typecheck -> PASS
+  - Command: npm run lint -> PASS
+  - Command: npm run test -> PASS (placeholder)
+  - Command: npm run build -> PASS
+  - Lint error detection test: ESLint correctly catches missing return types, any usage -> PASS
+  - Pre-commit hook test: lint-staged auto-formats staged .ts files -> PASS
+- Files changed:
+  - eslint.config.js (ESLint flat config with TypeScript support)
+  - .prettierrc (Prettier configuration)
+  - .prettierignore (Prettier ignore patterns)
+  - .husky/pre-commit (husky pre-commit hook)
+  - package.json (scripts: lint, lint:fix, format, format:check, prepare; lint-staged config)
+  - package-lock.json (updated dependencies)
+  - AGENTS.md (documented new commands)
+- What was implemented:
+  - Installed and configured ESLint with @typescript-eslint/eslint-plugin
+  - Installed and configured Prettier with consistent style (single quotes, semicolons, 100 char width)
+  - Added npm scripts: lint, lint:fix, format, format:check
+  - Configured husky for pre-commit hooks
+  - Configured lint-staged to run linter and formatter on staged .ts files
+  - ESLint rules include strict-boolean-expressions, explicit-function-return-type, no-explicit-any
+  - All acceptance criteria verified and passing
+- **Learnings for future iterations:**
+  - ESLint 9.x uses flat config format (eslint.config.js) instead of .eslintrc
+  - typescript-eslint package is the modern way to integrate TypeScript with ESLint
+  - lint-staged runs on staged files only, improving commit performance
+  - husky pre-commit hook must be executable and just run npx lint-staged
+---
