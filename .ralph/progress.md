@@ -912,3 +912,62 @@ Run summary: /Users/jackedney/criticality/.ralph/runs/run-20260124-213521-33625-
   - Required artifacts vary by phase - validation must check phase-specific requirements
   - BFS traversal pattern for building artifact requirement sets from phase index
 ---
+
+## 2026-01-24 22:03 - US-020: Define ModelRouter interface
+Thread:
+Run: 20260124-213521-33625 (iteration 4)
+Run log: /Users/jackedney/criticality/.ralph/runs/run-20260124-213521-33625-iter-4.log
+Run summary: /Users/jackedney/criticality/.ralph/runs/run-20260124-213521-33625-iter-4.md
+- Guardrails reviewed: yes
+- No-commit run: false
+- Commit: c7e5fb8 feat(US-020): Define ModelRouter interface
+- Post-commit status: clean (remaining files are PRD and ralph temp files)
+- Verification:
+  - Command: npm run typecheck -> PASS
+  - Command: npm run lint -> PASS
+  - Command: npm run test -> PASS (631 tests passed - 600 existing + 31 new router tests)
+- Files changed:
+  - src/router/types.ts (new - ModelRouter interface and related types)
+  - src/router/index.ts (new - module exports)
+  - src/router/types.test.ts (new - 31 tests for router types)
+- What was implemented:
+  - ModelAlias type for routing (architect, auditor, structurer, worker, fallback)
+  - ModelRouterRequest type:
+    - modelAlias: ModelAlias for routing
+    - prompt: string for the request content
+    - parameters?: ModelParameters (maxTokens, temperature, topP, stopSequences, systemPrompt)
+    - requestId?: string for tracking
+  - ModelRouterResponse type:
+    - content: string for generated text
+    - usage: ModelUsage (promptTokens, completionTokens, totalTokens)
+    - metadata: ModelMetadata (modelId, provider, latencyMs)
+    - requestId?: string for correlation
+  - ModelRouterError discriminated union:
+    - RateLimitError: retryable, retryAfterMs optional
+    - AuthenticationError: non-retryable, provider required
+    - ModelError: retryable configurable, errorCode/modelId optional
+    - TimeoutError: retryable, timeoutMs required
+    - NetworkError: retryable, endpoint optional
+    - ValidationError: non-retryable, invalidFields optional
+  - ModelRouter interface with three methods:
+    - prompt(modelAlias, prompt): Promise<ModelRouterResult>
+    - complete(request): Promise<ModelRouterResult>
+    - stream(request): AsyncGenerator<StreamChunk, ModelRouterResult>
+  - Type guards and factory functions:
+    - isValidModelAlias(), isModelRouterError(), isRetryableError()
+    - createRateLimitError(), createAuthenticationError(), createModelError()
+    - createTimeoutError(), createNetworkError(), createValidationError()
+    - createSuccessResult(), createFailureResult()
+  - All acceptance criteria verified:
+    - [x] Define interface with prompt, complete, stream methods
+    - [x] Define request type with model alias, prompt, parameters
+    - [x] Define response type with content, usage, model metadata
+    - [x] Define error types for rate limits, auth errors, model errors
+    - [x] Example: ModelRouter interface can be implemented by any backend (tested)
+    - [x] Negative case: implementation missing required method fails type check (documented in test)
+- **Learnings for future iterations:**
+  - exactOptionalPropertyTypes requires many conditional branches for factory functions
+  - Promise.resolve() pattern avoids @typescript-eslint/require-await warnings in mock implementations
+  - AsyncGenerator return type requires careful typing with StreamChunk and ModelRouterResult
+  - ESLint require-yield can be disabled for minimal generator implementations in tests
+---
