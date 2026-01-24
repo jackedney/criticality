@@ -61,3 +61,28 @@ export {
   getValidTransitions,
   getNextPhase,
 } from './transitions.js';
+
+export {
+  // Blocking types
+  type BlockingQueryId,
+  type BlockingRecord,
+  type BlockingResolution,
+  type EnterBlockingResult,
+  type ResolveBlockingResult,
+  type TimeoutCheckResult,
+  type TimeoutHandlingResult,
+  type BlockingErrorCode,
+  type BlockingError,
+  type EnterBlockingOptions,
+  type ResolveBlockingOptions,
+  type TimeoutHandlingOptions,
+  // Blocking functions
+  generateBlockingQueryId,
+  enterBlocking,
+  resolveBlocking,
+  checkTimeout,
+  handleTimeout,
+  getRemainingTimeout,
+  hasTimeout,
+  getTimeoutDeadline,
+} from './blocking.js';
