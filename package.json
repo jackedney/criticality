@@ -60,6 +60,7 @@
     "vitest": "^4.0.18"
   },
   "dependencies": {
-    "@iarna/toml": "^2.2.5"
+    "@iarna/toml": "^2.2.5",
+    "execa": "^9.6.1"
   }
 }

@@ -46,3 +46,12 @@ export {
   createSuccessResult,
   createFailureResult,
 } from './types.js';
+
+// Claude Code client
+export {
+  ClaudeCodeClient,
+  ClaudeCodeNotInstalledError,
+  checkClaudeCodeInstalled,
+  createClaudeCodeClient,
+  type ClaudeCodeClientOptions,
+} from './claude-code-client.js';
