@@ -16,7 +16,6 @@ import type {
   Config,
   ModelAssignments,
   NotificationConfig,
-  PartialConfig,
   PathConfig,
   ThresholdConfig,
 } from './types.js';
@@ -295,5 +294,3 @@ export function parseConfig(tomlContent: string): Config {
 export function getDefaultConfig(): Config {
   return { ...DEFAULT_CONFIG };
 }
-
-export type { Config, PartialConfig };
