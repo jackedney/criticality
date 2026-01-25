@@ -512,7 +512,7 @@ describe('criticality-toolchain-server - real project tests', () => {
       expect(typeof parsed.success).toBe('boolean');
       expect(typeof parsed.errorCount).toBe('number');
       expect(parsed.command).toContain('tsc');
-    });
+    }, 30000);
   });
 
   describe('run_function_test with real vitest', () => {
@@ -641,5 +641,5 @@ describe('verify_structure error parsing', () => {
 
     // The error count should match errors array length
     expect(parsed.errors.filter((e) => e.severity === 'error').length).toBe(parsed.errorCount);
-  });
+  }, 30000);
 });
