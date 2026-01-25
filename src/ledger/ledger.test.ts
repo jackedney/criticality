@@ -2049,6 +2049,231 @@ describe('Ledger', () => {
     });
   });
 
+  describe('downgradeDelegated (ledger_007)', () => {
+    let ledger: Ledger;
+
+    beforeEach(() => {
+      ledger = new Ledger({
+        project: 'test-project',
+        now: (): Date => new Date('2024-01-20T12:00:00.000Z'),
+      });
+    });
+
+    describe('successful downgrade', () => {
+      it('should downgrade delegated confidence to inferred', () => {
+        const decision = ledger.append(
+          createTestInput({
+            constraint: 'Delegated decision',
+            confidence: 'delegated',
+          })
+        );
+
+        const updated = ledger.downgradeDelegated(
+          decision.id,
+          'Contradicts constraint in architectural_003'
+        );
+
+        expect(updated.confidence).toBe('inferred');
+        expect(updated.id).toBe(decision.id);
+      });
+
+      it('should record contradiction reason in failure_context', () => {
+        const decision = ledger.append(
+          createTestInput({
+            constraint: 'Delegated decision',
+            confidence: 'delegated',
+          })
+        );
+
+        const updated = ledger.downgradeDelegated(
+          decision.id,
+          'Mutually exclusive options detected'
+        );
+
+        expect(updated.failure_context).toContain('Composition Audit contradiction');
+        expect(updated.failure_context).toContain('Mutually exclusive options detected');
+      });
+
+      it('should append to existing failure_context if present', () => {
+        const decision = ledger.append(
+          createTestInput({
+            constraint: 'Delegated decision',
+            confidence: 'delegated',
+            failure_context: 'Previous context',
+          })
+        );
+
+        const updated = ledger.downgradeDelegated(decision.id, 'New contradiction');
+
+        expect(updated.failure_context).toContain('Previous context');
+        expect(updated.failure_context).toContain('Composition Audit contradiction');
+        expect(updated.failure_context).toContain('New contradiction');
+      });
+
+      it('should preserve active status', () => {
+        const decision = ledger.append(
+          createTestInput({
+            constraint: 'Delegated decision',
+            confidence: 'delegated',
+          })
+        );
+
+        const updated = ledger.downgradeDelegated(decision.id, 'Contradiction found');
+
+        expect(updated.status).toBe('active');
+      });
+
+      it('should update the decision in place (retrievable by getById)', () => {
+        const decision = ledger.append(
+          createTestInput({
+            constraint: 'Delegated decision',
+            confidence: 'delegated',
+          })
+        );
+
+        ledger.downgradeDelegated(decision.id, 'Contradiction found');
+
+        const retrieved = ledger.getById(decision.id);
+        expect(retrieved?.confidence).toBe('inferred');
+      });
+
+      it('should update last_modified timestamp', () => {
+        const decision = ledger.append(
+          createTestInput({
+            constraint: 'Delegated decision',
+            confidence: 'delegated',
+          })
+        );
+
+        ledger.downgradeDelegated(decision.id, 'Contradiction found');
+
+        const data = ledger.toData();
+        expect(data.meta.last_modified).toBe('2024-01-20T12:00:00.000Z');
+      });
+    });
+
+    describe('error handling', () => {
+      it('should throw DecisionNotFoundError for non-existent decision', () => {
+        expect(() => ledger.downgradeDelegated('nonexistent_001', 'Reason')).toThrow(
+          DecisionNotFoundError
+        );
+      });
+
+      it('should throw InvalidSupersedeError for canonical confidence', () => {
+        const decision = ledger.append(
+          createTestInput({
+            constraint: 'Canonical decision',
+            confidence: 'canonical',
+          })
+        );
+
+        expect(() => ledger.downgradeDelegated(decision.id, 'Contradiction')).toThrow(
+          InvalidSupersedeError
+        );
+        expect(() => ledger.downgradeDelegated(decision.id, 'Contradiction')).toThrow(
+          /only 'delegated' decisions can be downgraded/
+        );
+      });
+
+      it('should throw InvalidSupersedeError for inferred confidence', () => {
+        const decision = ledger.append(
+          createTestInput({
+            constraint: 'Inferred decision',
+            confidence: 'inferred',
+          })
+        );
+
+        expect(() => ledger.downgradeDelegated(decision.id, 'Contradiction')).toThrow(
+          InvalidSupersedeError
+        );
+      });
+
+      it('should throw InvalidSupersedeError for provisional confidence', () => {
+        const decision = ledger.append(
+          createTestInput({
+            constraint: 'Provisional decision',
+            confidence: 'provisional',
+          })
+        );
+
+        expect(() => ledger.downgradeDelegated(decision.id, 'Contradiction')).toThrow(
+          InvalidSupersedeError
+        );
+      });
+
+      it('should throw InvalidSupersedeError for superseded decisions', () => {
+        const original = ledger.append(
+          createTestInput({
+            constraint: 'Delegated decision',
+            confidence: 'delegated',
+          })
+        );
+
+        ledger.supersede(original.id, createTestInput({ constraint: 'Replacement' }));
+
+        expect(() => ledger.downgradeDelegated(original.id, 'Contradiction')).toThrow(
+          InvalidSupersedeError
+        );
+        expect(() => ledger.downgradeDelegated(original.id, 'Contradiction')).toThrow(
+          /only active decisions can be downgraded/
+        );
+      });
+
+      it('should throw InvalidSupersedeError for invalidated decisions', () => {
+        const original = ledger.append(
+          createTestInput({
+            constraint: 'Delegated decision',
+            confidence: 'delegated',
+          })
+        );
+
+        ledger.invalidate(original.id);
+
+        expect(() => ledger.downgradeDelegated(original.id, 'Contradiction')).toThrow(
+          InvalidSupersedeError
+        );
+      });
+    });
+
+    describe('append-only invariant', () => {
+      it('should not delete or add decisions during downgrade', () => {
+        const decision = ledger.append(
+          createTestInput({
+            constraint: 'Delegated decision',
+            confidence: 'delegated',
+          })
+        );
+
+        const sizeBefore = ledger.size;
+        ledger.downgradeDelegated(decision.id, 'Contradiction');
+        const sizeAfter = ledger.size;
+
+        expect(sizeAfter).toBe(sizeBefore);
+      });
+
+      it('should preserve all other decision fields', () => {
+        const decision = ledger.append(
+          createTestInput({
+            category: 'architectural',
+            constraint: 'Delegated constraint text',
+            confidence: 'delegated',
+            source: 'discussion',
+            phase: 'ignition',
+            rationale: 'Some rationale',
+          })
+        );
+
+        const updated = ledger.downgradeDelegated(decision.id, 'Contradiction');
+
+        expect(updated.category).toBe('architectural');
+        expect(updated.constraint).toBe('Delegated constraint text');
+        expect(updated.source).toBe('discussion');
+        expect(updated.phase).toBe('ignition');
+        expect(updated.rationale).toBe('Some rationale');
+      });
+    });
+  });
+
   describe('query interface', () => {
     let ledger: Ledger;
 
