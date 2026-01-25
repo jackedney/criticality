@@ -75,6 +75,12 @@ The protocol specification is largely complete. Implementation has not yet begun
 - [ ] Add request/response logging
 - [ ] Implement retry logic with backoff
 
+#### 1.6 Tooling & Agents
+- [ ] Implement `criticality-artifact-server` (MCP)
+- [ ] Implement `criticality-toolchain-server` (MCP)
+- [ ] Define Agent Skills & Permissions registry
+- [ ] Configure Subagent Swarm access policies
+
 ---
 
 ## Phase 2: TypeScript Target Adapter (First Target)

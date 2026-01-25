@@ -28,10 +28,11 @@
    - [Human Intervention & Blocking](#55-human-intervention--blocking)
 6. [Property Test Synthesis](#6-property-test-synthesis)
 7. [Model Allocation](#7-model-allocation)
-8. [Orchestrator Specification](#8-orchestrator-specification)
-9. [Language Support Matrix](#9-language-support-matrix)
-10. [Open Questions & Future Work](#10-open-questions--future-work)
-11. [Appendices](#11-appendices)
+8. [Tooling & Agent Architecture](#8-tooling--agent-architecture)
+9. [Orchestrator Specification](#9-orchestrator-specification)
+10. [Language Support Matrix](#10-language-support-matrix)
+11. [Open Questions & Future Work](#11-open-questions--future-work)
+12. [Appendices](#12-appendices)
 
 ---
 
@@ -2151,7 +2152,60 @@ Benchmark results are tracked over time to detect regressions and validate impro
 
 ---
 
-## 8. Orchestrator Specification
+## 8. Tooling & Agent Architecture
+
+The Criticality Protocol requires specialized tooling to enforce its "Context Shedding" philosophy. Standard "Memory" MCPs are anti-patterns here. Instead, **Artifact Servers** serve rigid, stateless truth.
+
+### 8.1 Criticality MCP Servers
+
+#### `criticality-artifact-server` (The Source of Truth)
+Replaces standard memory. Provides read/write access *only* to official protocol artifacts (`spec.toml`, `DECISIONS.toml`).
+- **Purpose**: Prevents context hallucination. Agents only see committed truth.
+- **Tools**:
+    - `read_spec_section(section: string)`: Returns specific toml sections.
+    - `append_decision(decision: DecisionEntry)`: Atomic append to ledger.
+    - `get_type_witness(name: string)`: Retrieves witness definitions.
+    - `validate_schema(artifact: string)`: Validates against `schemas/*.json`.
+
+#### `criticality-toolchain-server` (The Hands)
+Safe wrapper around the build system (`npm`, `cargo`, `vitest`).
+- **Purpose**: Returns structured JSON results (pass/fail, coverage) instead of raw stdout, essential for the `Injection` phase loop.
+- **Tools**:
+    - `verify_structure()`: Runs `tsc --noEmit` or `cargo check`.
+    - `run_function_test(function_name: string)`: Runs isolated unit tests.
+    - `run_property_test(claim_id: string)`: Executes property tests.
+    - `check_complexity(file_path: string)`: Returns complexity metrics.
+
+### 8.2 Agent Skills & Permissions
+
+Skills are grouped by phase and assigned strict permissions.
+
+| Phase | Skill | Description | Assigned Role |
+|-------|-------|-------------|---------------|
+| **Ignition** | `conduct_interview` | Orchestrates Q&A, delegates to artifact-server | Architect |
+| | `synthesize_spec` | Transforms transcripts to `spec.toml` | Architect |
+| | `audit_proposal` | Cross-references spec vs. decisions | Auditor |
+| **Lattice** | `generate_witness` | Creates type-witness definitions | Structurer |
+| | `scaffold_module` | Creates file structures & `todo!()` sigs | Structurer |
+| **Injection** | `implement_atomic` | Core loop: Read sig -> Write code -> Test -> Commit | Worker |
+| **Mass Defect** | `detect_smells` | Runs static analysis | Refiner |
+| | `apply_pattern` | Applies refactoring patterns | Refiner |
+
+### 8.3 Subagent Swarm Definition
+
+Agents are defined with strict MCP access policies to enforce the "Principle of Least Privilege".
+
+| Agent | Role | Access Policy | Primary MCPs |
+|:---|:---|:---|:---|
+| **Architect** | Ignition / Synthesis | **High Reasoning, Low Execution**. Can read/write Specs. Can Search. | `artifact-server`, `brave-search` |
+| **Auditor** | Verification | **Read-Only**. "Devil's Advocate". No write access to code. | `artifact-server`, `toolchain-server` (read-only) |
+| **Structurer** | Lattice / Scaffold | **Structure Only**. Writes files/types. No logic implementation. | `filesystem`, `artifact-server` (read-only) |
+| **Worker** | Injection | **Stateless Coder**. Sees ONE function at a time. No Spec access. No Internet. | `filesystem` (scoped), `toolchain-server` |
+| **Guardian** | Security | **Security Scan**. Runs alongside Worker. | `toolchain-server` (security scanners) |
+
+---
+
+## 9. Orchestrator Specification
 
 ### 8.1 Responsibilities
 
@@ -3038,7 +3092,7 @@ reminder_interval_hours = 24
 
 ---
 
-## 9. Language Support Matrix
+## 10. Language Support Matrix
 
 **Note**: Protocol v1 assumes single-language projects. Multi-language support (cross-language type mapping, unified spec for polyglot projects, FFI generation) is deferred to Phase 7.
 
@@ -3084,7 +3138,7 @@ class GoAdapter implements LanguageAdapter { /* ... */ }
 
 ---
 
-## 10. Open Questions & Future Work
+## 11. Open Questions & Future Work
 
 ### Open Questions
 
@@ -3112,7 +3166,7 @@ class GoAdapter implements LanguageAdapter { /* ... */ }
 
 ---
 
-## 11. Appendices
+## 12. Appendices
 
 ### Appendix A: Glossary
 

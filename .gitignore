@@ -32,6 +32,8 @@ npm-debug.log*
 # Build outputs
 dist/
 build/
+docs/
+coverage/
 *.egg-info/
 
 # Local configuration
@@ -42,3 +44,8 @@ build/
 # Logs
 *.log
 logs/
+# Local agent and ralph metadata
+.agents/
+.ralph/
+.serena/
+\n# Archive\narchive/\n
