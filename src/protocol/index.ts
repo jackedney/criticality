@@ -130,3 +130,40 @@ export {
   getStartupState,
   isStateCorrupted,
 } from './checkpoint.js';
+
+export {
+  // Orchestrator types
+  type Guard,
+  type Action,
+  type ActionResult,
+  type TransitionDefinition,
+  type TickContext,
+  type ExternalOperations,
+  type TickResult,
+  type TickStopReason,
+  type OrchestratorOptions,
+  type OrchestratorState,
+  // Orchestrator utilities
+  Guards,
+  Actions,
+  executeTick,
+  createOrchestrator,
+  getProtocolStatus,
+} from './orchestrator.js';
+
+export {
+  // CLI types
+  type CliCommand,
+  type CliOptions,
+  type CliResult,
+  // CLI constants
+  DEFAULT_STATE_PATH,
+  // CLI functions
+  parseArgs,
+  executeStatus,
+  executeResume,
+  executeResolve,
+  executeHelp,
+  executeCommand,
+  main as runCli,
+} from './cli.js';

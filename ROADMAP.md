@@ -1,17 +1,23 @@
 # Criticality Protocol - Development Roadmap
 
 **Version**: 0.1.0
-**Last Updated**: 2025-01-24
+**Last Updated**: 2026-01-25
 
 ---
 
-## Current Status: Design Phase
+## Current Status: Phase 1 Complete
 
-The protocol specification is largely complete. Implementation has not yet begun.
+Phase 0 (Design) and Phase 1 (Core Infrastructure) are complete. The codebase includes:
+- Full configuration system with TOML parsing and environment overrides
+- Append-only decision ledger with dependency tracking and cascade invalidation
+- Protocol state machine with blocking, persistence, and checkpoint/resume
+- Model router with Claude Code and OpenCode clients, retry logic, and context budgeting
+- MCP servers for artifacts and toolchain
+- Agent skills registry and subagent swarm access policies
 
 ---
 
-## Phase 0: Design Completion (Current)
+## Phase 0: Design Completion
 
 ### Completed
 
@@ -41,45 +47,45 @@ The protocol specification is largely complete. Implementation has not yet begun
 ### Milestones
 
 #### 1.1 Project Scaffolding
-- [ ] Initialize TypeScript project with strict mode
-- [ ] Set up CI/CD pipeline
-- [ ] Configure linting (ESLint) and formatting (Prettier)
-- [ ] Set up testing infrastructure (Vitest for unit/integration, fast-check for property)
-- [ ] Create documentation generation (TypeDoc)
+- [x] Initialize TypeScript project with strict mode
+- [x] Set up CI/CD pipeline
+- [x] Configure linting (ESLint) and formatting (Prettier)
+- [x] Set up testing infrastructure (Vitest for unit/integration, fast-check for property)
+- [x] Create documentation generation (TypeDoc)
 
 #### 1.2 Configuration System
-- [ ] Implement `criticality.toml` parser
-- [ ] Implement `spec.toml` parser
-- [ ] Create configuration validation
-- [ ] Support environment variable overrides
+- [x] Implement `criticality.toml` parser
+- [x] Implement `spec.toml` parser
+- [x] Create configuration validation
+- [x] Support environment variable overrides
 
 #### 1.3 Decision Ledger
-- [ ] Implement append operations
-- [ ] Implement override/invalidate operations
-- [ ] Implement cascade (dependency tracking)
-- [ ] Implement serialization/deserialization
-- [ ] Add ledger query interface
+- [x] Implement append operations
+- [x] Implement override/invalidate operations
+- [x] Implement cascade (dependency tracking)
+- [x] Implement serialization/deserialization
+- [x] Add ledger query interface
 
 #### 1.4 Protocol State Machine
-- [ ] Define `ProtocolState` enum
-- [ ] Implement phase transitions
-- [ ] Implement blocking state
-- [ ] Implement state persistence
-- [ ] Add checkpoint/resume capability
+- [x] Define `ProtocolState` enum
+- [x] Implement phase transitions
+- [x] Implement blocking state
+- [x] Implement state persistence
+- [x] Add checkpoint/resume capability
 
 #### 1.5 Model Router
-- [ ] Define `ModelRouter` trait
-- [ ] Implement Anthropic client (Claude)
-- [ ] Implement Groq client (Kimi K2)
-- [ ] Implement Cerebras client (MiniMax)
-- [ ] Add request/response logging
-- [ ] Implement retry logic with backoff
+- [x] Define `ModelRouter` trait
+- [x] Implement Anthropic client (Claude)
+- [x] Implement Groq client (Kimi K2)
+- [x] Implement Cerebras client (MiniMax)
+- [x] Add request/response logging
+- [x] Implement retry logic with backoff
 
 #### 1.6 Tooling & Agents
-- [ ] Implement `criticality-artifact-server` (MCP)
-- [ ] Implement `criticality-toolchain-server` (MCP)
-- [ ] Define Agent Skills & Permissions registry
-- [ ] Configure Subagent Swarm access policies
+- [x] Implement `criticality-artifact-server` (MCP)
+- [x] Implement `criticality-toolchain-server` (MCP)
+- [x] Define Agent Skills & Permissions registry
+- [x] Configure Subagent Swarm access policies
 
 ---
 

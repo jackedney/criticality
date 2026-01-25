@@ -18,11 +18,6 @@ export const ALLOWED_ARTIFACT_FILES = ['DECISIONS.toml', 'spec.toml'] as const;
 export const ALLOWED_ARTIFACT_DIRS = ['examples/', 'schemas/'] as const;
 
 /**
- * Union type of allowed artifact file names.
- */
-export type AllowedArtifactFile = (typeof ALLOWED_ARTIFACT_FILES)[number];
-
-/**
  * Result of reading a spec section.
  */
 export interface ReadSpecSectionResult {

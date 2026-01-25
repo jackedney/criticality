@@ -14,8 +14,8 @@ import type {
 
 /**
  * Default model assignments based on design decisions.
- * Uses Claude Opus 4.5 for architect/fallback, Kimi K2 for auditing,
- * Claude Sonnet 4.5 for structure, and MiniMax M2 for worker tasks.
+ * Uses Claude Opus 4.5 for architect, Kimi K2 for auditing,
+ * Claude Sonnet 4.5 for structure and fallback, and MiniMax M2 for worker tasks.
  */
 export const DEFAULT_MODEL_ASSIGNMENTS: ModelAssignments = {
   architect_model: 'claude-opus-4.5',

@@ -1340,6 +1340,82 @@ export class Ledger {
       timestamp,
     };
   }
+
+  /**
+   * Downgrades a delegated decision to inferred confidence level.
+   *
+   * Per ledger_007: Delegated decisions downgrade to 'inferred' only when
+   * Composition Audit finds contradictions involving the decision.
+   *
+   * This method:
+   * - Only affects decisions with confidence 'delegated'
+   * - Changes confidence from 'delegated' to 'inferred'
+   * - Preserves the decision's active status (no status change)
+   * - Records the contradiction that triggered the downgrade
+   *
+   * @param decisionId - ID of the delegated decision to downgrade.
+   * @param contradictionReason - Explanation of the contradiction from Composition Audit.
+   * @returns The updated decision with 'inferred' confidence.
+   * @throws DecisionNotFoundError if the decision doesn't exist.
+   * @throws InvalidSupersedeError if the decision is not 'delegated' confidence.
+   *
+   * @example
+   * ```typescript
+   * // Downgrade a delegated decision when Composition Audit finds contradiction
+   * const updated = ledger.downgradeDelegated(
+   *   'architectural_001',
+   *   'Contradicts constraint in architectural_003: mutually exclusive options'
+   * );
+   * console.log(updated.confidence); // 'inferred'
+   * console.log(updated.failure_context); // Contains the contradiction reason
+   * ```
+   */
+  downgradeDelegated(decisionId: string, contradictionReason: string): Decision {
+    // Find the decision
+    const decisionIndex = this.decisions.findIndex((d) => d.id === decisionId);
+    if (decisionIndex === -1) {
+      throw new DecisionNotFoundError(decisionId);
+    }
+
+    const decision = this.decisions[decisionIndex];
+    if (decision === undefined) {
+      throw new DecisionNotFoundError(decisionId);
+    }
+
+    // Only downgrade delegated decisions
+    if (decision.confidence !== 'delegated') {
+      throw new InvalidSupersedeError(
+        decisionId,
+        `cannot downgrade decision with confidence '${decision.confidence}'; only 'delegated' decisions can be downgraded per ledger_007`
+      );
+    }
+
+    // Check if already superseded or invalidated
+    if (decision.status !== 'active') {
+      throw new InvalidSupersedeError(
+        decisionId,
+        `cannot downgrade decision with status '${decision.status}'; only active decisions can be downgraded`
+      );
+    }
+
+    // Create the downgraded decision with inferred confidence
+    const updatedDecision: Decision = {
+      ...decision,
+      confidence: 'inferred',
+      failure_context:
+        decision.failure_context !== undefined
+          ? `${decision.failure_context}; Composition Audit contradiction: ${contradictionReason}`
+          : `Composition Audit contradiction: ${contradictionReason}`,
+    };
+
+    // Replace in the array
+    this.decisions[decisionIndex] = updatedDecision;
+
+    // Update last_modified
+    this.meta.last_modified = this.now().toISOString();
+
+    return updatedDecision;
+  }
 }
 
 /**
