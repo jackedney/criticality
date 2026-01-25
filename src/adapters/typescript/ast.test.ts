@@ -3,7 +3,14 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import * as os from 'node:os';
 import { Project } from 'ts-morph';
-import { createProject, TsConfigNotFoundError, findTodoFunctions } from './ast.js';
+import {
+  createProject,
+  TsConfigNotFoundError,
+  findTodoFunctions,
+  injectFunctionBody,
+  FunctionNotFoundError,
+  InvalidBodySyntaxError,
+} from './ast.js';
 
 describe('createProject', () => {
   let tempDir: string;
@@ -536,6 +543,529 @@ describe('findTodoFunctions', () => {
         expect(todos).toHaveLength(1);
         expect(todos[0]?.name).toBe('multiply');
       }
+    });
+  });
+});
+
+describe('injectFunctionBody', () => {
+  let tempDir: string;
+  let project: Project;
+
+  beforeEach(() => {
+    tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'inject-test-'));
+    project = createProject();
+  });
+
+  afterEach(() => {
+    fs.rmSync(tempDir, { recursive: true, force: true });
+  });
+
+  function addSourceFile(filename: string, content: string): string {
+    const filePath = path.join(tempDir, filename);
+    fs.writeFileSync(filePath, content);
+    project.addSourceFileAtPath(filePath);
+    return filePath;
+  }
+
+  function readFileContent(filePath: string): string {
+    return fs.readFileSync(filePath, 'utf-8');
+  }
+
+  describe('basic injection', () => {
+    it('injects body into function with throw new Error("TODO")', () => {
+      const filePath = addSourceFile(
+        'add.ts',
+        `export function add(a: number, b: number): number {
+  throw new Error('TODO');
+}`
+      );
+
+      injectFunctionBody(project, filePath, 'add', 'return a + b;');
+
+      const content = readFileContent(filePath);
+      expect(content).toContain('return a + b;');
+      expect(content).not.toContain("throw new Error('TODO')");
+    });
+
+    it('preserves function signature', () => {
+      const filePath = addSourceFile(
+        'multiply.ts',
+        `export function multiply(a: number, b: number): number {
+  throw new Error('TODO');
+}`
+      );
+
+      injectFunctionBody(project, filePath, 'multiply', 'return a * b;');
+
+      const content = readFileContent(filePath);
+      expect(content).toContain('function multiply(a: number, b: number): number');
+    });
+
+    it('preserves export modifier', () => {
+      const filePath = addSourceFile(
+        'exported.ts',
+        `export function exported(): string {
+  throw new Error('TODO');
+}`
+      );
+
+      injectFunctionBody(project, filePath, 'exported', "return 'hello';");
+
+      const content = readFileContent(filePath);
+      expect(content).toContain('export function exported');
+    });
+  });
+
+  describe('preserving decorators and JSDoc', () => {
+    it('preserves JSDoc comments', () => {
+      const filePath = addSourceFile(
+        'documented.ts',
+        `/**
+ * Adds two numbers.
+ * @param a First number
+ * @param b Second number
+ * @returns Sum of a and b
+ */
+export function add(a: number, b: number): number {
+  throw new Error('TODO');
+}`
+      );
+
+      injectFunctionBody(project, filePath, 'add', 'return a + b;');
+
+      const content = readFileContent(filePath);
+      expect(content).toContain('Adds two numbers.');
+      expect(content).toContain('@param a First number');
+      expect(content).toContain('@returns Sum of a and b');
+      expect(content).toContain('return a + b;');
+    });
+
+    it('preserves decorators on class methods', () => {
+      const filePath = addSourceFile(
+        'decorated.ts',
+        `function MyDecorator(target: unknown, key: string) {}
+
+class Service {
+  @MyDecorator
+  process(input: string): string {
+    throw new Error('TODO');
+  }
+}`
+      );
+
+      injectFunctionBody(project, filePath, 'process', 'return input.toUpperCase();');
+
+      const content = readFileContent(filePath);
+      expect(content).toContain('@MyDecorator');
+      expect(content).toContain('return input.toUpperCase();');
+    });
+  });
+
+  describe('async functions', () => {
+    it('handles async function with await in body', () => {
+      const filePath = addSourceFile(
+        'async-func.ts',
+        `export async function fetchData(url: string): Promise<string> {
+  throw new Error('TODO');
+}`
+      );
+
+      injectFunctionBody(
+        project,
+        filePath,
+        'fetchData',
+        `const response = await fetch(url);
+return await response.text();`
+      );
+
+      const content = readFileContent(filePath);
+      expect(content).toContain('await fetch(url)');
+      expect(content).toContain('await response.text()');
+    });
+
+    it('preserves async modifier', () => {
+      const filePath = addSourceFile(
+        'async-preserve.ts',
+        `export async function asyncFunc(): Promise<number> {
+  throw new Error('TODO');
+}`
+      );
+
+      injectFunctionBody(project, filePath, 'asyncFunc', 'return await Promise.resolve(42);');
+
+      const content = readFileContent(filePath);
+      expect(content).toContain('async function asyncFunc');
+    });
+  });
+
+  describe('generator functions', () => {
+    it('handles generator function with yield in body', () => {
+      const filePath = addSourceFile(
+        'generator.ts',
+        `export function* range(start: number, end: number): Generator<number> {
+  throw new Error('TODO');
+}`
+      );
+
+      injectFunctionBody(
+        project,
+        filePath,
+        'range',
+        `for (let i = start; i < end; i++) {
+  yield i;
+}`
+      );
+
+      const content = readFileContent(filePath);
+      expect(content).toContain('yield i;');
+    });
+
+    it('preserves generator asterisk', () => {
+      const filePath = addSourceFile(
+        'generator-preserve.ts',
+        `export function* numbers(): Generator<number> {
+  throw new Error('TODO');
+}`
+      );
+
+      injectFunctionBody(project, filePath, 'numbers', 'yield 1; yield 2; yield 3;');
+
+      const content = readFileContent(filePath);
+      expect(content).toContain('function* numbers');
+    });
+  });
+
+  describe('class methods', () => {
+    it('injects body into class method', () => {
+      const filePath = addSourceFile(
+        'calculator.ts',
+        `export class Calculator {
+  add(a: number, b: number): number {
+    throw new Error('TODO');
+  }
+}`
+      );
+
+      injectFunctionBody(project, filePath, 'add', 'return a + b;');
+
+      const content = readFileContent(filePath);
+      expect(content).toContain('return a + b;');
+      expect(content).not.toContain("throw new Error('TODO')");
+    });
+
+    it('preserves class structure', () => {
+      const filePath = addSourceFile(
+        'service.ts',
+        `export class Service {
+  private value: number = 0;
+
+  getValue(): number {
+    throw new Error('TODO');
+  }
+
+  setValue(v: number): void {
+    this.value = v;
+  }
+}`
+      );
+
+      injectFunctionBody(project, filePath, 'getValue', 'return this.value;');
+
+      const content = readFileContent(filePath);
+      expect(content).toContain('private value: number = 0;');
+      expect(content).toContain('return this.value;');
+      expect(content).toContain('setValue(v: number): void');
+    });
+  });
+
+  describe('arrow functions', () => {
+    it('injects body into arrow function assigned to variable', () => {
+      const filePath = addSourceFile(
+        'arrow.ts',
+        `export const increment = (n: number): number => {
+  throw new Error('TODO');
+};`
+      );
+
+      injectFunctionBody(project, filePath, 'increment', 'return n + 1;');
+
+      const content = readFileContent(filePath);
+      expect(content).toContain('return n + 1;');
+    });
+
+    it('handles async arrow function', () => {
+      const filePath = addSourceFile(
+        'async-arrow.ts',
+        `export const asyncFunc = async (x: number): Promise<number> => {
+  throw new Error('TODO');
+};`
+      );
+
+      injectFunctionBody(project, filePath, 'asyncFunc', 'return await Promise.resolve(x * 2);');
+
+      const content = readFileContent(filePath);
+      expect(content).toContain('await Promise.resolve(x * 2)');
+    });
+  });
+
+  describe('function expressions', () => {
+    it('injects body into function expression assigned to variable', () => {
+      const filePath = addSourceFile(
+        'func-expr.ts',
+        `export const double = function(n: number): number {
+  throw new Error('TODO');
+};`
+      );
+
+      injectFunctionBody(project, filePath, 'double', 'return n * 2;');
+
+      const content = readFileContent(filePath);
+      expect(content).toContain('return n * 2;');
+    });
+  });
+
+  describe('preserving surrounding code', () => {
+    it('preserves code before and after the function', () => {
+      const filePath = addSourceFile(
+        'surrounded.ts',
+        `import { something } from 'somewhere';
+
+const CONSTANT = 42;
+
+export function add(a: number, b: number): number {
+  throw new Error('TODO');
+}
+
+export function existingFunc(): void {
+  console.log('existing');
+}
+
+export const exportedValue = 'hello';`
+      );
+
+      injectFunctionBody(project, filePath, 'add', 'return a + b;');
+
+      const content = readFileContent(filePath);
+      expect(content).toContain("import { something } from 'somewhere';");
+      expect(content).toContain('const CONSTANT = 42;');
+      expect(content).toContain('return a + b;');
+      expect(content).toContain("console.log('existing');");
+      expect(content).toContain("export const exportedValue = 'hello';");
+    });
+
+    it('does not modify other functions in the file', () => {
+      const filePath = addSourceFile(
+        'multiple.ts',
+        `export function first(): number {
+  throw new Error('TODO');
+}
+
+export function second(): string {
+  return 'already implemented';
+}
+
+export function third(): boolean {
+  throw new Error('TODO');
+}`
+      );
+
+      injectFunctionBody(project, filePath, 'first', 'return 1;');
+
+      const content = readFileContent(filePath);
+      expect(content).toContain('return 1;');
+      expect(content).toContain("return 'already implemented';");
+      expect(content).toContain("throw new Error('TODO');"); // third function still has TODO
+    });
+  });
+
+  describe('negative cases', () => {
+    it('throws FunctionNotFoundError for non-existent function', () => {
+      const filePath = addSourceFile(
+        'existing.ts',
+        `export function existing(): void {
+  throw new Error('TODO');
+}`
+      );
+
+      expect(() => {
+        injectFunctionBody(project, filePath, 'nonExistent', 'return 42;');
+      }).toThrow(FunctionNotFoundError);
+    });
+
+    it('throws FunctionNotFoundError with function name in message', () => {
+      const filePath = addSourceFile('test.ts', `export function test(): void {}`);
+
+      expect(() => {
+        injectFunctionBody(project, filePath, 'missing', 'return;');
+      }).toThrow(/missing/);
+    });
+
+    it('throws FunctionNotFoundError with file path in message', () => {
+      const filePath = addSourceFile('test2.ts', `export function test(): void {}`);
+
+      expect(() => {
+        injectFunctionBody(project, filePath, 'missing', 'return;');
+      }).toThrow(new RegExp(filePath.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));
+    });
+
+    it('throws FunctionNotFoundError for non-existent file', () => {
+      const nonExistentPath = path.join(tempDir, 'nonexistent.ts');
+
+      expect(() => {
+        injectFunctionBody(project, nonExistentPath, 'any', 'return;');
+      }).toThrow(FunctionNotFoundError);
+    });
+
+    it('throws InvalidBodySyntaxError for syntactically invalid body', () => {
+      const filePath = addSourceFile(
+        'syntax-error.ts',
+        `export function test(): void {
+  throw new Error('TODO');
+}`
+      );
+
+      expect(() => {
+        injectFunctionBody(project, filePath, 'test', 'return {{{ invalid syntax');
+      }).toThrow(InvalidBodySyntaxError);
+    });
+
+    it('throws InvalidBodySyntaxError with function name in message', () => {
+      const filePath = addSourceFile(
+        'syntax-error2.ts',
+        `export function myFunc(): void {
+  throw new Error('TODO');
+}`
+      );
+
+      expect(() => {
+        injectFunctionBody(project, filePath, 'myFunc', 'return )');
+      }).toThrow(/myFunc/);
+    });
+
+    it('does not save file when body is invalid', () => {
+      const filePath = addSourceFile(
+        'no-save.ts',
+        `export function test(): number {
+  throw new Error('TODO');
+}`
+      );
+
+      const originalContent = readFileContent(filePath);
+
+      try {
+        injectFunctionBody(project, filePath, 'test', 'return {{{');
+      } catch {
+        // Expected to throw
+      }
+
+      const afterContent = readFileContent(filePath);
+      expect(afterContent).toBe(originalContent);
+    });
+  });
+
+  describe('edge cases', () => {
+    it('handles multi-line body', () => {
+      const filePath = addSourceFile(
+        'multiline.ts',
+        `export function process(items: number[]): number {
+  throw new Error('TODO');
+}`
+      );
+
+      injectFunctionBody(
+        project,
+        filePath,
+        'process',
+        `let sum = 0;
+for (const item of items) {
+  sum += item;
+}
+return sum;`
+      );
+
+      const content = readFileContent(filePath);
+      expect(content).toContain('let sum = 0;');
+      expect(content).toContain('for (const item of items)');
+      expect(content).toContain('return sum;');
+    });
+
+    it('handles empty body', () => {
+      const filePath = addSourceFile(
+        'empty.ts',
+        `export function noop(): void {
+  throw new Error('TODO');
+}`
+      );
+
+      injectFunctionBody(project, filePath, 'noop', '');
+
+      const content = readFileContent(filePath);
+      expect(content).not.toContain("throw new Error('TODO')");
+    });
+
+    it('handles body with comments', () => {
+      const filePath = addSourceFile(
+        'comments.ts',
+        `export function withComments(): number {
+  throw new Error('TODO');
+}`
+      );
+
+      injectFunctionBody(
+        project,
+        filePath,
+        'withComments',
+        `// This is the implementation
+const value = 42; // the answer
+/* multi-line
+   comment */
+return value;`
+      );
+
+      const content = readFileContent(filePath);
+      expect(content).toContain('// This is the implementation');
+      expect(content).toContain('return value;');
+    });
+
+    it('handles generic function', () => {
+      const filePath = addSourceFile(
+        'generic.ts',
+        `export function identity<T>(value: T): T {
+  throw new Error('TODO');
+}`
+      );
+
+      injectFunctionBody(project, filePath, 'identity', 'return value;');
+
+      const content = readFileContent(filePath);
+      expect(content).toContain('function identity<T>(value: T): T');
+      expect(content).toContain('return value;');
+    });
+  });
+
+  describe('error classes', () => {
+    it('FunctionNotFoundError has correct name property', () => {
+      const error = new FunctionNotFoundError('myFunc', '/path/to/file.ts');
+
+      expect(error.name).toBe('FunctionNotFoundError');
+    });
+
+    it('FunctionNotFoundError is an instance of Error', () => {
+      const error = new FunctionNotFoundError('myFunc', '/path/to/file.ts');
+
+      expect(error).toBeInstanceOf(Error);
+    });
+
+    it('InvalidBodySyntaxError has correct name property', () => {
+      const error = new InvalidBodySyntaxError('myFunc', 'unexpected token');
+
+      expect(error.name).toBe('InvalidBodySyntaxError');
+    });
+
+    it('InvalidBodySyntaxError is an instance of Error', () => {
+      const error = new InvalidBodySyntaxError('myFunc', 'unexpected token');
+
+      expect(error).toBeInstanceOf(Error);
     });
   });
 });

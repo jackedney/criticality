@@ -381,6 +381,229 @@ function topologicalSort(
  * const todos = findTodoFunctions(project);
  * // Returns functions like: { name: 'add', filePath: '/src/math.ts', line: 5, ... }
  */
+/**
+ * Error thrown when attempting to inject into a function that doesn't exist.
+ */
+export class FunctionNotFoundError extends Error {
+  constructor(functionName: string, filePath: string) {
+    super(`Function '${functionName}' not found in file: ${filePath}`);
+    this.name = 'FunctionNotFoundError';
+  }
+}
+
+/**
+ * Error thrown when the injected body contains syntax errors.
+ */
+export class InvalidBodySyntaxError extends Error {
+  constructor(functionName: string, originalMessage: string) {
+    super(`Invalid body syntax for function '${functionName}': ${originalMessage}`);
+    this.name = 'InvalidBodySyntaxError';
+  }
+}
+
+/**
+ * Finds a function-like declaration by name in a source file.
+ *
+ * @param sourceFile - The source file to search in.
+ * @param functionName - The name of the function to find.
+ * @returns The function-like node if found, undefined otherwise.
+ */
+function findFunctionByName(
+  sourceFile: SourceFile,
+  functionName: string
+): FunctionLike | undefined {
+  // Check top-level function declarations
+  for (const func of sourceFile.getFunctions()) {
+    if (func.getName() === functionName) {
+      return func;
+    }
+  }
+
+  // Check class methods
+  for (const classDecl of sourceFile.getClasses()) {
+    for (const method of classDecl.getMethods()) {
+      if (method.getName() === functionName) {
+        return method;
+      }
+    }
+  }
+
+  // Check arrow functions and function expressions assigned to variables
+  for (const statement of sourceFile.getStatements()) {
+    if (statement.getKind() === SyntaxKind.VariableStatement) {
+      const varStatement = statement.asKind(SyntaxKind.VariableStatement);
+      if (varStatement !== undefined) {
+        for (const decl of varStatement.getDeclarationList().getDeclarations()) {
+          if (decl.getName() === functionName) {
+            const initializer = decl.getInitializer();
+            if (initializer) {
+              if (
+                initializer.getKind() === SyntaxKind.ArrowFunction ||
+                initializer.getKind() === SyntaxKind.FunctionExpression
+              ) {
+                return initializer as ArrowFunction | FunctionExpression;
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+
+  return undefined;
+}
+
+/**
+ * Validates that a body string is syntactically valid TypeScript.
+ *
+ * @param body - The body string to validate.
+ * @param isAsync - Whether the function is async (allows await).
+ * @param isGenerator - Whether the function is a generator (allows yield).
+ * @returns An error message if invalid, undefined if valid.
+ */
+function validateBodySyntax(
+  body: string,
+  isAsync: boolean,
+  isGenerator: boolean
+): string | undefined {
+  // Create a temporary project to parse the body
+  const tempProject = new Project({
+    useInMemoryFileSystem: true,
+    compilerOptions: {
+      strict: true,
+      target: 99, // ScriptTarget.ESNext
+      module: 199, // ModuleKind.NodeNext
+    },
+  });
+
+  // Wrap body in a function to validate it as a function body
+  let functionPrefix = 'function __validate__() ';
+  if (isAsync && isGenerator) {
+    functionPrefix = 'async function* __validate__() ';
+  } else if (isAsync) {
+    functionPrefix = 'async function __validate__() ';
+  } else if (isGenerator) {
+    functionPrefix = 'function* __validate__() ';
+  }
+
+  const wrappedBody = `${functionPrefix}{ ${body} }`;
+
+  try {
+    const tempFile = tempProject.createSourceFile('__validate__.ts', wrappedBody);
+    const diagnostics = tempFile.getPreEmitDiagnostics();
+
+    // Filter for syntax errors (not type errors)
+    const syntaxErrors = diagnostics.filter((d) => {
+      const code = d.getCode();
+      // TypeScript error codes 1000-1999 are generally parse/syntax errors
+      return code >= 1000 && code < 2000;
+    });
+
+    if (syntaxErrors.length > 0) {
+      const firstError = syntaxErrors[0];
+      if (firstError) {
+        const messageText = firstError.getMessageText();
+        // getMessageText() returns string | DiagnosticMessageChain
+        if (typeof messageText === 'string') {
+          return messageText;
+        }
+        // DiagnosticMessageChain has a messageText property
+        return messageText.getMessageText();
+      }
+      return 'Unknown syntax error';
+    }
+
+    return undefined;
+  } catch (error) {
+    return error instanceof Error ? error.message : 'Unknown parse error';
+  }
+}
+
+/**
+ * Injects a function body into an existing function, replacing the current body.
+ *
+ * This function:
+ * - Replaces the existing function body (including `throw new Error('TODO')`) with the new body
+ * - Preserves function signature, decorators, JSDoc comments
+ * - Handles async functions (body may contain await)
+ * - Handles generator functions (body may contain yield)
+ * - Saves changes to the source file after injection
+ *
+ * @param project - The ts-morph Project containing the file.
+ * @param filePath - The path to the source file containing the function.
+ * @param functionName - The name of the function to inject into.
+ * @param body - The new function body to inject (without curly braces).
+ * @throws {FunctionNotFoundError} If the function doesn't exist in the file.
+ * @throws {InvalidBodySyntaxError} If the body contains syntax errors.
+ *
+ * @example
+ * // Injecting 'return a + b;' into add(a, b) { throw new Error('TODO'); }
+ * // produces add(a, b) { return a + b; }
+ * injectFunctionBody(project, './math.ts', 'add', 'return a + b;');
+ */
+export function injectFunctionBody(
+  project: Project,
+  filePath: string,
+  functionName: string,
+  body: string
+): void {
+  const sourceFile = project.getSourceFile(filePath);
+  if (!sourceFile) {
+    throw new FunctionNotFoundError(functionName, filePath);
+  }
+
+  const func = findFunctionByName(sourceFile, functionName);
+  if (!func) {
+    throw new FunctionNotFoundError(functionName, filePath);
+  }
+
+  // Determine if the function is async or generator
+  let isAsync = false;
+  let isGenerator = false;
+
+  if (
+    func.getKind() === SyntaxKind.FunctionDeclaration ||
+    func.getKind() === SyntaxKind.MethodDeclaration ||
+    func.getKind() === SyntaxKind.FunctionExpression
+  ) {
+    const funcDecl = func as FunctionDeclaration | MethodDeclaration | FunctionExpression;
+    isAsync = funcDecl.isAsync();
+    isGenerator = funcDecl.isGenerator();
+  } else if (func.getKind() === SyntaxKind.ArrowFunction) {
+    const arrowFunc = func as ArrowFunction;
+    isAsync = arrowFunc.isAsync();
+    // Arrow functions cannot be generators
+    isGenerator = false;
+  }
+
+  // Validate the body syntax before modifying the file
+  const syntaxError = validateBodySyntax(body, isAsync, isGenerator);
+  if (syntaxError !== undefined) {
+    throw new InvalidBodySyntaxError(functionName, syntaxError);
+  }
+
+  // Get the existing body
+  const existingBody = func.getBody();
+  if (!existingBody) {
+    // Function has no body (e.g., abstract method or overload declaration)
+    throw new FunctionNotFoundError(functionName, filePath);
+  }
+
+  // For arrow functions with expression body, we need to set a block body
+  if (func.getKind() === SyntaxKind.ArrowFunction) {
+    const arrowFunc = func as ArrowFunction;
+    // Use setBodyText which handles both expression and block bodies
+    arrowFunc.setBodyText(body);
+  } else {
+    // For function declarations, methods, and function expressions, use setBodyText
+    const funcWithBody = func as FunctionDeclaration | MethodDeclaration | FunctionExpression;
+    funcWithBody.setBodyText(body);
+  }
+
+  // Save the source file
+  sourceFile.saveSync();
+}
+
 export function findTodoFunctions(project: Project): TodoFunction[] {
   const todoFunctions: TodoFunction[] = [];
   const allFunctions: FunctionLike[] = [];
