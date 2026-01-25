@@ -29,3 +29,6 @@ export {
   createReadWritePermissions,
   createNoPermissions,
 } from './registry.js';
+
+// Swarm - Subagent access policies and configuration
+export * from './swarm/index.js';
