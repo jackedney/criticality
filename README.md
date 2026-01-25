@@ -1,4 +1,4 @@
-# Criticality Protocol
+# criticality.
 
 **A Context-Shedding Architecture for Autonomous Software Synthesis**
 
@@ -10,7 +10,7 @@
 
 ## Overview
 
-Criticality is a protocol for autonomous software engineering that explicitly rejects conversational, stateful agent paradigms. Instead, it enforces strict **context shedding** at phase boundaries to prevent hallucination, goal drift, and entropy accumulation.
+Criticality is a 'vibe coding' protocol for autonomous software engineering that explicitly rejects conversational, stateful agent paradigms. Instead, it enforces strict **context shedding** at phase boundaries to prevent hallucination, goal drift, and entropy accumulation.
 
 Traditional coding agents treat context as an asset, accumulating conversation history until they degrade. **Criticality treats context as a liability.**
 
