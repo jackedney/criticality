@@ -8,6 +8,7 @@
  */
 
 import { startToolchainServer } from './server.js';
+import { createServerLogger } from '../logging.js';
 
 async function main(): Promise<void> {
   const args = process.argv.slice(2);
@@ -26,14 +27,18 @@ async function main(): Promise<void> {
     }
   }
 
-  // eslint-disable-next-line no-console
-  console.error(`[toolchain-server] Starting with projectRoot: ${projectRoot}`);
+  const logger = createServerLogger({ serverName: 'toolchain-server', debug });
+
+  if (debug) {
+    logger.logDebug('server_start', { projectRoot });
+  }
 
   await startToolchainServer({ projectRoot, debug });
 }
 
 main().catch((err: unknown) => {
-  // eslint-disable-next-line no-console
-  console.error('Failed to start toolchain server:', err);
+  const logger = createServerLogger({ serverName: 'toolchain-server', debug: true });
+  const errorMessage = err instanceof Error ? err.message : String(err);
+  logger.error('startup_failed', { error: errorMessage });
   process.exit(1);
 });

@@ -13,24 +13,9 @@
 
 import path from 'node:path';
 import { startArtifactServer } from './server.js';
+import { createServerLogger } from '../logging.js';
 
-function parseArgs(): { projectRoot: string; debug: boolean } {
-  const args = process.argv.slice(2);
-  let projectRoot = process.cwd();
-  let debug = false;
-
-  for (let i = 0; i < args.length; i++) {
-    const arg = args[i];
-    if (arg === '--project-root' || arg === '-p') {
-      const next = args[i + 1];
-      if (next !== undefined) {
-        projectRoot = path.resolve(next);
-        i++;
-      }
-    } else if (arg === '--debug' || arg === '-d') {
-      debug = true;
-    } else if (arg === '--help' || arg === '-h') {
-      console.log(`
+const HELP_TEXT = `
 criticality-artifact-server - MCP Server for protocol artifacts
 
 Usage:
@@ -50,7 +35,25 @@ Tools provided:
   - append_decision: Atomically appends decisions to DECISIONS.toml
   - get_type_witness: Retrieves type witness definitions
   - validate_schema: Validates artifacts against their JSON schemas
-`);
+`;
+
+function parseArgs(): { projectRoot: string; debug: boolean } {
+  const args = process.argv.slice(2);
+  let projectRoot = process.cwd();
+  let debug = false;
+
+  for (let i = 0; i < args.length; i++) {
+    const arg = args[i];
+    if (arg === '--project-root' || arg === '-p') {
+      const next = args[i + 1];
+      if (next !== undefined) {
+        projectRoot = path.resolve(next);
+        i++;
+      }
+    } else if (arg === '--debug' || arg === '-d') {
+      debug = true;
+    } else if (arg === '--help' || arg === '-h') {
+      process.stdout.write(HELP_TEXT);
       process.exit(0);
     }
   }
@@ -59,12 +62,14 @@ Tools provided:
 }
 
 const { projectRoot, debug } = parseArgs();
+const logger = createServerLogger({ serverName: 'artifact-server', debug });
 
 if (debug) {
-  console.error(`[artifact-server] Starting with project root: ${projectRoot}`);
+  logger.logDebug('server_start', { projectRoot });
 }
 
 startArtifactServer({ projectRoot, debug }).catch((err: unknown) => {
-  console.error('Failed to start artifact server:', err);
+  const errorMessage = err instanceof Error ? err.message : String(err);
+  logger.error('startup_failed', { error: errorMessage });
   process.exit(1);
 });

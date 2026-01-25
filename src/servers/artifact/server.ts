@@ -36,6 +36,7 @@ import {
 import { fromData } from '../../ledger/ledger.js';
 import type { DecisionInput, LedgerData, Decision } from '../../ledger/types.js';
 import type { ErrorObject } from 'ajv';
+import { createServerLogger } from '../logging.js';
 
 /**
  * Creates and configures the criticality-artifact-server.
@@ -46,6 +47,8 @@ import type { ErrorObject } from 'ajv';
 // eslint-disable-next-line @typescript-eslint/no-deprecated
 export function createArtifactServer(config: ArtifactServerConfig): Server {
   const { projectRoot, debug = false } = config;
+
+  const logger = createServerLogger({ serverName: 'artifact-server', debug });
 
   const ajv = new (Ajv as unknown as new (opts: { allErrors: boolean }) => {
     compile: (schema: Record<string, unknown>) => {
@@ -294,9 +297,7 @@ export function createArtifactServer(config: ArtifactServerConfig): Server {
   server.setRequestHandler(CallToolRequestSchema, async (request): Promise<CallToolResult> => {
     const { name, arguments: args } = request.params;
 
-    if (debug) {
-      console.error(`[artifact-server] Tool call: ${name}`, args);
-    }
+    logger.logDebug('tool_call', { name, args });
 
     try {
       switch (name) {

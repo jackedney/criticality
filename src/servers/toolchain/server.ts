@@ -35,6 +35,7 @@ import {
   ToolchainNotInstalledError,
   OutputParseError,
 } from './types.js';
+import { createServerLogger } from '../logging.js';
 
 const DEFAULT_TIMEOUT = 60000;
 
@@ -44,6 +45,8 @@ const DEFAULT_TIMEOUT = 60000;
 // eslint-disable-next-line @typescript-eslint/no-deprecated
 export function createToolchainServer(config: ToolchainServerConfig): Server {
   const { projectRoot, debug = false, timeout = DEFAULT_TIMEOUT } = config;
+
+  const logger = createServerLogger({ serverName: 'toolchain-server', debug });
 
   // eslint-disable-next-line @typescript-eslint/no-deprecated
   const server = new Server(
@@ -215,9 +218,7 @@ export function createToolchainServer(config: ToolchainServerConfig): Server {
   server.setRequestHandler(CallToolRequestSchema, async (request): Promise<CallToolResult> => {
     const { name, arguments: args } = request.params;
 
-    if (debug) {
-      console.error(`[toolchain-server] Tool call: ${name}`, args);
-    }
+    logger.logDebug('tool_call', { name, args });
 
     try {
       switch (name) {
