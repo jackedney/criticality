@@ -15,7 +15,8 @@ Phase 0 (Design), Phase 1 (Core Infrastructure), and Phase 2 (TypeScript Adapter
 - MCP servers for artifacts and toolchain
 - Agent skills registry and subagent swarm access policies
 - Complete TypeScript adapter with AST manipulation, compiler integration, witness generation, and contract parsing
-- Property and behavioral test generators using fast-check and vitest
+- Comprehensive property, behavioral, concurrent, and benchmark test generators
+- LLM-based claim parsing for structured test scenario generation
 
 ---
 
