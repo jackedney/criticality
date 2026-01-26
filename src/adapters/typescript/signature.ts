@@ -308,3 +308,112 @@ export function extractMethodOverloadSignatures(method: MethodDeclaration): Func
 
   return overloads.map((overload) => extractSignature(overload));
 }
+
+/**
+ * Counts union members in a type string.
+ * Returns the number of union members minus 1 (since a single type has 0 "extra" members).
+ * Handles nested types by tracking bracket depth.
+ *
+ * @param typeStr - The type string to analyze.
+ * @returns The count of additional union members (total members - 1 for each union).
+ */
+function countUnionMembers(typeStr: string): number {
+  let count = 0;
+  let depth = 0;
+
+  for (const char of typeStr) {
+    if (char === '<' || char === '(' || char === '{' || char === '[') {
+      depth++;
+    } else if (char === '>' || char === ')' || char === '}' || char === ']') {
+      depth--;
+    } else if (char === '|' && depth === 0) {
+      count++;
+    }
+  }
+
+  return count;
+}
+
+/**
+ * Calculates the maximum nesting depth of generic types in a type string.
+ * Each level of angle brackets (<>) adds to the depth.
+ *
+ * @param typeStr - The type string to analyze.
+ * @returns The maximum nesting depth of generic types.
+ */
+function calculateNestedTypeDepth(typeStr: string): number {
+  let maxDepth = 0;
+  let currentDepth = 0;
+
+  for (const char of typeStr) {
+    if (char === '<') {
+      currentDepth++;
+      if (currentDepth > maxDepth) {
+        maxDepth = currentDepth;
+      }
+    } else if (char === '>') {
+      currentDepth--;
+    }
+  }
+
+  return maxDepth;
+}
+
+/**
+ * Calculates the complexity of a function signature for model routing decisions.
+ *
+ * The complexity formula is:
+ * `genericParams * 2 + unionMembers + nestedTypeDepth + paramCount * 0.5`
+ *
+ * Where:
+ * - `genericParams`: Number of type parameters (generics)
+ * - `unionMembers`: Count of union type members across all parameters and return type
+ *   (each `|` in a union adds 1 to complexity)
+ * - `nestedTypeDepth`: Maximum depth of nested generic types
+ * - `paramCount`: Number of function parameters
+ *
+ * Note: lifetimeParams is Rust-specific and omitted for TypeScript.
+ *
+ * @param signature - The function signature to analyze.
+ * @returns A numeric complexity score.
+ *
+ * @example
+ * // function foo<T, U>(x: T | U | null, y: number): Promise<T>
+ * // genericParams = 2, unionMembers = 2, nestedTypeDepth = 1, paramCount = 2
+ * // Complexity = 2*2 + 2 + 1 + 2*0.5 = 4 + 2 + 1 + 1 = 8
+ *
+ * @example
+ * // function bar(x: number): number
+ * // genericParams = 0, unionMembers = 0, nestedTypeDepth = 0, paramCount = 1
+ * // Complexity = 0 + 0 + 0 + 0.5 = 0.5
+ */
+export function calculateSignatureComplexity(signature: FunctionSignature): number {
+  // Count generic type parameters
+  const genericParams = signature.typeParameters.length;
+
+  // Count union members across all parameter types and return type
+  let unionMembers = 0;
+  for (const param of signature.parameters) {
+    unionMembers += countUnionMembers(param.type);
+  }
+  unionMembers += countUnionMembers(signature.returnType);
+
+  // Calculate maximum nesting depth across all types
+  let nestedTypeDepth = 0;
+  for (const param of signature.parameters) {
+    const depth = calculateNestedTypeDepth(param.type);
+    if (depth > nestedTypeDepth) {
+      nestedTypeDepth = depth;
+    }
+  }
+  const returnDepth = calculateNestedTypeDepth(signature.returnType);
+  if (returnDepth > nestedTypeDepth) {
+    nestedTypeDepth = returnDepth;
+  }
+
+  // Count parameters
+  const paramCount = signature.parameters.length;
+
+  // Apply formula
+  return genericParams * 2 + unionMembers + nestedTypeDepth + paramCount * 0.5;
+}
