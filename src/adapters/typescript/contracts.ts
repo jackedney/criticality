@@ -16,7 +16,7 @@ import {
   Node,
   SyntaxKind,
 } from 'ts-morph';
-import { type MicroContract, ContractParseError } from './assertions.js';
+import { type MicroContract, type InlineAssertion, ContractParseError } from './assertions.js';
 
 /**
  * Error thrown when a contract tag has malformed syntax.
@@ -60,6 +60,35 @@ const CONTRACT_TAGS = new Set(['requires', 'ensures', 'invariant', 'complexity',
  * Format: CLAIM_REF: claim_id or CLAIM_REF:claim_id
  */
 const CLAIM_REF_PATTERN = /CLAIM_REF:\s*(\S+)/g;
+
+/**
+ * Regular expression to match inline @invariant: comments with expression (single-line only).
+ * Format: // @invariant: expression
+ * Note: Must start with // (not /* or block comments)
+ */
+const INLINE_INVARIANT_PATTERN = /^[ \t]*\/\/\s*@invariant:\s*(.+)$/;
+
+/**
+ * Regular expression to detect @invariant: comment without expression (for error reporting).
+ */
+const INLINE_INVARIANT_EMPTY_PATTERN = /^[ \t]*\/\/\s*@invariant:\s*$/;
+
+/**
+ * Regular expression to match inline @assert: comments with expression (single-line only).
+ * Format: // @assert: expression
+ */
+const INLINE_ASSERT_PATTERN = /^[ \t]*\/\/\s*@assert:\s*(.+)$/;
+
+/**
+ * Regular expression to detect @assert: comment without expression (for error reporting).
+ */
+const INLINE_ASSERT_EMPTY_PATTERN = /^[ \t]*\/\/\s*@assert:\s*$/;
+
+/**
+ * Regular expression to match inline CLAIM_REF comments (single-line only).
+ * Format: // CLAIM_REF: claim_id
+ */
+const INLINE_CLAIM_REF_PATTERN = /^[ \t]*\/\/\s*CLAIM_REF:\s*(\S+)/;
 
 /**
  * Extracts the text content from a JSDoc tag.
@@ -213,6 +242,156 @@ function extractClaimRefs(text: string): string[] {
 }
 
 /**
+ * Result of parsing inline assertions from a function body.
+ */
+interface InlineParseResult {
+  /** Inline assertions found (both @invariant: and @assert:) */
+  inlineAssertions: InlineAssertion[];
+  /** Claim references found in inline comments */
+  claimRefs: string[];
+}
+
+/**
+ * Parses inline assertions from function body text.
+ *
+ * This function extracts:
+ * - `// @invariant: expression` - Inline invariants
+ * - `// @assert: expression` - Inline assertions
+ * - `// CLAIM_REF: claim_id` - Inline claim references
+ *
+ * Note: Only single-line comments (`//`) are parsed. Block comments (`/* *\/`)
+ * containing these patterns are ignored per the acceptance criteria.
+ *
+ * @param bodyText - The function body text.
+ * @param startLine - The starting line number of the function body (1-indexed).
+ * @returns Object containing inline assertions and claim refs.
+ * @throws ContractSyntaxError if an inline assertion is malformed.
+ */
+function parseInlineAssertions(bodyText: string, startLine: number): InlineParseResult {
+  const inlineAssertions: InlineAssertion[] = [];
+  const claimRefs: string[] = [];
+
+  const lines = bodyText.split('\n');
+
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+    if (line === undefined) {
+      continue;
+    }
+
+    const lineNumber = startLine + i;
+
+    // Check for empty @invariant: (malformed - error case)
+    if (INLINE_INVARIANT_EMPTY_PATTERN.test(line)) {
+      throw new ContractSyntaxError(
+        `@invariant: without expression at line ${String(lineNumber)}`,
+        '',
+        '@invariant: requires an expression',
+        lineNumber,
+        '@invariant:'
+      );
+    }
+
+    // Check for empty @assert: (malformed - error case)
+    if (INLINE_ASSERT_EMPTY_PATTERN.test(line)) {
+      throw new ContractSyntaxError(
+        `@assert: without expression at line ${String(lineNumber)}`,
+        '',
+        '@assert: requires an expression',
+        lineNumber,
+        '@assert:'
+      );
+    }
+
+    // Check for inline @invariant: with expression
+    const invariantMatch = INLINE_INVARIANT_PATTERN.exec(line);
+    if (invariantMatch !== null) {
+      const expression = invariantMatch[1]?.trim();
+      if (expression !== undefined && expression !== '') {
+        inlineAssertions.push({
+          type: 'invariant',
+          expression,
+          lineNumber,
+        });
+      }
+      continue;
+    }
+
+    // Check for inline @assert: with expression
+    const assertMatch = INLINE_ASSERT_PATTERN.exec(line);
+    if (assertMatch !== null) {
+      const expression = assertMatch[1]?.trim();
+      if (expression !== undefined && expression !== '') {
+        inlineAssertions.push({
+          type: 'assert',
+          expression,
+          lineNumber,
+        });
+      }
+      continue;
+    }
+
+    // Check for inline CLAIM_REF:
+    const claimRefMatch = INLINE_CLAIM_REF_PATTERN.exec(line);
+    if (claimRefMatch !== null) {
+      const claimId = claimRefMatch[1];
+      if (claimId !== undefined && claimId !== '') {
+        claimRefs.push(claimId);
+      }
+    }
+  }
+
+  return { inlineAssertions, claimRefs };
+}
+
+/**
+ * Checks if a function body contains any inline assertion comments.
+ *
+ * This includes both valid patterns with expressions and empty patterns
+ * (which will trigger errors during parsing).
+ *
+ * @param bodyText - The function body text.
+ * @returns True if the body contains inline assertions or claim refs.
+ */
+function hasInlineAssertions(bodyText: string): boolean {
+  const lines = bodyText.split('\n');
+
+  for (const line of lines) {
+    if (
+      INLINE_INVARIANT_PATTERN.test(line) ||
+      INLINE_INVARIANT_EMPTY_PATTERN.test(line) ||
+      INLINE_ASSERT_PATTERN.test(line) ||
+      INLINE_ASSERT_EMPTY_PATTERN.test(line) ||
+      INLINE_CLAIM_REF_PATTERN.test(line)
+    ) {
+      return true;
+    }
+  }
+
+  return false;
+}
+
+/**
+ * Gets the function body text and start line from a function-like node.
+ *
+ * @param node - The function or method declaration.
+ * @returns Object with body text and start line, or null if no body.
+ */
+function getFunctionBodyInfo(
+  node: FunctionDeclaration | MethodDeclaration
+): { text: string; startLine: number } | null {
+  const body = node.getBody();
+  if (!body) {
+    return null;
+  }
+
+  return {
+    text: body.getText(),
+    startLine: body.getStartLineNumber(),
+  };
+}
+
+/**
  * Gets the name of a function-like node.
  *
  * @param node - The node to get the name from.
@@ -252,7 +431,7 @@ function hasContractTags(node: JSDocableNode): boolean {
 }
 
 /**
- * Parses micro-contracts from JSDoc comments in a TypeScript file.
+ * Parses micro-contracts from JSDoc comments and inline comments in a TypeScript file.
  *
  * This function extracts semantic constraints from JSDoc tags:
  * - `@requires` - Preconditions that must hold before function execution
@@ -261,12 +440,17 @@ function hasContractTags(node: JSDocableNode): boolean {
  * - `@complexity` - Performance requirements (e.g., `O(n)`, `O(n log n)`)
  * - `@purity` - Side effect classification: `pure`, `reads`, `writes`, or `io`
  *
- * Additionally, CLAIM_REF comments are extracted to link functions to spec claims.
+ * Additionally extracts inline assertions from function bodies (single-line comments only):
+ * - `// @invariant: expression` - Inline invariants
+ * - `// @assert: expression` - Inline assertions
+ * - `// CLAIM_REF: claim_id` - Inline claim references for traceability
+ *
+ * Note: Block comments (`/* *\/`) containing these patterns are ignored.
  *
  * @param project - The ts-morph Project containing the file.
  * @param filePath - The path to the source file to parse.
  * @returns Array of MicroContract objects extracted from the file.
- * @throws ContractSyntaxError if a contract tag has malformed syntax.
+ * @throws ContractSyntaxError if a contract tag or inline assertion has malformed syntax.
  *
  * @example
  * // For JSDoc: /** @requires x > 0 @ensures result > x *\/
@@ -275,6 +459,14 @@ function hasContractTags(node: JSDocableNode): boolean {
  * @example
  * // For JSDoc: /** @complexity O(n log n) *\/
  * // Returns: [{ complexity: 'O(n log n)', ... }]
+ *
+ * @example
+ * // For inline: // @invariant: this.count >= 0
+ * // Returns: [{ inlineAssertions: [{ type: 'invariant', expression: 'this.count >= 0', lineNumber: N }], ... }]
+ *
+ * @example
+ * // For inline: // CLAIM_REF: perf_001
+ * // Links the function to spec claim perf_001
  *
  * @example
  * // Unknown tags like @foobar are ignored (not an error)
@@ -292,7 +484,11 @@ export function parseContracts(project: Project, filePath: string): MicroContrac
 
   // Process function declarations
   for (const func of sourceFile.getFunctions()) {
-    if (hasContractTags(func)) {
+    const bodyInfo = getFunctionBodyInfo(func);
+    const hasJsDocContracts = hasContractTags(func);
+    const hasInline = bodyInfo !== null && hasInlineAssertions(bodyInfo.text);
+
+    if (hasJsDocContracts || hasInline) {
       const contract = parseNodeContracts(func, filePath);
       if (contract !== null) {
         contracts.push(contract);
@@ -303,7 +499,11 @@ export function parseContracts(project: Project, filePath: string): MicroContrac
   // Process class methods
   for (const classDecl of sourceFile.getClasses()) {
     for (const method of classDecl.getMethods()) {
-      if (hasContractTags(method)) {
+      const bodyInfo = getFunctionBodyInfo(method);
+      const hasJsDocContracts = hasContractTags(method);
+      const hasInline = bodyInfo !== null && hasInlineAssertions(bodyInfo.text);
+
+      if (hasJsDocContracts || hasInline) {
         const contract = parseNodeContracts(method, filePath);
         if (contract !== null) {
           contracts.push(contract);
@@ -323,9 +523,18 @@ export function parseContracts(project: Project, filePath: string): MicroContrac
             initializer &&
             (Node.isArrowFunction(initializer) || Node.isFunctionExpression(initializer))
           ) {
-            // Check if the variable declaration has JSDoc
-            if (hasContractTags(varStatement)) {
-              const contract = parseVariableContracts(varStatement, decl.getName(), filePath);
+            // Check if the variable declaration has JSDoc or the function body has inline assertions
+            const hasJsDocContracts = hasContractTags(varStatement);
+            const bodyText = initializer.getText();
+            const hasInline = hasInlineAssertions(bodyText);
+
+            if (hasJsDocContracts || hasInline) {
+              const contract = parseVariableContracts(
+                varStatement,
+                decl.getName(),
+                filePath,
+                initializer
+              );
               if (contract !== null) {
                 contracts.push(contract);
               }
@@ -357,11 +566,13 @@ function parseNodeContracts(
     complexity?: string;
     purity?: PurityLevel;
     claimRefs: string[];
+    inlineAssertions: InlineAssertion[];
   } = {
     requires: [],
     ensures: [],
     invariants: [],
     claimRefs: [],
+    inlineAssertions: [],
   };
 
   const jsDocs = node.getJsDocs();
@@ -378,6 +589,14 @@ function parseNodeContracts(
     contract.claimRefs.push(...claimRefs);
   }
 
+  // Parse inline assertions from function body
+  const bodyInfo = getFunctionBodyInfo(node);
+  if (bodyInfo !== null) {
+    const inlineResult = parseInlineAssertions(bodyInfo.text, bodyInfo.startLine);
+    contract.inlineAssertions.push(...inlineResult.inlineAssertions);
+    contract.claimRefs.push(...inlineResult.claimRefs);
+  }
+
   // Only return a contract if there's at least one contract element
   if (
     contract.requires.length === 0 &&
@@ -385,7 +604,8 @@ function parseNodeContracts(
     contract.invariants.length === 0 &&
     contract.complexity === undefined &&
     contract.purity === undefined &&
-    contract.claimRefs.length === 0
+    contract.claimRefs.length === 0 &&
+    contract.inlineAssertions.length === 0
   ) {
     return null;
   }
@@ -406,6 +626,9 @@ function parseNodeContracts(
   if (contract.purity !== undefined) {
     result.purity = contract.purity;
   }
+  if (contract.inlineAssertions.length > 0) {
+    result.inlineAssertions = contract.inlineAssertions;
+  }
 
   return result;
 }
@@ -416,12 +639,14 @@ function parseNodeContracts(
  * @param varStatement - The variable statement with JSDoc.
  * @param functionName - The name of the variable.
  * @param filePath - The file path for the contract.
+ * @param initializer - The arrow function or function expression node (optional).
  * @returns The parsed MicroContract, or null if no contracts found.
  */
 function parseVariableContracts(
   varStatement: JSDocableNode,
   functionName: string,
-  filePath: string
+  filePath: string,
+  initializer?: Node
 ): MicroContract | null {
   const contract: {
     requires: string[];
@@ -430,11 +655,13 @@ function parseVariableContracts(
     complexity?: string;
     purity?: PurityLevel;
     claimRefs: string[];
+    inlineAssertions: InlineAssertion[];
   } = {
     requires: [],
     ensures: [],
     invariants: [],
     claimRefs: [],
+    inlineAssertions: [],
   };
 
   const jsDocs = varStatement.getJsDocs();
@@ -451,6 +678,15 @@ function parseVariableContracts(
     contract.claimRefs.push(...claimRefs);
   }
 
+  // Parse inline assertions from the arrow function or function expression body
+  if (initializer !== undefined) {
+    const bodyText = initializer.getText();
+    const startLine = initializer.getStartLineNumber();
+    const inlineResult = parseInlineAssertions(bodyText, startLine);
+    contract.inlineAssertions.push(...inlineResult.inlineAssertions);
+    contract.claimRefs.push(...inlineResult.claimRefs);
+  }
+
   // Only return a contract if there's at least one contract element
   if (
     contract.requires.length === 0 &&
@@ -458,7 +694,8 @@ function parseVariableContracts(
     contract.invariants.length === 0 &&
     contract.complexity === undefined &&
     contract.purity === undefined &&
-    contract.claimRefs.length === 0
+    contract.claimRefs.length === 0 &&
+    contract.inlineAssertions.length === 0
   ) {
     return null;
   }
@@ -478,6 +715,9 @@ function parseVariableContracts(
   }
   if (contract.purity !== undefined) {
     result.purity = contract.purity;
+  }
+  if (contract.inlineAssertions.length > 0) {
+    result.inlineAssertions = contract.inlineAssertions;
   }
 
   return result;

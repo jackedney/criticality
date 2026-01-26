@@ -874,6 +874,472 @@ describe('parseContracts', () => {
   });
 });
 
+describe('inline assertion parsing', () => {
+  let project: Project;
+
+  beforeEach(() => {
+    project = new Project({
+      useInMemoryFileSystem: true,
+      compilerOptions: {
+        strict: true,
+        target: 99, // ESNext
+        module: 199, // NodeNext
+      },
+    });
+  });
+
+  afterEach(() => {
+    for (const sourceFile of project.getSourceFiles()) {
+      project.removeSourceFile(sourceFile);
+    }
+  });
+
+  describe('// @invariant: parsing', () => {
+    it('parses single inline @invariant:', () => {
+      project.createSourceFile(
+        'test.ts',
+        `
+        class Counter {
+          count = 0;
+
+          increment(): void {
+            // @invariant: this.count >= 0
+            this.count++;
+          }
+        }
+      `
+      );
+
+      const contracts = parseContracts(project, 'test.ts');
+
+      expect(contracts).toHaveLength(1);
+      expect(contracts[0]?.functionName).toBe('increment');
+      expect(contracts[0]?.inlineAssertions).toHaveLength(1);
+      expect(contracts[0]?.inlineAssertions?.[0]?.type).toBe('invariant');
+      expect(contracts[0]?.inlineAssertions?.[0]?.expression).toBe('this.count >= 0');
+    });
+
+    it('parses multiple inline @invariant: comments', () => {
+      project.createSourceFile(
+        'test.ts',
+        `
+        class Buffer {
+          size = 0;
+          capacity = 100;
+
+          resize(newSize: number): void {
+            // @invariant: this.size >= 0
+            // @invariant: this.size <= this.capacity
+            this.size = newSize;
+          }
+        }
+      `
+      );
+
+      const contracts = parseContracts(project, 'test.ts');
+
+      expect(contracts).toHaveLength(1);
+      expect(contracts[0]?.inlineAssertions).toHaveLength(2);
+      expect(contracts[0]?.inlineAssertions?.[0]?.expression).toBe('this.size >= 0');
+      expect(contracts[0]?.inlineAssertions?.[1]?.expression).toBe('this.size <= this.capacity');
+    });
+
+    it('captures line numbers for inline @invariant:', () => {
+      project.createSourceFile(
+        'test.ts',
+        `function test(): void {
+  // @invariant: x > 0
+}`
+      );
+
+      const contracts = parseContracts(project, 'test.ts');
+
+      expect(contracts).toHaveLength(1);
+      expect(contracts[0]?.inlineAssertions?.[0]?.lineNumber).toBe(2);
+    });
+  });
+
+  describe('// @assert: parsing', () => {
+    it('parses single inline @assert:', () => {
+      project.createSourceFile(
+        'test.ts',
+        `
+        function process(arr: number[]): number {
+          // @assert: arr.length > 0
+          return arr[0]!;
+        }
+      `
+      );
+
+      const contracts = parseContracts(project, 'test.ts');
+
+      expect(contracts).toHaveLength(1);
+      expect(contracts[0]?.inlineAssertions).toHaveLength(1);
+      expect(contracts[0]?.inlineAssertions?.[0]?.type).toBe('assert');
+      expect(contracts[0]?.inlineAssertions?.[0]?.expression).toBe('arr.length > 0');
+    });
+
+    it('parses multiple inline @assert: comments', () => {
+      project.createSourceFile(
+        'test.ts',
+        `
+        function safeDivide(a: number, b: number): number {
+          // @assert: b !== 0
+          // @assert: Number.isFinite(a)
+          return a / b;
+        }
+      `
+      );
+
+      const contracts = parseContracts(project, 'test.ts');
+
+      expect(contracts).toHaveLength(1);
+      expect(contracts[0]?.inlineAssertions).toHaveLength(2);
+      expect(contracts[0]?.inlineAssertions?.[0]?.type).toBe('assert');
+      expect(contracts[0]?.inlineAssertions?.[1]?.type).toBe('assert');
+    });
+  });
+
+  describe('// CLAIM_REF: parsing', () => {
+    it('parses inline CLAIM_REF:', () => {
+      project.createSourceFile(
+        'test.ts',
+        `
+        function performanceOptimized(): void {
+          // CLAIM_REF: perf_001
+          // Do something fast
+        }
+      `
+      );
+
+      const contracts = parseContracts(project, 'test.ts');
+
+      expect(contracts).toHaveLength(1);
+      expect(contracts[0]?.claimRefs).toContain('perf_001');
+    });
+
+    it('parses multiple inline CLAIM_REF: comments', () => {
+      project.createSourceFile(
+        'test.ts',
+        `
+        function criticalOperation(): void {
+          // CLAIM_REF: perf_001
+          // CLAIM_REF: safety_002
+          // Do something
+        }
+      `
+      );
+
+      const contracts = parseContracts(project, 'test.ts');
+
+      expect(contracts).toHaveLength(1);
+      expect(contracts[0]?.claimRefs).toContain('perf_001');
+      expect(contracts[0]?.claimRefs).toContain('safety_002');
+    });
+
+    it('combines JSDoc CLAIM_REF with inline CLAIM_REF', () => {
+      project.createSourceFile(
+        'test.ts',
+        `
+        /**
+         * CLAIM_REF: doc_001
+         */
+        function dualClaimed(): void {
+          // CLAIM_REF: inline_001
+          // Do something
+        }
+      `
+      );
+
+      const contracts = parseContracts(project, 'test.ts');
+
+      expect(contracts).toHaveLength(1);
+      expect(contracts[0]?.claimRefs).toContain('doc_001');
+      expect(contracts[0]?.claimRefs).toContain('inline_001');
+    });
+  });
+
+  describe('mixed inline assertions', () => {
+    it('parses @invariant:, @assert:, and CLAIM_REF: together', () => {
+      project.createSourceFile(
+        'test.ts',
+        `
+        class Account {
+          balance = 0;
+
+          withdraw(amount: number): void {
+            // CLAIM_REF: safety_001
+            // @assert: amount > 0
+            // @invariant: this.balance >= 0
+            this.balance -= amount;
+          }
+        }
+      `
+      );
+
+      const contracts = parseContracts(project, 'test.ts');
+
+      expect(contracts).toHaveLength(1);
+      expect(contracts[0]?.claimRefs).toContain('safety_001');
+      expect(contracts[0]?.inlineAssertions).toHaveLength(2);
+
+      const assertAssertion = contracts[0]?.inlineAssertions?.find((a) => a.type === 'assert');
+      const invariantAssertion = contracts[0]?.inlineAssertions?.find(
+        (a) => a.type === 'invariant'
+      );
+
+      expect(assertAssertion?.expression).toBe('amount > 0');
+      expect(invariantAssertion?.expression).toBe('this.balance >= 0');
+    });
+
+    it('combines JSDoc contracts with inline assertions', () => {
+      project.createSourceFile(
+        'test.ts',
+        `
+        /**
+         * @requires amount > 0
+         * @ensures result >= 0
+         */
+        function transfer(amount: number): number {
+          // @invariant: amount <= 1000000
+          return amount * 0.99;
+        }
+      `
+      );
+
+      const contracts = parseContracts(project, 'test.ts');
+
+      expect(contracts).toHaveLength(1);
+      expect(contracts[0]?.requires).toEqual(['amount > 0']);
+      expect(contracts[0]?.ensures).toEqual(['result >= 0']);
+      expect(contracts[0]?.inlineAssertions).toHaveLength(1);
+      expect(contracts[0]?.inlineAssertions?.[0]?.type).toBe('invariant');
+    });
+  });
+
+  describe('example from acceptance criteria', () => {
+    it('// @invariant: this.count >= 0 inside a method is captured', () => {
+      project.createSourceFile(
+        'test.ts',
+        `
+        class Counter {
+          count = 0;
+
+          decrement(): void {
+            // @invariant: this.count >= 0
+            this.count--;
+          }
+        }
+      `
+      );
+
+      const contracts = parseContracts(project, 'test.ts');
+
+      expect(contracts).toHaveLength(1);
+      expect(contracts[0]?.functionName).toBe('decrement');
+      expect(contracts[0]?.inlineAssertions).toHaveLength(1);
+      expect(contracts[0]?.inlineAssertions?.[0]?.type).toBe('invariant');
+      expect(contracts[0]?.inlineAssertions?.[0]?.expression).toBe('this.count >= 0');
+    });
+
+    it('// CLAIM_REF: perf_001 links the function to spec claim perf_001', () => {
+      project.createSourceFile(
+        'test.ts',
+        `
+        function fastLookup(key: string): string | undefined {
+          // CLAIM_REF: perf_001
+          return cache.get(key);
+        }
+      `
+      );
+
+      const contracts = parseContracts(project, 'test.ts');
+
+      expect(contracts).toHaveLength(1);
+      expect(contracts[0]?.claimRefs).toContain('perf_001');
+    });
+  });
+
+  describe('negative case: block comments ignored', () => {
+    it('@invariant in block comment (/* */) is ignored', () => {
+      project.createSourceFile(
+        'test.ts',
+        `
+        function test(): void {
+          /* @invariant: this.count >= 0 */
+          console.log('test');
+        }
+      `
+      );
+
+      const contracts = parseContracts(project, 'test.ts');
+
+      // Function has no contracts - should return empty
+      expect(contracts).toHaveLength(0);
+    });
+
+    it('@assert in block comment (/* */) is ignored', () => {
+      project.createSourceFile(
+        'test.ts',
+        `
+        function test(): void {
+          /* @assert: x > 0 */
+          console.log('test');
+        }
+      `
+      );
+
+      const contracts = parseContracts(project, 'test.ts');
+
+      expect(contracts).toHaveLength(0);
+    });
+
+    it('CLAIM_REF in block comment (/* */) is ignored', () => {
+      project.createSourceFile(
+        'test.ts',
+        `
+        function test(): void {
+          /* CLAIM_REF: perf_001 */
+          console.log('test');
+        }
+      `
+      );
+
+      const contracts = parseContracts(project, 'test.ts');
+
+      expect(contracts).toHaveLength(0);
+    });
+
+    it('@invariant in multi-line block comment is ignored', () => {
+      project.createSourceFile(
+        'test.ts',
+        `
+        function test(): void {
+          /*
+           * @invariant: this.count >= 0
+           */
+          console.log('test');
+        }
+      `
+      );
+
+      const contracts = parseContracts(project, 'test.ts');
+
+      expect(contracts).toHaveLength(0);
+    });
+  });
+
+  describe('negative case: malformed inline assertions', () => {
+    it('throws ContractSyntaxError for @invariant: without expression', () => {
+      project.createSourceFile(
+        'test.ts',
+        `
+        function test(): void {
+          // @invariant:
+          console.log('test');
+        }
+      `
+      );
+
+      expect(() => parseContracts(project, 'test.ts')).toThrow(ContractSyntaxError);
+      expect(() => parseContracts(project, 'test.ts')).toThrow('@invariant: without expression');
+    });
+
+    it('throws ContractSyntaxError for @assert: without expression', () => {
+      project.createSourceFile(
+        'test.ts',
+        `
+        function test(): void {
+          // @assert:
+          console.log('test');
+        }
+      `
+      );
+
+      expect(() => parseContracts(project, 'test.ts')).toThrow(ContractSyntaxError);
+      expect(() => parseContracts(project, 'test.ts')).toThrow('@assert: without expression');
+    });
+
+    it('ContractSyntaxError includes line number for inline assertions', () => {
+      project.createSourceFile(
+        'test.ts',
+        `function test(): void {
+  // @invariant:
+}`
+      );
+
+      try {
+        parseContracts(project, 'test.ts');
+        expect.fail('Should have thrown');
+      } catch (error) {
+        expect(error).toBeInstanceOf(ContractSyntaxError);
+        const err = error as ContractSyntaxError;
+        expect(err.lineNumber).toBeGreaterThan(0);
+      }
+    });
+  });
+
+  describe('arrow functions and function expressions', () => {
+    it('parses inline assertions in arrow function body', () => {
+      project.createSourceFile(
+        'test.ts',
+        `
+        const process = (x: number): number => {
+          // @assert: x > 0
+          return x * 2;
+        };
+      `
+      );
+
+      const contracts = parseContracts(project, 'test.ts');
+
+      expect(contracts).toHaveLength(1);
+      expect(contracts[0]?.functionName).toBe('process');
+      expect(contracts[0]?.inlineAssertions).toHaveLength(1);
+      expect(contracts[0]?.inlineAssertions?.[0]?.type).toBe('assert');
+    });
+
+    it('parses inline CLAIM_REF in function expression body', () => {
+      project.createSourceFile(
+        'test.ts',
+        `
+        const lookup = function(key: string): string | undefined {
+          // CLAIM_REF: perf_001
+          return map.get(key);
+        };
+      `
+      );
+
+      const contracts = parseContracts(project, 'test.ts');
+
+      expect(contracts).toHaveLength(1);
+      expect(contracts[0]?.claimRefs).toContain('perf_001');
+    });
+  });
+
+  describe('whitespace handling', () => {
+    it('handles various whitespace in inline assertions', () => {
+      project.createSourceFile(
+        'test.ts',
+        `
+        function test(): void {
+          //   @invariant:   this.count >= 0
+          //  @assert:  x > 0
+          console.log('test');
+        }
+      `
+      );
+
+      const contracts = parseContracts(project, 'test.ts');
+
+      expect(contracts).toHaveLength(1);
+      expect(contracts[0]?.inlineAssertions).toHaveLength(2);
+      expect(contracts[0]?.inlineAssertions?.[0]?.expression).toBe('this.count >= 0');
+      expect(contracts[0]?.inlineAssertions?.[1]?.expression).toBe('x > 0');
+    });
+  });
+});
+
 describe('ContractSyntaxError', () => {
   it('has correct properties', () => {
     const error = new ContractSyntaxError(

@@ -8,6 +8,22 @@
  */
 
 /**
+ * Represents an inline assertion found within a function body.
+ *
+ * Inline assertions are specified using single-line comments:
+ * - `// @invariant: expression` - Inline invariant
+ * - `// @assert: expression` - Inline assertion
+ */
+export interface InlineAssertion {
+  /** The type of inline assertion */
+  type: 'invariant' | 'assert';
+  /** The assertion expression */
+  expression: string;
+  /** The 1-indexed line number where the assertion appears */
+  lineNumber: number;
+}
+
+/**
  * Represents a micro-contract extracted from a function's JSDoc comments.
  *
  * A micro-contract specifies the behavioral contract of a function including
@@ -31,6 +47,8 @@ export interface MicroContract {
   purity?: 'pure' | 'reads' | 'writes' | 'io';
   /** References to spec claims linked to this function */
   claimRefs: string[];
+  /** Inline assertions found within the function body */
+  inlineAssertions?: InlineAssertion[];
 }
 
 /**
