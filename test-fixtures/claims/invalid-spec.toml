@@ -1,0 +1,3 @@
+# Invalid TOML syntax - missing bracket
+[meta
+version = "1.0.0"

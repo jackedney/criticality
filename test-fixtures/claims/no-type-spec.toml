@@ -1,0 +1,16 @@
+# Spec with claims that have no type - should default to behavioral
+
+[meta]
+version = "1.0.0"
+created = "2024-01-24T12:00:00Z"
+
+[system]
+name = "test-system"
+
+[claims.claim_no_type]
+text = "This claim has no type specified"
+testable = true
+
+[claims.claim_with_type]
+text = "This claim has a type specified"
+type = "invariant"

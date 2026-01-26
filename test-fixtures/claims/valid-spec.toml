@@ -1,0 +1,54 @@
+# Valid spec.toml with various claim types
+
+[meta]
+version = "1.0.0"
+created = "2024-01-24T12:00:00Z"
+domain = "fintech"
+authors = ["Test Author"]
+
+[system]
+name = "payment-system"
+description = "Payment processing system"
+language = "typescript"
+
+[claims.inv_001]
+text = "Account balance is never negative"
+type = "invariant"
+testable = true
+subject = "account balance"
+predicate = "is non-negative"
+
+[claims.beh_001]
+text = "Transferring funds between accounts updates both balances correctly"
+type = "behavioral"
+testable = true
+trigger = "Transfer request"
+outcome = "Source debited, destination credited"
+
+[claims.neg_001]
+text = "Double spending is prevented"
+type = "negative"
+testable = true
+action = "Attempt to spend same funds twice"
+forbidden_outcome = "Both transactions succeed"
+
+[claims.temp_001]
+text = "Transaction lock is held during processing"
+type = "temporal"
+testable = true
+setup = "Begin transaction"
+invariant = "Lock is held"
+termination = "Transaction completes"
+
+[claims.perf_001]
+text = "Account lookup is O(1)"
+type = "performance"
+testable = true
+operation = "Account lookup by ID"
+complexity = "O(1)"
+
+[claims.conc_001]
+text = "Concurrent balance updates are serialized"
+type = "concurrent"
+testable = true
+operation = "Balance update"
