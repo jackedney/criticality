@@ -7,7 +7,12 @@
 import { describe, expect, it, vi } from 'vitest';
 import { ClaimParser } from './claim-parser.js';
 import type { SpecClaim } from '../../spec/types.js';
-import type { ModelRouter, ModelRouterResult, ModelRouterRequest } from '../../router/index.js';
+import type {
+  ModelRouter,
+  ModelRouterResult,
+  ModelRouterRequest,
+  StreamChunk,
+} from '../../router/index.js';
 import { createSuccessResult, createFailureResult, createModelError } from '../../router/types.js';
 
 /**
@@ -16,7 +21,7 @@ import { createSuccessResult, createFailureResult, createModelError } from '../.
 class MockRouter implements ModelRouter {
   public complete = vi.fn();
   public prompt = vi.fn();
-  public async *stream(): AsyncGenerator<unknown, ModelRouterResult, unknown> {
+  public async *stream(): AsyncGenerator<StreamChunk, ModelRouterResult, unknown> {
     await Promise.resolve(); // satisfying require-await
     yield { content: '', done: true };
     return createSuccessResult({
