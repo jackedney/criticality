@@ -20,6 +20,17 @@ export class ToolchainNotInstalledError extends Error {
 }
 
 /**
+ * Structured type details extracted from compiler error messages.
+ * Provides specific information about type mismatches for targeted repair feedback.
+ */
+export interface TypeDetails {
+  /** The expected type (what was declared/required) */
+  expected: string;
+  /** The actual type that was provided */
+  actual: string;
+}
+
+/**
  * Represents a single compiler error from TypeScript.
  */
 export interface CompilerError {
@@ -33,6 +44,8 @@ export interface CompilerError {
   code: string;
   /** The error message */
   message: string;
+  /** Extracted type details for type mismatch errors, null if unparseable */
+  typeDetails: TypeDetails | null;
 }
 
 /**
@@ -67,12 +80,216 @@ export interface TypeCheckResult {
  */
 const TSC_ERROR_PATTERN = /^(.+?)\((\d+),(\d+)\): error (TS\d+): (.+)$/;
 
+/** Type for extractor functions that parse type details from error messages. */
+type TypeDetailsExtractor = (match: RegExpMatchArray) => TypeDetails | null;
+
+/** Pattern definition for matching and extracting type details from TypeScript errors. */
+interface TypeMismatchPattern {
+  codes: string[];
+  pattern: RegExp;
+  extractor: TypeDetailsExtractor;
+}
+
+const TYPE_MISMATCH_PATTERNS: TypeMismatchPattern[] = [
+  // TS2322: Type 'X' is not assignable to type 'Y'.
+  {
+    codes: ['TS2322', 'TS2741'],
+    pattern: /Type '(.+?)' is not assignable to type '(.+?)'/,
+    extractor: (match: RegExpMatchArray): TypeDetails | null => {
+      const actual = match[1];
+      const expected = match[2];
+      if (actual !== undefined && expected !== undefined) {
+        return { expected, actual };
+      }
+      return null;
+    },
+  },
+  // TS2345: Argument of type 'X' is not assignable to parameter of type 'Y'.
+  {
+    codes: ['TS2345'],
+    pattern: /Argument of type '(.+?)' is not assignable to parameter of type '(.+?)'/,
+    extractor: (match: RegExpMatchArray): TypeDetails | null => {
+      const actual = match[1];
+      const expected = match[2];
+      if (actual !== undefined && expected !== undefined) {
+        return { expected, actual };
+      }
+      return null;
+    },
+  },
+  // TS2304: Cannot find name 'X'.
+  {
+    codes: ['TS2304'],
+    pattern: /Cannot find name '(.+?)'/,
+    extractor: (match: RegExpMatchArray): TypeDetails | null => {
+      const name = match[1];
+      if (name !== undefined) {
+        return { expected: name, actual: '<undefined>' };
+      }
+      return null;
+    },
+  },
+  // TS2339: Property 'X' does not exist on type 'Y'.
+  {
+    codes: ['TS2339'],
+    pattern: /Property '(.+?)' does not exist on type '(.+?)'/,
+    extractor: (match: RegExpMatchArray): TypeDetails | null => {
+      const prop = match[1];
+      const onType = match[2];
+      if (prop !== undefined && onType !== undefined) {
+        return { expected: `${onType} with property '${prop}'`, actual: onType };
+      }
+      return null;
+    },
+  },
+  // TS2554: Expected X arguments, but got Y.
+  {
+    codes: ['TS2554', 'TS2555'],
+    pattern: /Expected (\d+) arguments?, but got (\d+)/,
+    extractor: (match: RegExpMatchArray): TypeDetails | null => {
+      const expectedCount = match[1];
+      const actualCount = match[2];
+      if (expectedCount !== undefined && actualCount !== undefined) {
+        return { expected: `${expectedCount} arguments`, actual: `${actualCount} arguments` };
+      }
+      return null;
+    },
+  },
+  // TS2353/TS2322: Object literal may only specify known properties, and 'X' does not exist in type 'Y'.
+  {
+    codes: ['TS2353', 'TS2322'],
+    pattern:
+      /Object literal may only specify known properties, and '(.+?)' does not exist in type '(.+?)'/,
+    extractor: (match: RegExpMatchArray): TypeDetails | null => {
+      const prop = match[1];
+      const onType = match[2];
+      if (prop !== undefined && onType !== undefined) {
+        return { expected: onType, actual: `${onType} with extra property '${prop}'` };
+      }
+      return null;
+    },
+  },
+  // TS2551: Property 'X' does not exist on type 'Y'. Did you mean 'Z'?
+  {
+    codes: ['TS2551'],
+    pattern: /Property '(.+?)' does not exist on type '(.+?)'\. Did you mean '(.+?)'/,
+    extractor: (match: RegExpMatchArray): TypeDetails | null => {
+      const prop = match[1];
+      const onType = match[2];
+      const suggestion = match[3];
+      if (prop !== undefined && onType !== undefined && suggestion !== undefined) {
+        return {
+          expected: `'${suggestion}' (suggestion)`,
+          actual: `property '${prop}' on ${onType}`,
+        };
+      }
+      return null;
+    },
+  },
+  // TS2769: No overload matches this call.
+  // This is often followed by multi-line details, but we extract basic info
+  {
+    codes: ['TS2769'],
+    pattern: /No overload matches this call/,
+    extractor: (): TypeDetails | null => {
+      return { expected: 'valid overload arguments', actual: 'arguments that match no overload' };
+    },
+  },
+  // TS2740: Type 'X' is missing the following properties from type 'Y': prop1, prop2, ...
+  {
+    codes: ['TS2740'],
+    pattern: /Type '(.+?)' is missing the following properties from type '(.+?)': (.+)/,
+    extractor: (match: RegExpMatchArray): TypeDetails | null => {
+      const actualType = match[1];
+      const expectedType = match[2];
+      const missingProps = match[3];
+      if (actualType !== undefined && expectedType !== undefined && missingProps !== undefined) {
+        return { expected: `${expectedType} (missing: ${missingProps})`, actual: actualType };
+      }
+      return null;
+    },
+  },
+  // TS2559: Type 'X' has no properties in common with type 'Y'.
+  {
+    codes: ['TS2559'],
+    pattern: /Type '(.+?)' has no properties in common with type '(.+?)'/,
+    extractor: (match: RegExpMatchArray): TypeDetails | null => {
+      const actualType = match[1];
+      const expectedType = match[2];
+      if (actualType !== undefined && expectedType !== undefined) {
+        return { expected: expectedType, actual: actualType };
+      }
+      return null;
+    },
+  },
+  // TS2352: Conversion of type 'X' to type 'Y' may be a mistake.
+  {
+    codes: ['TS2352'],
+    pattern: /Conversion of type '(.+?)' to type '(.+?)' may be a mistake/,
+    extractor: (match: RegExpMatchArray): TypeDetails | null => {
+      const actualType = match[1];
+      const expectedType = match[2];
+      if (actualType !== undefined && expectedType !== undefined) {
+        return { expected: expectedType, actual: actualType };
+      }
+      return null;
+    },
+  },
+];
+
+/**
+ * Parses type details from a TypeScript compiler error message.
+ *
+ * Extracts structured information about type mismatches, including the expected
+ * and actual types involved in the error.
+ *
+ * @param code - The TypeScript error code (e.g., "TS2322").
+ * @param message - The error message text.
+ * @returns TypeDetails if the message could be parsed, null otherwise.
+ *
+ * @example
+ * // TS2322: Type 'string' is not assignable to type 'number'
+ * parseTypeDetails('TS2322', "Type 'string' is not assignable to type 'number'")
+ * // Returns: { expected: 'number', actual: 'string' }
+ *
+ * @example
+ * // Unparseable error message
+ * parseTypeDetails('TS9999', "Some unknown error format")
+ * // Returns: null
+ */
+export function parseTypeDetails(code: string, message: string): TypeDetails | null {
+  // Try each pattern in order
+  for (const { codes, pattern, extractor } of TYPE_MISMATCH_PATTERNS) {
+    // Skip if code doesn't match any of the pattern's applicable codes
+    if (!codes.includes(code)) {
+      continue;
+    }
+
+    const match = message.match(pattern);
+    if (match) {
+      return extractor(match);
+    }
+  }
+
+  // Generic fallback: try to extract any "Type 'X' ... 'Y'" pattern
+  const genericTypeMatch = /Type '(.+?)'.+?type '(.+?)'/.exec(message);
+  if (genericTypeMatch) {
+    const actual = genericTypeMatch[1];
+    const expected = genericTypeMatch[2];
+    if (actual !== undefined && expected !== undefined) {
+      return { expected, actual };
+    }
+  }
+
+  return null;
+}
+
 /**
  * Parses TypeScript compiler output into structured CompilerError objects.
  *
  * @param output - The raw tsc output string.
  * @param projectPath - The project path to resolve relative file paths.
- * @returns Array of CompilerError objects.
+ * @returns Array of CompilerError objects with enriched type details.
  */
 function parseCompilerOutput(output: string, projectPath: string): CompilerError[] {
   const errors: CompilerError[] = [];
@@ -105,6 +322,7 @@ function parseCompilerOutput(output: string, projectPath: string): CompilerError
           column: parseInt(columnStr, 10),
           code,
           message,
+          typeDetails: parseTypeDetails(code, message),
         });
       }
     }
