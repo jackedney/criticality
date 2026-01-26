@@ -8,7 +8,8 @@ import { runTypeCheck, ToolchainNotInstalledError, parseTypeDetails } from './ty
 
 const FIXTURES_DIR = path.resolve(import.meta.dirname, '../../../test-fixtures');
 
-describe('runTypeCheck', () => {
+// These tests invoke tsc which can be slow in CI environments
+describe('runTypeCheck', { timeout: 15000 }, () => {
   describe('clean project', () => {
     it('should return success for a project with no type errors', async () => {
       const projectPath = path.join(FIXTURES_DIR, 'typecheck-clean');
@@ -67,7 +68,7 @@ describe('runTypeCheck', () => {
 
       expect(result.success).toBe(true);
       expect(result.errorCount).toBe(0);
-    }, 15000); // Extended timeout for file-specific tsc invocation
+    });
   });
 
   describe('custom tsconfig', () => {
