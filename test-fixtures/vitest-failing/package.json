@@ -1,0 +1,5 @@
+{
+  "name": "vitest-failing-fixture",
+  "type": "module",
+  "private": true
+}
