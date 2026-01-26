@@ -261,13 +261,79 @@ function buildCallGraph(functions: FunctionLike[]): Map<string, Set<string>> {
 }
 
 /**
+ * Finds strongly connected components (cycles) in the dependency graph using Tarjan's algorithm.
+ * Returns SCCs in reverse topological order (leaves first).
+ *
+ * @param nodes - Set of node names.
+ * @param dependsOn - Map of node name to nodes it depends on (calls).
+ * @returns Array of SCCs, where each SCC is an array of node names.
+ */
+function findStronglyConnectedComponents(
+  nodes: Set<string>,
+  dependsOn: Map<string, Set<string>>
+): string[][] {
+  let index = 0;
+  const stack: string[] = [];
+  const onStack = new Set<string>();
+  const indices = new Map<string, number>();
+  const lowLinks = new Map<string, number>();
+  const sccs: string[][] = [];
+
+  function strongConnect(v: string): void {
+    indices.set(v, index);
+    lowLinks.set(v, index);
+    index++;
+    stack.push(v);
+    onStack.add(v);
+
+    const deps = dependsOn.get(v) ?? new Set<string>();
+    for (const w of deps) {
+      if (!nodes.has(w)) {
+        continue;
+      }
+      if (!indices.has(w)) {
+        strongConnect(w);
+        lowLinks.set(v, Math.min(lowLinks.get(v) ?? 0, lowLinks.get(w) ?? 0));
+      } else if (onStack.has(w)) {
+        lowLinks.set(v, Math.min(lowLinks.get(v) ?? 0, indices.get(w) ?? 0));
+      }
+    }
+
+    if (lowLinks.get(v) === indices.get(v)) {
+      const scc: string[] = [];
+      let w: string | undefined;
+      do {
+        w = stack.pop();
+        if (w !== undefined) {
+          onStack.delete(w);
+          scc.push(w);
+        }
+      } while (w !== v && w !== undefined);
+      sccs.push(scc.sort()); // Sort for deterministic ordering
+    }
+  }
+
+  // Process nodes in sorted order for determinism
+  const sortedNodes = [...nodes].sort();
+  for (const v of sortedNodes) {
+    if (!indices.has(v)) {
+      strongConnect(v);
+    }
+  }
+
+  return sccs;
+}
+
+/**
  * Performs topological sort on functions based on their call dependencies.
  * Returns functions in order where leaves (functions that don't call other TODO functions) come first.
  * This ensures we implement dependencies before the functions that depend on them.
+ * Handles cycles by grouping cycle members together as a batch.
  *
  * @param functions - Array of TodoFunction objects.
  * @param callGraph - Map of function name to called function names.
  * @returns Sorted array with leaves first (dependencies before dependents).
+ *          Functions in cycles are grouped together as a batch.
  */
 function topologicalSort(
   functions: TodoFunction[],
@@ -292,77 +358,144 @@ function topologicalSort(
     dependsOn.set(func.name, filteredCalls);
   }
 
-  // Build reverse graph: callee -> [callers that depend on it]
-  const dependedOnBy = new Map<string, Set<string>>();
-  for (const func of functions) {
-    dependedOnBy.set(func.name, new Set());
+  // Find SCCs (cycle detection) - returns SCCs in reverse topological order
+  const sccs = findStronglyConnectedComponents(todoNames, dependsOn);
+
+  // Build SCC-level dependency graph
+  const nodeToScc = new Map<string, number>();
+  for (let i = 0; i < sccs.length; i++) {
+    const scc = sccs[i];
+    if (scc) {
+      for (const node of scc) {
+        nodeToScc.set(node, i);
+      }
+    }
+  }
+
+  // Build SCC-level dependencies
+  const sccDepsOn = new Map<number, Set<number>>();
+  for (let i = 0; i < sccs.length; i++) {
+    sccDepsOn.set(i, new Set());
   }
   for (const [caller, callees] of dependsOn) {
+    const callerScc = nodeToScc.get(caller);
+    if (callerScc === undefined) {
+      continue;
+    }
     for (const callee of callees) {
-      dependedOnBy.get(callee)?.add(caller);
+      const calleeScc = nodeToScc.get(callee);
+      if (calleeScc !== undefined && calleeScc !== callerScc) {
+        sccDepsOn.get(callerScc)?.add(calleeScc);
+      }
     }
   }
 
-  // Kahn's algorithm: start with functions that have no dependencies (leaves)
-  // out-degree in dependsOn = how many TODO functions this function calls
-  const outDegree = new Map<string, number>();
-  for (const func of functions) {
-    outDegree.set(func.name, dependsOn.get(func.name)?.size ?? 0);
+  // Topologically sort SCCs using Kahn's algorithm
+  const sccOutDegree = new Map<number, number>();
+  const sccDependedOnBy = new Map<number, Set<number>>();
+  for (let i = 0; i < sccs.length; i++) {
+    sccOutDegree.set(i, sccDepsOn.get(i)?.size ?? 0);
+    sccDependedOnBy.set(i, new Set());
+  }
+  for (const [scc, deps] of sccDepsOn) {
+    for (const dep of deps) {
+      sccDependedOnBy.get(dep)?.add(scc);
+    }
   }
 
-  // Queue starts with functions that don't call any other TODO functions (leaves)
-  const queue: string[] = [];
-  for (const [name, degree] of outDegree) {
+  // Start with SCCs that have no outgoing dependencies (leaves)
+  const sccQueue: number[] = [];
+  for (const [scc, degree] of sccOutDegree) {
     if (degree === 0) {
-      queue.push(name);
+      sccQueue.push(scc);
     }
   }
-
-  // Sort queue for deterministic ordering
-  queue.sort();
+  sccQueue.sort((a, b) => a - b);
 
   const result: TodoFunction[] = [];
   const funcMap = new Map(functions.map((f) => [f.name, f]));
+  const processedSccs = new Set<number>();
 
-  while (queue.length > 0) {
-    const name = queue.shift();
-    if (name === undefined) {
-      break;
+  while (sccQueue.length > 0) {
+    const sccIndex = sccQueue.shift();
+    if (sccIndex === undefined || processedSccs.has(sccIndex)) {
+      continue;
     }
-    const func = funcMap.get(name);
-    if (func !== undefined) {
-      result.push(func);
+    processedSccs.add(sccIndex);
+
+    const scc = sccs[sccIndex];
+    if (scc) {
+      // Add all functions in this SCC (already sorted for determinism)
+      for (const name of scc) {
+        const func = funcMap.get(name);
+        if (func !== undefined) {
+          result.push(func);
+        }
+      }
     }
 
-    // For each function that depends on the current one,
-    // decrement its out-degree (one less dependency to satisfy)
-    const callers = dependedOnBy.get(name);
-    if (callers) {
-      for (const caller of callers) {
-        const newDegree = (outDegree.get(caller) ?? 1) - 1;
-        outDegree.set(caller, newDegree);
-        if (newDegree === 0) {
-          // Insert in sorted position for deterministic ordering
-          const insertIndex = queue.findIndex((q) => q > caller);
+    // Update SCC-level dependencies
+    const dependents = sccDependedOnBy.get(sccIndex);
+    if (dependents) {
+      for (const dependent of dependents) {
+        const newDegree = (sccOutDegree.get(dependent) ?? 1) - 1;
+        sccOutDegree.set(dependent, newDegree);
+        if (newDegree === 0 && !processedSccs.has(dependent)) {
+          // Insert in sorted position
+          const insertIndex = sccQueue.findIndex((q) => q > dependent);
           if (insertIndex === -1) {
-            queue.push(caller);
+            sccQueue.push(dependent);
           } else {
-            queue.splice(insertIndex, 0, caller);
+            sccQueue.splice(insertIndex, 0, dependent);
           }
         }
       }
     }
   }
 
-  // Handle cycles: add any remaining functions not in result
-  const resultNames = new Set(result.map((f) => f.name));
-  for (const func of functions) {
-    if (!resultNames.has(func.name)) {
-      result.push(func);
-    }
+  return result;
+}
+
+/**
+ * Orders functions by their dependencies using topological sort.
+ * Functions are returned with leaves first (functions that don't depend on other TODO functions).
+ * This enables injection to proceed from independent functions to those that depend on them.
+ *
+ * @param functions - Array of TodoFunction objects to order.
+ * @param project - The ts-morph Project containing the source files.
+ * @returns Functions in topological order with leaves first.
+ *          Functions in cycles are grouped together as a batch.
+ *
+ * @example
+ * // If A calls B and B calls C, order is [C, B, A]
+ * const ordered = orderByDependency([A, B, C], project);
+ * // ordered === [C, B, A]
+ *
+ * @example
+ * // If A and B call each other (cycle), they are returned as a batch
+ * const ordered = orderByDependency([A, B], project);
+ * // ordered contains both A and B adjacent to each other
+ */
+export function orderByDependency(functions: TodoFunction[], project: Project): TodoFunction[] {
+  if (functions.length === 0) {
+    return [];
   }
 
-  return result;
+  // Get all source files from the project
+  const allFunctions: FunctionLike[] = [];
+  for (const sourceFile of project.getSourceFiles()) {
+    const filePath = sourceFile.getFilePath();
+    if (filePath.includes('node_modules') || filePath.endsWith('.d.ts')) {
+      continue;
+    }
+    allFunctions.push(...collectFunctions(sourceFile));
+  }
+
+  // Build call graph from all functions
+  const callGraph = buildCallGraph(allFunctions);
+
+  // Perform topological sort
+  return topologicalSort(functions, callGraph);
 }
 
 /**

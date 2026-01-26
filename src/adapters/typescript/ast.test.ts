@@ -10,6 +10,8 @@ import {
   injectFunctionBody,
   FunctionNotFoundError,
   InvalidBodySyntaxError,
+  orderByDependency,
+  type TodoFunction,
 } from './ast.js';
 
 describe('createProject', () => {
@@ -1066,6 +1068,454 @@ return value;`
       const error = new InvalidBodySyntaxError('myFunc', 'unexpected token');
 
       expect(error).toBeInstanceOf(Error);
+    });
+  });
+});
+
+describe('orderByDependency', () => {
+  let tempDir: string;
+  let project: Project;
+
+  beforeEach(() => {
+    tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'topo-test-'));
+    project = createProject();
+  });
+
+  afterEach(() => {
+    fs.rmSync(tempDir, { recursive: true, force: true });
+  });
+
+  function addSourceFile(filename: string, content: string): string {
+    const filePath = path.join(tempDir, filename);
+    fs.writeFileSync(filePath, content);
+    project.addSourceFileAtPath(filePath);
+    return filePath;
+  }
+
+  function createTodoFunction(name: string, filePath: string, line: number): TodoFunction {
+    return {
+      name,
+      filePath,
+      line,
+      signature: `function ${name}()`,
+      hasTodoBody: true,
+    };
+  }
+
+  describe('linear dependency chain', () => {
+    it('returns functions in topological order (leaves first) for A -> B -> C', () => {
+      const filePath = addSourceFile(
+        'chain.ts',
+        `
+        export function functionA(): number {
+          return functionB() + 1;
+        }
+
+        export function functionB(): number {
+          return functionC() * 2;
+        }
+
+        export function functionC(): number {
+          return 42;
+        }
+      `
+      );
+
+      const todos: TodoFunction[] = [
+        createTodoFunction('functionA', filePath, 2),
+        createTodoFunction('functionB', filePath, 6),
+        createTodoFunction('functionC', filePath, 10),
+      ];
+
+      const ordered = orderByDependency(todos, project);
+
+      expect(ordered).toHaveLength(3);
+      // C is a leaf (called by B, calls nothing)
+      // B is called by A, calls C
+      // A is the root (calls B, called by nothing)
+      // Expected order: C first, then B, then A
+      expect(ordered[0]?.name).toBe('functionC');
+      expect(ordered[1]?.name).toBe('functionB');
+      expect(ordered[2]?.name).toBe('functionA');
+    });
+  });
+
+  describe('independent functions (no dependencies)', () => {
+    it('returns functions sorted alphabetically for determinism', () => {
+      const filePath = addSourceFile(
+        'independent.ts',
+        `
+        export function zeta(): number {
+          return 1;
+        }
+
+        export function alpha(): number {
+          return 2;
+        }
+
+        export function beta(): number {
+          return 3;
+        }
+      `
+      );
+
+      const todos: TodoFunction[] = [
+        createTodoFunction('zeta', filePath, 2),
+        createTodoFunction('alpha', filePath, 6),
+        createTodoFunction('beta', filePath, 10),
+      ];
+
+      const ordered = orderByDependency(todos, project);
+
+      expect(ordered).toHaveLength(3);
+      // All are leaves, should be sorted alphabetically for determinism
+      expect(ordered[0]?.name).toBe('alpha');
+      expect(ordered[1]?.name).toBe('beta');
+      expect(ordered[2]?.name).toBe('zeta');
+    });
+  });
+
+  describe('cycle handling', () => {
+    it('groups functions in a two-node cycle together', () => {
+      const filePath = addSourceFile(
+        'cycle-two.ts',
+        `
+        export function funcA(): number {
+          return funcB() + 1;
+        }
+
+        export function funcB(): number {
+          return funcA() - 1;
+        }
+      `
+      );
+
+      const todos: TodoFunction[] = [
+        createTodoFunction('funcA', filePath, 2),
+        createTodoFunction('funcB', filePath, 6),
+      ];
+
+      const ordered = orderByDependency(todos, project);
+
+      expect(ordered).toHaveLength(2);
+      // Both should be in the result, adjacent to each other (as a batch)
+      const names = ordered.map((f) => f.name);
+      expect(names).toContain('funcA');
+      expect(names).toContain('funcB');
+      // They should be adjacent (both in the same SCC batch)
+      const indexA = names.indexOf('funcA');
+      const indexB = names.indexOf('funcB');
+      expect(Math.abs(indexA - indexB)).toBe(1);
+    });
+
+    it('groups functions in a three-node cycle together', () => {
+      const filePath = addSourceFile(
+        'cycle-three.ts',
+        `
+        export function cycleA(): number {
+          return cycleB() + 1;
+        }
+
+        export function cycleB(): number {
+          return cycleC() + 1;
+        }
+
+        export function cycleC(): number {
+          return cycleA() + 1;
+        }
+      `
+      );
+
+      const todos: TodoFunction[] = [
+        createTodoFunction('cycleA', filePath, 2),
+        createTodoFunction('cycleB', filePath, 6),
+        createTodoFunction('cycleC', filePath, 10),
+      ];
+
+      const ordered = orderByDependency(todos, project);
+
+      expect(ordered).toHaveLength(3);
+      // All three should be grouped together as a batch
+      const names = ordered.map((f) => f.name);
+      expect(names).toContain('cycleA');
+      expect(names).toContain('cycleB');
+      expect(names).toContain('cycleC');
+    });
+
+    it('handles cycle with external dependency', () => {
+      const filePath = addSourceFile(
+        'cycle-with-external.ts',
+        `
+        export function cycleX(): number {
+          return cycleY() + helper();
+        }
+
+        export function cycleY(): number {
+          return cycleX() - 1;
+        }
+
+        function helper(): number {
+          return 42;
+        }
+      `
+      );
+
+      const todos: TodoFunction[] = [
+        createTodoFunction('cycleX', filePath, 2),
+        createTodoFunction('cycleY', filePath, 6),
+      ];
+
+      const ordered = orderByDependency(todos, project);
+
+      expect(ordered).toHaveLength(2);
+      const names = ordered.map((f) => f.name);
+      expect(names).toContain('cycleX');
+      expect(names).toContain('cycleY');
+    });
+
+    it('orders cycle after its dependencies', () => {
+      const filePath = addSourceFile(
+        'cycle-with-dependency.ts',
+        `
+        export function leaf(): number {
+          return 1;
+        }
+
+        export function cycleP(): number {
+          return cycleQ() + leaf();
+        }
+
+        export function cycleQ(): number {
+          return cycleP() - 1;
+        }
+      `
+      );
+
+      const todos: TodoFunction[] = [
+        createTodoFunction('leaf', filePath, 2),
+        createTodoFunction('cycleP', filePath, 6),
+        createTodoFunction('cycleQ', filePath, 10),
+      ];
+
+      const ordered = orderByDependency(todos, project);
+
+      expect(ordered).toHaveLength(3);
+      // leaf should come first as it has no dependencies
+      expect(ordered[0]?.name).toBe('leaf');
+      // Then the cycle (cycleP and cycleQ)
+      const remainingNames = ordered.slice(1).map((f) => f.name);
+      expect(remainingNames).toContain('cycleP');
+      expect(remainingNames).toContain('cycleQ');
+    });
+
+    it('handles diamond dependency with cycle', () => {
+      const filePath = addSourceFile(
+        'diamond-cycle.ts',
+        `
+        export function top(): number {
+          return left() + right();
+        }
+
+        export function left(): number {
+          return bottom();
+        }
+
+        export function right(): number {
+          return bottom();
+        }
+
+        export function bottom(): number {
+          return 1;
+        }
+      `
+      );
+
+      const todos: TodoFunction[] = [
+        createTodoFunction('top', filePath, 2),
+        createTodoFunction('left', filePath, 6),
+        createTodoFunction('right', filePath, 10),
+        createTodoFunction('bottom', filePath, 14),
+      ];
+
+      const ordered = orderByDependency(todos, project);
+
+      expect(ordered).toHaveLength(4);
+      // bottom should come first (leaf)
+      expect(ordered[0]?.name).toBe('bottom');
+      // left and right can be in any order (both depend on bottom)
+      const middleNames = ordered.slice(1, 3).map((f) => f.name);
+      expect(middleNames).toContain('left');
+      expect(middleNames).toContain('right');
+      // top should come last (depends on left and right)
+      expect(ordered[3]?.name).toBe('top');
+    });
+  });
+
+  describe('external dependencies (node_modules)', () => {
+    it('treats function with external-only dependencies as leaf', () => {
+      const filePath = addSourceFile(
+        'external-deps.ts',
+        `
+        import * as fs from 'fs';
+
+        export function readFile(path: string): string {
+          return fs.readFileSync(path, 'utf-8');
+        }
+
+        export function processFile(path: string): string {
+          return readFile(path).toUpperCase();
+        }
+      `
+      );
+
+      const todos: TodoFunction[] = [
+        createTodoFunction('readFile', filePath, 4),
+        createTodoFunction('processFile', filePath, 8),
+      ];
+
+      const ordered = orderByDependency(todos, project);
+
+      expect(ordered).toHaveLength(2);
+      // readFile is a leaf (only calls external fs)
+      // processFile calls readFile
+      expect(ordered[0]?.name).toBe('readFile');
+      expect(ordered[1]?.name).toBe('processFile');
+    });
+
+    it('ignores calls to non-project functions', () => {
+      const filePath = addSourceFile(
+        'external-only.ts',
+        `
+        export function funcWithExternalCalls(): void {
+          console.log('hello');
+          JSON.stringify({});
+        }
+
+        export function anotherFunc(): void {
+          funcWithExternalCalls();
+        }
+      `
+      );
+
+      const todos: TodoFunction[] = [
+        createTodoFunction('funcWithExternalCalls', filePath, 2),
+        createTodoFunction('anotherFunc', filePath, 7),
+      ];
+
+      const ordered = orderByDependency(todos, project);
+
+      expect(ordered).toHaveLength(2);
+      // funcWithExternalCalls is a leaf (only calls globals)
+      expect(ordered[0]?.name).toBe('funcWithExternalCalls');
+      expect(ordered[1]?.name).toBe('anotherFunc');
+    });
+  });
+
+  describe('edge cases', () => {
+    it('returns empty array for empty input', () => {
+      addSourceFile('empty.ts', `export function foo(): void {}`);
+
+      const ordered = orderByDependency([], project);
+
+      expect(ordered).toHaveLength(0);
+    });
+
+    it('handles single function', () => {
+      const filePath = addSourceFile(
+        'single.ts',
+        `
+        export function onlyOne(): number {
+          return 42;
+        }
+      `
+      );
+
+      const todos: TodoFunction[] = [createTodoFunction('onlyOne', filePath, 2)];
+
+      const ordered = orderByDependency(todos, project);
+
+      expect(ordered).toHaveLength(1);
+      expect(ordered[0]?.name).toBe('onlyOne');
+    });
+
+    it('handles self-recursive function', () => {
+      const filePath = addSourceFile(
+        'recursive.ts',
+        `
+        export function factorial(n: number): number {
+          if (n <= 1) return 1;
+          return n * factorial(n - 1);
+        }
+      `
+      );
+
+      const todos: TodoFunction[] = [createTodoFunction('factorial', filePath, 2)];
+
+      const ordered = orderByDependency(todos, project);
+
+      expect(ordered).toHaveLength(1);
+      expect(ordered[0]?.name).toBe('factorial');
+    });
+
+    it('handles method calls (not tracked as dependencies)', () => {
+      const filePath = addSourceFile(
+        'method-calls.ts',
+        `
+        export function funcA(): number {
+          const arr = [1, 2, 3];
+          return arr.map(x => x * 2).reduce((a, b) => a + b);
+        }
+
+        export function funcB(): number {
+          return funcA() + 1;
+        }
+      `
+      );
+
+      const todos: TodoFunction[] = [
+        createTodoFunction('funcA', filePath, 2),
+        createTodoFunction('funcB', filePath, 7),
+      ];
+
+      const ordered = orderByDependency(todos, project);
+
+      expect(ordered).toHaveLength(2);
+      expect(ordered[0]?.name).toBe('funcA');
+      expect(ordered[1]?.name).toBe('funcB');
+    });
+
+    it('handles functions across multiple files', () => {
+      const fileA = addSourceFile(
+        'fileA.ts',
+        `
+        export function funcInA(): number {
+          return funcInB();
+        }
+
+        declare function funcInB(): number;
+      `
+      );
+
+      const fileB = addSourceFile(
+        'fileB.ts',
+        `
+        export function funcInB(): number {
+          return 42;
+        }
+      `
+      );
+
+      const todos: TodoFunction[] = [
+        createTodoFunction('funcInA', fileA, 2),
+        createTodoFunction('funcInB', fileB, 2),
+      ];
+
+      const ordered = orderByDependency(todos, project);
+
+      expect(ordered).toHaveLength(2);
+      // funcInB is a leaf, funcInA depends on it
+      expect(ordered[0]?.name).toBe('funcInB');
+      expect(ordered[1]?.name).toBe('funcInA');
     });
   });
 });
