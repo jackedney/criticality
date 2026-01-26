@@ -6,7 +6,8 @@
 
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { Project } from 'ts-morph';
-import { parseContracts, ContractSyntaxError } from './contracts.js';
+import { parseContracts, ContractSyntaxError, serializeContractForPrompt } from './contracts.js';
+import type { MicroContract } from './assertions.js';
 
 describe('parseContracts', () => {
   let project: Project;
@@ -1362,5 +1363,461 @@ describe('ContractSyntaxError', () => {
     const error = new ContractSyntaxError('message', 'expr', 'reason', 1, 'requires');
 
     expect(error).toBeInstanceOf(Error);
+  });
+});
+
+describe('serializeContractForPrompt', () => {
+  describe('basic serialization', () => {
+    it('serializes requires clauses', () => {
+      const contract: MicroContract = {
+        functionName: 'test',
+        filePath: 'test.ts',
+        requires: ['x > 0'],
+        ensures: [],
+        invariants: [],
+        claimRefs: [],
+      };
+
+      const result = serializeContractForPrompt(contract);
+
+      expect(result).toBe('REQUIRES: x > 0');
+    });
+
+    it('serializes multiple requires clauses', () => {
+      const contract: MicroContract = {
+        functionName: 'test',
+        filePath: 'test.ts',
+        requires: ['x > 0', 'y !== 0'],
+        ensures: [],
+        invariants: [],
+        claimRefs: [],
+      };
+
+      const result = serializeContractForPrompt(contract);
+
+      expect(result).toBe('REQUIRES: x > 0\nREQUIRES: y !== 0');
+    });
+
+    it('serializes ensures clauses', () => {
+      const contract: MicroContract = {
+        functionName: 'test',
+        filePath: 'test.ts',
+        requires: [],
+        ensures: ['result !== null'],
+        invariants: [],
+        claimRefs: [],
+      };
+
+      const result = serializeContractForPrompt(contract);
+
+      expect(result).toBe('ENSURES: result !== null');
+    });
+
+    it('serializes multiple ensures clauses', () => {
+      const contract: MicroContract = {
+        functionName: 'test',
+        filePath: 'test.ts',
+        requires: [],
+        ensures: ['result >= 0', 'result < 100'],
+        invariants: [],
+        claimRefs: [],
+      };
+
+      const result = serializeContractForPrompt(contract);
+
+      expect(result).toBe('ENSURES: result >= 0\nENSURES: result < 100');
+    });
+
+    it('serializes invariant clauses', () => {
+      const contract: MicroContract = {
+        functionName: 'test',
+        filePath: 'test.ts',
+        requires: [],
+        ensures: [],
+        invariants: ['this.balance >= 0'],
+        claimRefs: [],
+      };
+
+      const result = serializeContractForPrompt(contract);
+
+      expect(result).toBe('INVARIANT: this.balance >= 0');
+    });
+
+    it('serializes complexity requirement', () => {
+      const contract: MicroContract = {
+        functionName: 'test',
+        filePath: 'test.ts',
+        requires: [],
+        ensures: [],
+        invariants: [],
+        claimRefs: [],
+        complexity: 'O(n)',
+      };
+
+      const result = serializeContractForPrompt(contract);
+
+      expect(result).toBe('COMPLEXITY: O(n)');
+    });
+
+    it('serializes purity requirement', () => {
+      const contract: MicroContract = {
+        functionName: 'test',
+        filePath: 'test.ts',
+        requires: [],
+        ensures: [],
+        invariants: [],
+        claimRefs: [],
+        purity: 'pure',
+      };
+
+      const result = serializeContractForPrompt(contract);
+
+      expect(result).toBe('PURITY: pure');
+    });
+  });
+
+  describe('inline assertions', () => {
+    it('serializes inline invariant assertions', () => {
+      const contract: MicroContract = {
+        functionName: 'test',
+        filePath: 'test.ts',
+        requires: [],
+        ensures: [],
+        invariants: [],
+        claimRefs: [],
+        inlineAssertions: [{ type: 'invariant', expression: 'this.count >= 0', lineNumber: 10 }],
+      };
+
+      const result = serializeContractForPrompt(contract);
+
+      expect(result).toBe('INVARIANT: this.count >= 0');
+    });
+
+    it('serializes inline assert assertions', () => {
+      const contract: MicroContract = {
+        functionName: 'test',
+        filePath: 'test.ts',
+        requires: [],
+        ensures: [],
+        invariants: [],
+        claimRefs: [],
+        inlineAssertions: [{ type: 'assert', expression: 'arr.length > 0', lineNumber: 5 }],
+      };
+
+      const result = serializeContractForPrompt(contract);
+
+      expect(result).toBe('ASSERT: arr.length > 0');
+    });
+
+    it('serializes multiple inline assertions', () => {
+      const contract: MicroContract = {
+        functionName: 'test',
+        filePath: 'test.ts',
+        requires: [],
+        ensures: [],
+        invariants: [],
+        claimRefs: [],
+        inlineAssertions: [
+          { type: 'invariant', expression: 'this.count >= 0', lineNumber: 10 },
+          { type: 'assert', expression: 'x > 0', lineNumber: 12 },
+        ],
+      };
+
+      const result = serializeContractForPrompt(contract);
+
+      expect(result).toBe('INVARIANT: this.count >= 0\nASSERT: x > 0');
+    });
+  });
+
+  describe('combined contracts', () => {
+    it('serializes all contract elements in correct order', () => {
+      const contract: MicroContract = {
+        functionName: 'test',
+        filePath: 'test.ts',
+        requires: ['x > 0'],
+        ensures: ['result > x'],
+        invariants: ['this.balance >= 0'],
+        claimRefs: ['inv_001'],
+        complexity: 'O(n)',
+        purity: 'pure',
+      };
+
+      const result = serializeContractForPrompt(contract);
+
+      const lines = result.split('\n');
+      expect(lines).toEqual([
+        'REQUIRES: x > 0',
+        'ENSURES: result > x',
+        'INVARIANT: this.balance >= 0',
+        'COMPLEXITY: O(n)',
+        'PURITY: pure',
+      ]);
+    });
+
+    it('example from acceptance criteria', () => {
+      const contract: MicroContract = {
+        functionName: 'process',
+        filePath: 'file.ts',
+        requires: ['x > 0'],
+        ensures: ['result > x'],
+        invariants: [],
+        claimRefs: ['inv_001'],
+        complexity: 'O(n)',
+        purity: 'pure',
+      };
+
+      const result = serializeContractForPrompt(contract);
+
+      expect(result).toBe('REQUIRES: x > 0\nENSURES: result > x\nCOMPLEXITY: O(n)\nPURITY: pure');
+    });
+  });
+
+  describe('CLAIM_REF exclusion', () => {
+    it('excludes CLAIM_REF from output (internal traceability)', () => {
+      const contract: MicroContract = {
+        functionName: 'test',
+        filePath: 'test.ts',
+        requires: ['x > 0'],
+        ensures: [],
+        invariants: [],
+        claimRefs: ['inv_001', 'perf_002'],
+      };
+
+      const result = serializeContractForPrompt(contract);
+
+      expect(result).toBe('REQUIRES: x > 0');
+      expect(result).not.toContain('CLAIM_REF');
+      expect(result).not.toContain('inv_001');
+      expect(result).not.toContain('perf_002');
+    });
+
+    it('excludes CLAIM_REF even when only claim refs present', () => {
+      const contract: MicroContract = {
+        functionName: 'test',
+        filePath: 'test.ts',
+        requires: [],
+        ensures: [],
+        invariants: [],
+        claimRefs: ['inv_001'],
+      };
+
+      const result = serializeContractForPrompt(contract);
+
+      expect(result).toBe('');
+    });
+  });
+
+  describe('negative case: no clauses', () => {
+    it('returns empty string for contract with no clauses', () => {
+      const contract: MicroContract = {
+        functionName: 'test',
+        filePath: 'test.ts',
+        requires: [],
+        ensures: [],
+        invariants: [],
+        claimRefs: [],
+      };
+
+      const result = serializeContractForPrompt(contract);
+
+      expect(result).toBe('');
+    });
+
+    it('returns empty string when only claimRefs present', () => {
+      const contract: MicroContract = {
+        functionName: 'test',
+        filePath: 'test.ts',
+        requires: [],
+        ensures: [],
+        invariants: [],
+        claimRefs: ['inv_001', 'behavior_002'],
+      };
+
+      const result = serializeContractForPrompt(contract);
+
+      expect(result).toBe('');
+    });
+
+    it('returns empty string when inlineAssertions is undefined', () => {
+      const contract: MicroContract = {
+        functionName: 'test',
+        filePath: 'test.ts',
+        requires: [],
+        ensures: [],
+        invariants: [],
+        claimRefs: [],
+        // inlineAssertions is undefined
+      };
+
+      const result = serializeContractForPrompt(contract);
+
+      expect(result).toBe('');
+    });
+
+    it('returns empty string when inlineAssertions is empty array', () => {
+      const contract: MicroContract = {
+        functionName: 'test',
+        filePath: 'test.ts',
+        requires: [],
+        ensures: [],
+        invariants: [],
+        claimRefs: [],
+        inlineAssertions: [],
+      };
+
+      const result = serializeContractForPrompt(contract);
+
+      expect(result).toBe('');
+    });
+  });
+
+  describe('concise format for token minimization', () => {
+    it('uses single line per clause', () => {
+      const contract: MicroContract = {
+        functionName: 'test',
+        filePath: 'test.ts',
+        requires: ['x > 0', 'y > 0'],
+        ensures: ['result !== null'],
+        invariants: [],
+        claimRefs: [],
+      };
+
+      const result = serializeContractForPrompt(contract);
+      const lines = result.split('\n');
+
+      // Each clause should be on its own line
+      expect(lines).toHaveLength(3);
+      expect(lines.every((line) => line.includes(':'))).toBe(true);
+    });
+
+    it('has no trailing newline', () => {
+      const contract: MicroContract = {
+        functionName: 'test',
+        filePath: 'test.ts',
+        requires: ['x > 0'],
+        ensures: [],
+        invariants: [],
+        claimRefs: [],
+      };
+
+      const result = serializeContractForPrompt(contract);
+
+      expect(result.endsWith('\n')).toBe(false);
+    });
+
+    it('has no leading newline', () => {
+      const contract: MicroContract = {
+        functionName: 'test',
+        filePath: 'test.ts',
+        requires: ['x > 0'],
+        ensures: [],
+        invariants: [],
+        claimRefs: [],
+      };
+
+      const result = serializeContractForPrompt(contract);
+
+      expect(result.startsWith('\n')).toBe(false);
+    });
+  });
+
+  describe('purity levels', () => {
+    it('serializes purity: reads', () => {
+      const contract: MicroContract = {
+        functionName: 'test',
+        filePath: 'test.ts',
+        requires: [],
+        ensures: [],
+        invariants: [],
+        claimRefs: [],
+        purity: 'reads',
+      };
+
+      const result = serializeContractForPrompt(contract);
+
+      expect(result).toBe('PURITY: reads');
+    });
+
+    it('serializes purity: writes', () => {
+      const contract: MicroContract = {
+        functionName: 'test',
+        filePath: 'test.ts',
+        requires: [],
+        ensures: [],
+        invariants: [],
+        claimRefs: [],
+        purity: 'writes',
+      };
+
+      const result = serializeContractForPrompt(contract);
+
+      expect(result).toBe('PURITY: writes');
+    });
+
+    it('serializes purity: io', () => {
+      const contract: MicroContract = {
+        functionName: 'test',
+        filePath: 'test.ts',
+        requires: [],
+        ensures: [],
+        invariants: [],
+        claimRefs: [],
+        purity: 'io',
+      };
+
+      const result = serializeContractForPrompt(contract);
+
+      expect(result).toBe('PURITY: io');
+    });
+  });
+
+  describe('complexity patterns', () => {
+    it('serializes O(1)', () => {
+      const contract: MicroContract = {
+        functionName: 'test',
+        filePath: 'test.ts',
+        requires: [],
+        ensures: [],
+        invariants: [],
+        claimRefs: [],
+        complexity: 'O(1)',
+      };
+
+      const result = serializeContractForPrompt(contract);
+
+      expect(result).toBe('COMPLEXITY: O(1)');
+    });
+
+    it('serializes O(n log n)', () => {
+      const contract: MicroContract = {
+        functionName: 'test',
+        filePath: 'test.ts',
+        requires: [],
+        ensures: [],
+        invariants: [],
+        claimRefs: [],
+        complexity: 'O(n log n)',
+      };
+
+      const result = serializeContractForPrompt(contract);
+
+      expect(result).toBe('COMPLEXITY: O(n log n)');
+    });
+
+    it('serializes O(n^2)', () => {
+      const contract: MicroContract = {
+        functionName: 'test',
+        filePath: 'test.ts',
+        requires: [],
+        ensures: [],
+        invariants: [],
+        claimRefs: [],
+        complexity: 'O(n^2)',
+      };
+
+      const result = serializeContractForPrompt(contract);
+
+      expect(result).toBe('COMPLEXITY: O(n^2)');
+    });
   });
 });

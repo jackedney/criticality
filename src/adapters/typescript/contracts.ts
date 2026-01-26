@@ -634,6 +634,91 @@ function parseNodeContracts(
 }
 
 /**
+ * Serializes a micro-contract into a human-readable format suitable for LLM prompts.
+ *
+ * The output format is concise to minimize token usage while providing clear
+ * constraint information for the Injection phase. CLAIM_REF information is
+ * excluded as it's for internal traceability, not for LLM consumption.
+ *
+ * @param contract - The micro-contract to serialize.
+ * @returns A formatted string representation of the contract clauses, or empty string if no clauses.
+ *
+ * @example
+ * // For a contract with requires, ensures, complexity, and purity:
+ * serializeContractForPrompt({
+ *   functionName: 'process',
+ *   filePath: 'file.ts',
+ *   requires: ['x > 0'],
+ *   ensures: ['result > x'],
+ *   invariants: [],
+ *   claimRefs: ['inv_001'],
+ *   complexity: 'O(n)',
+ *   purity: 'pure'
+ * })
+ * // Returns:
+ * // 'REQUIRES: x > 0
+ * // ENSURES: result > x
+ * // COMPLEXITY: O(n)
+ * // PURITY: pure'
+ *
+ * @example
+ * // For a contract with no clauses:
+ * serializeContractForPrompt({
+ *   functionName: 'func',
+ *   filePath: 'file.ts',
+ *   requires: [],
+ *   ensures: [],
+ *   invariants: [],
+ *   claimRefs: ['inv_001']  // Excluded from output
+ * })
+ * // Returns: ''
+ */
+export function serializeContractForPrompt(contract: MicroContract): string {
+  const lines: string[] = [];
+
+  // Add REQUIRES clauses
+  for (const req of contract.requires) {
+    lines.push(`REQUIRES: ${req}`);
+  }
+
+  // Add ENSURES clauses
+  for (const ens of contract.ensures) {
+    lines.push(`ENSURES: ${ens}`);
+  }
+
+  // Add INVARIANT clauses (from JSDoc @invariant)
+  for (const inv of contract.invariants) {
+    lines.push(`INVARIANT: ${inv}`);
+  }
+
+  // Add inline assertion invariants if present
+  if (contract.inlineAssertions !== undefined) {
+    for (const assertion of contract.inlineAssertions) {
+      if (assertion.type === 'invariant') {
+        lines.push(`INVARIANT: ${assertion.expression}`);
+      } else {
+        // assertion.type === 'assert'
+        lines.push(`ASSERT: ${assertion.expression}`);
+      }
+    }
+  }
+
+  // Add COMPLEXITY if present
+  if (contract.complexity !== undefined) {
+    lines.push(`COMPLEXITY: ${contract.complexity}`);
+  }
+
+  // Add PURITY if present
+  if (contract.purity !== undefined) {
+    lines.push(`PURITY: ${contract.purity}`);
+  }
+
+  // Note: CLAIM_REF is intentionally excluded (internal traceability, not for LLM)
+
+  return lines.join('\n');
+}
+
+/**
  * Parses contracts from a variable statement containing an arrow function or function expression.
  *
  * @param varStatement - The variable statement with JSDoc.
