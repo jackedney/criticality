@@ -315,3 +315,340 @@ function shouldWrapInParentheses(baseType: string): boolean {
 
   return false;
 }
+
+/**
+ * Represents a validation condition for a witness invariant.
+ */
+export interface InvariantCondition {
+  /** The condition expression (e.g., "value >= 0", "value.length > 0") */
+  expression: string;
+  /** Human-readable description of what this condition checks */
+  description?: string;
+}
+
+/**
+ * Options for generating validation factories.
+ */
+export interface ValidationFactoryOptions {
+  /** Include JSDoc comments in generated code */
+  includeJsDoc?: boolean;
+}
+
+/**
+ * Converts a witness name to a valid function name for the factory.
+ *
+ * @param name - The witness type name.
+ * @returns The name formatted for use in function names.
+ */
+function toFunctionName(name: string): string {
+  // If name starts with uppercase, keep it for camelCase naming
+  return name;
+}
+
+/**
+ * Formats type parameters for a function declaration (without constraints/defaults).
+ *
+ * @param typeParams - Array of type parameter definitions.
+ * @returns Formatted type parameter string for function use.
+ */
+function formatTypeParametersForFunction(typeParams: WitnessTypeParameter[] | undefined): string {
+  if (!typeParams || typeParams.length === 0) {
+    return '';
+  }
+  return `<${typeParams.map((tp) => tp.name).join(', ')}>`;
+}
+
+/**
+ * Generates a validation factory function, assertion function, and type guard
+ * for a witness type.
+ *
+ * The generated code includes:
+ * - `makeXxx(value: BaseType): Xxx | null` - Returns branded value or null
+ * - `assertXxx(value: BaseType): Xxx` - Returns branded value or throws
+ * - `isXxx(value: unknown): value is Xxx` - Type guard for runtime checking
+ *
+ * @param witness - The witness definition to generate factories for.
+ * @param options - Options for code generation.
+ * @returns The generated TypeScript code as a string.
+ * @throws InvalidBaseTypeError if the base type is invalid.
+ *
+ * @example
+ * // Simple number validation
+ * generateValidationFactory({
+ *   name: 'NonNegativeDecimal',
+ *   baseType: 'number',
+ *   invariant: 'value >= 0'
+ * })
+ * // Generates:
+ * // function makeNonNegativeDecimal(value: number): NonNegativeDecimal | null { ... }
+ * // function assertNonNegativeDecimal(value: number): NonNegativeDecimal { ... }
+ * // function isNonNegativeDecimal(value: unknown): value is NonNegativeDecimal { ... }
+ *
+ * @example
+ * // Generic non-empty array
+ * generateValidationFactory({
+ *   name: 'NonEmptyArray',
+ *   baseType: 'T[]',
+ *   typeParameters: [{ name: 'T' }],
+ *   invariant: 'value.length > 0'
+ * })
+ */
+export function generateValidationFactory(
+  witness: WitnessDefinition,
+  options: ValidationFactoryOptions = {}
+): string {
+  // Validate the base type
+  validateBaseType(witness.baseType);
+
+  const { includeJsDoc = true } = options;
+  const name = toFunctionName(witness.name);
+  const typeParams = formatTypeParameters(witness.typeParameters);
+  const funcTypeParams = formatTypeParametersForFunction(witness.typeParameters);
+  const trimmedBase = witness.baseType.trim();
+
+  // Parse the invariant conditions
+  const conditions = parseInvariantConditions(witness.invariant);
+
+  const lines: string[] = [];
+
+  // Generate the make factory function
+  if (includeJsDoc) {
+    lines.push(`/**`);
+    lines.push(` * Creates a ${witness.name} from a ${trimmedBase} value.`);
+    if (witness.invariant !== undefined && witness.invariant !== '') {
+      lines.push(` * Validates that: ${witness.invariant}`);
+    }
+    lines.push(` * @param value - The value to validate and brand.`);
+    lines.push(` * @returns The branded value if valid, null otherwise.`);
+    lines.push(` */`);
+  }
+  lines.push(
+    `function make${name}${funcTypeParams}(value: ${trimmedBase}): ${witness.name}${funcTypeParams} | null {`
+  );
+  if (conditions.length === 0) {
+    // No invariant - always succeed (handles unsatisfiable invariant case)
+    lines.push(`  return value as ${witness.name}${funcTypeParams};`);
+  } else {
+    const conditionExpr = conditions.map((c) => `(${c.expression})`).join(' && ');
+    lines.push(`  if (${conditionExpr}) {`);
+    lines.push(`    return value as ${witness.name}${funcTypeParams};`);
+    lines.push(`  }`);
+    lines.push(`  return null;`);
+  }
+  lines.push(`}`);
+  lines.push('');
+
+  // Generate the assertion function
+  if (includeJsDoc) {
+    lines.push(`/**`);
+    lines.push(` * Asserts that a value is a valid ${witness.name} and returns it.`);
+    if (witness.invariant !== undefined && witness.invariant !== '') {
+      lines.push(` * Validates that: ${witness.invariant}`);
+    }
+    lines.push(` * @param value - The value to validate and brand.`);
+    lines.push(` * @returns The branded value.`);
+    lines.push(` * @throws Error if the value does not satisfy the invariant.`);
+    lines.push(` */`);
+  }
+  lines.push(
+    `function assert${name}${funcTypeParams}(value: ${trimmedBase}): ${witness.name}${funcTypeParams} {`
+  );
+  if (conditions.length === 0) {
+    // No invariant - always succeed
+    lines.push(`  return value as ${witness.name}${funcTypeParams};`);
+  } else {
+    const conditionExpr = conditions.map((c) => `(${c.expression})`).join(' && ');
+    const errorMessage =
+      witness.invariant !== undefined && witness.invariant !== ''
+        ? `Assertion failed: ${witness.invariant}`
+        : `Assertion failed for ${witness.name}`;
+    lines.push(`  if (!(${conditionExpr})) {`);
+    lines.push(`    throw new Error('${escapeString(errorMessage)}');`);
+    lines.push(`  }`);
+    lines.push(`  return value as ${witness.name}${funcTypeParams};`);
+  }
+  lines.push(`}`);
+  lines.push('');
+
+  // Generate the type guard
+  if (includeJsDoc) {
+    lines.push(`/**`);
+    lines.push(` * Type guard to check if a value is a valid ${witness.name}.`);
+    if (witness.invariant !== undefined && witness.invariant !== '') {
+      lines.push(` * Checks that: ${witness.invariant}`);
+    }
+    lines.push(` * @param value - The value to check.`);
+    lines.push(` * @returns True if the value satisfies the ${witness.name} invariant.`);
+    lines.push(` */`);
+  }
+  lines.push(`function is${name}(value: unknown): value is ${witness.name}${typeParams} {`);
+  // Type guard needs to check the base type first
+  const typeCheck = generateTypeCheck(trimmedBase);
+  if (conditions.length === 0) {
+    // No invariant - just check the base type
+    lines.push(`  return ${typeCheck};`);
+  } else {
+    const conditionExpr = conditions.map((c) => `(${c.expression})`).join(' && ');
+    lines.push(`  return ${typeCheck} && ${conditionExpr};`);
+  }
+  lines.push(`}`);
+
+  return lines.join('\n');
+}
+
+/**
+ * Parses an invariant string into individual conditions.
+ *
+ * Handles:
+ * - Single conditions: "value >= 0"
+ * - Multiple conditions separated by "&&": "value >= 0 && value <= 100"
+ * - Empty/undefined invariants (returns empty array)
+ *
+ * @param invariant - The invariant string to parse.
+ * @returns Array of parsed conditions.
+ */
+function parseInvariantConditions(invariant: string | undefined): InvariantCondition[] {
+  if (invariant === undefined || invariant.trim() === '') {
+    return [];
+  }
+
+  // Split by && at the top level (not inside parentheses)
+  const parts = splitByTopLevelOperator(invariant.trim(), '&&');
+
+  return parts.map((part) => ({
+    expression: part.trim(),
+  }));
+}
+
+/**
+ * Splits a string by an operator at the top level (not inside brackets/parens).
+ *
+ * @param str - The string to split.
+ * @param operator - The operator to split by.
+ * @returns Array of parts.
+ */
+function splitByTopLevelOperator(str: string, operator: string): string[] {
+  const parts: string[] = [];
+  let depth = 0;
+  let current = '';
+
+  for (let i = 0; i < str.length; i++) {
+    const char = str[i] ?? '';
+
+    // Track nesting depth - only parentheses, brackets, and braces
+    // We don't track angle brackets because in invariant expressions, < and > are comparison operators
+    if (char === '(' || char === '[' || char === '{') {
+      depth++;
+    } else if (char === ')' || char === ']' || char === '}') {
+      depth--;
+    }
+
+    // Check for operator at top level
+    if (depth === 0 && str.slice(i, i + operator.length) === operator) {
+      if (current.trim() !== '') {
+        parts.push(current.trim());
+      }
+      current = '';
+      i += operator.length - 1; // Skip the operator
+      continue;
+    }
+
+    current = current + char;
+  }
+
+  if (current.trim() !== '') {
+    parts.push(current.trim());
+  }
+
+  return parts;
+}
+
+/**
+ * Generates a runtime type check expression for a base type.
+ *
+ * @param baseType - The base type to generate a check for.
+ * @returns A TypeScript expression that checks if `value` is of the base type.
+ */
+function generateTypeCheck(baseType: string): string {
+  const trimmed = baseType.trim();
+
+  // Primitive types
+  if (trimmed === 'string') {
+    return `typeof value === 'string'`;
+  }
+  if (trimmed === 'number') {
+    return `typeof value === 'number'`;
+  }
+  if (trimmed === 'boolean') {
+    return `typeof value === 'boolean'`;
+  }
+  if (trimmed === 'bigint') {
+    return `typeof value === 'bigint'`;
+  }
+  if (trimmed === 'symbol') {
+    return `typeof value === 'symbol'`;
+  }
+  if (trimmed === 'undefined') {
+    return `typeof value === 'undefined'`;
+  }
+  if (trimmed === 'null') {
+    return `value === null`;
+  }
+
+  // Array types
+  if (trimmed.endsWith('[]')) {
+    return `Array.isArray(value)`;
+  }
+  if (trimmed.startsWith('Array<')) {
+    return `Array.isArray(value)`;
+  }
+  if (trimmed.startsWith('readonly ') && trimmed.endsWith('[]')) {
+    return `Array.isArray(value)`;
+  }
+  if (trimmed.startsWith('ReadonlyArray<')) {
+    return `Array.isArray(value)`;
+  }
+
+  // Tuple types
+  if (trimmed.startsWith('[') && trimmed.endsWith(']')) {
+    return `Array.isArray(value)`;
+  }
+
+  // Object types (includes interfaces, object literals, etc.)
+  if (trimmed.startsWith('{')) {
+    return `typeof value === 'object' && value !== null`;
+  }
+
+  // Function types
+  if (trimmed.includes('=>')) {
+    return `typeof value === 'function'`;
+  }
+
+  // Map, Set, etc. - check for object
+  if (trimmed.startsWith('Map<')) {
+    return `value instanceof Map`;
+  }
+  if (trimmed.startsWith('Set<')) {
+    return `value instanceof Set`;
+  }
+  if (trimmed.startsWith('Promise<')) {
+    return `value instanceof Promise`;
+  }
+
+  // Default to object check for complex types
+  return `typeof value === 'object' && value !== null`;
+}
+
+/**
+ * Escapes a string for use in a JavaScript string literal.
+ *
+ * @param str - The string to escape.
+ * @returns The escaped string.
+ */
+function escapeString(str: string): string {
+  return str
+    .replace(/\\/g, '\\\\')
+    .replace(/'/g, "\\'")
+    .replace(/\n/g, '\\n')
+    .replace(/\r/g, '\\r');
+}
