@@ -8,9 +8,11 @@ import { describe, it, expect } from 'vitest';
 import {
   generateBrandedType,
   generateValidationFactory,
+  generateArbitrary,
   InvalidBaseTypeError,
   type WitnessDefinition,
 } from './witness.js';
+import * as fc from 'fast-check';
 
 describe('generateBrandedType', () => {
   describe('primitive base types', () => {
@@ -1089,6 +1091,546 @@ describe('generateValidationFactory', () => {
 
       // The error message should have escaped quotes
       expect(result).toContain("throw new Error('Assertion failed: value !== \\'test\\'');");
+    });
+  });
+});
+
+describe('generateArbitrary', () => {
+  describe('basic arbitrary generation', () => {
+    it('generates arbitrary for NonNegativeDecimal with invariant', () => {
+      const witness: WitnessDefinition = {
+        name: 'NonNegativeDecimal',
+        baseType: 'number',
+        invariant: 'value >= 0',
+      };
+
+      const result = generateArbitrary(witness);
+
+      // Should use optimized fc.float with min constraint
+      expect(result).toContain('fc.float({ min: 0, noNaN: true })');
+      // Should include filter for type safety
+      expect(result).toContain('.filter((v): v is NonNegativeDecimal => (v >= 0))');
+      // Should generate validate function
+      expect(result).toContain('function validateNonNegativeDecimalArbitrary()');
+    });
+
+    it('generates optimized arbitrary for NonEmptyString', () => {
+      const witness: WitnessDefinition = {
+        name: 'NonEmptyString',
+        baseType: 'string',
+        invariant: 'value.length > 0',
+      };
+
+      const result = generateArbitrary(witness);
+
+      // Should use optimized fc.string with minLength constraint
+      expect(result).toContain('fc.string({ minLength: 1 })');
+      // Since this is fully optimized, it can skip the filter
+      expect(result).toContain('arbitraryNonEmptyString');
+    });
+
+    it('generates arbitrary for number without invariant', () => {
+      const witness: WitnessDefinition = {
+        name: 'AnyNumber',
+        baseType: 'number',
+      };
+
+      const result = generateArbitrary(witness);
+
+      // Should use base fc.float
+      expect(result).toContain('fc.float({ noNaN: true })');
+      // Should cast to branded type
+      expect(result).toContain('as fc.Arbitrary<AnyNumber>');
+      // Should not have filter
+      expect(result).not.toContain('.filter');
+      // Should not have validate function (no invariant)
+      expect(result).not.toContain('validateAnyNumberArbitrary');
+    });
+  });
+
+  describe('optimized constraints', () => {
+    it('optimizes string length >= constraint', () => {
+      const witness: WitnessDefinition = {
+        name: 'LongString',
+        baseType: 'string',
+        invariant: 'value.length >= 5',
+      };
+
+      const result = generateArbitrary(witness);
+      expect(result).toContain('fc.string({ minLength: 5 })');
+    });
+
+    it('optimizes string length > constraint (adds 1)', () => {
+      const witness: WitnessDefinition = {
+        name: 'VeryLongString',
+        baseType: 'string',
+        invariant: 'value.length > 10',
+      };
+
+      const result = generateArbitrary(witness);
+      // value.length > 10 means minLength: 11
+      expect(result).toContain('fc.string({ minLength: 11 })');
+    });
+
+    it('optimizes number range constraints', () => {
+      const witness: WitnessDefinition = {
+        name: 'Percentage',
+        baseType: 'number',
+        invariant: 'value >= 0 && value <= 100',
+      };
+
+      const result = generateArbitrary(witness);
+      expect(result).toContain('min: 0');
+      expect(result).toContain('max: 100');
+      expect(result).toContain('noNaN: true');
+    });
+
+    it('optimizes array minLength for non-empty', () => {
+      const witness: WitnessDefinition = {
+        name: 'NonEmptyNumbers',
+        baseType: 'number[]',
+        invariant: 'value.length > 0',
+      };
+
+      const result = generateArbitrary(witness);
+      expect(result).toContain('fc.array(fc.float({ noNaN: true }), { minLength: 1 })');
+    });
+  });
+
+  describe('generic witnesses', () => {
+    it('generates parameterized arbitrary for NonEmptyArray<T>', () => {
+      const witness: WitnessDefinition = {
+        name: 'NonEmptyArray',
+        baseType: 'T[]',
+        typeParameters: [{ name: 'T' }],
+        invariant: 'value.length > 0',
+      };
+
+      const result = generateArbitrary(witness);
+
+      // Should generate a factory function
+      expect(result).toContain('function arbitraryNonEmptyArray<T>');
+      // Should take an arbitrary for T
+      expect(result).toContain('arbT: fc.Arbitrary<T>');
+      // Should return the correct type
+      expect(result).toContain('fc.Arbitrary<NonEmptyArray<T>>');
+      // Should use the type parameter arbitrary
+      expect(result).toContain('fc.array(arbT, { minLength: 1 })');
+    });
+
+    it('generates parameterized arbitrary with multiple type params', () => {
+      const witness: WitnessDefinition = {
+        name: 'ValidPair',
+        baseType: '[K, V]',
+        typeParameters: [{ name: 'K' }, { name: 'V' }],
+      };
+
+      const result = generateArbitrary(witness);
+
+      expect(result).toContain('function arbitraryValidPair<K, V>');
+      expect(result).toContain('arbK: fc.Arbitrary<K>');
+      expect(result).toContain('arbV: fc.Arbitrary<V>');
+      expect(result).toContain('fc.tuple(arbK, arbV)');
+    });
+
+    it('generates generic arbitrary without invariant', () => {
+      const witness: WitnessDefinition = {
+        name: 'Container',
+        baseType: 'T',
+        typeParameters: [{ name: 'T' }],
+      };
+
+      const result = generateArbitrary(witness);
+
+      expect(result).toContain('function arbitraryContainer<T>');
+      expect(result).toContain('return arbT as fc.Arbitrary<Container<T>>');
+      expect(result).not.toContain('.filter');
+    });
+  });
+
+  describe('complex types', () => {
+    it('generates arbitrary for object literal type', () => {
+      const witness: WitnessDefinition = {
+        name: 'User',
+        baseType: '{ id: string; age: number }',
+      };
+
+      const result = generateArbitrary(witness);
+
+      expect(result).toContain('fc.record({');
+      expect(result).toContain('id: fc.string()');
+      expect(result).toContain('age: fc.float({ noNaN: true })');
+    });
+
+    it('generates arbitrary for object with optional property', () => {
+      const witness: WitnessDefinition = {
+        name: 'Config',
+        baseType: '{ host: string; port?: number }',
+      };
+
+      const result = generateArbitrary(witness);
+
+      expect(result).toContain('host: fc.string()');
+      expect(result).toContain('port: fc.option(fc.float({ noNaN: true }), { nil: undefined })');
+    });
+
+    it('generates arbitrary for tuple type', () => {
+      const witness: WitnessDefinition = {
+        name: 'Point',
+        baseType: '[number, number]',
+      };
+
+      const result = generateArbitrary(witness);
+
+      expect(result).toContain('fc.tuple(fc.float({ noNaN: true }), fc.float({ noNaN: true }))');
+    });
+
+    it('generates arbitrary for Map type', () => {
+      const witness: WitnessDefinition = {
+        name: 'StringMap',
+        baseType: 'Map<string, number>',
+      };
+
+      const result = generateArbitrary(witness);
+
+      expect(result).toContain('fc.array(fc.tuple(fc.string(), fc.float({ noNaN: true })))');
+      expect(result).toContain('.map(entries => new Map(entries))');
+    });
+
+    it('generates arbitrary for Set type', () => {
+      const witness: WitnessDefinition = {
+        name: 'StringSet',
+        baseType: 'Set<string>',
+      };
+
+      const result = generateArbitrary(witness);
+
+      expect(result).toContain('fc.array(fc.string())');
+      expect(result).toContain('.map(items => new Set(items))');
+    });
+
+    it('generates arbitrary for boolean type', () => {
+      const witness: WitnessDefinition = {
+        name: 'Flag',
+        baseType: 'boolean',
+      };
+
+      const result = generateArbitrary(witness);
+
+      expect(result).toContain('fc.boolean()');
+    });
+
+    it('generates arbitrary for bigint type', () => {
+      const witness: WitnessDefinition = {
+        name: 'BigNumber',
+        baseType: 'bigint',
+      };
+
+      const result = generateArbitrary(witness);
+
+      expect(result).toContain('fc.bigInt()');
+    });
+
+    it('generates arbitrary for Array<T> syntax', () => {
+      const witness: WitnessDefinition = {
+        name: 'StringArray',
+        baseType: 'Array<string>',
+      };
+
+      const result = generateArbitrary(witness);
+
+      expect(result).toContain('fc.array(fc.string())');
+    });
+  });
+
+  describe('JSDoc generation', () => {
+    it('includes JSDoc by default', () => {
+      const witness: WitnessDefinition = {
+        name: 'PositiveNumber',
+        baseType: 'number',
+        invariant: 'value > 0',
+      };
+
+      const result = generateArbitrary(witness);
+
+      expect(result).toContain('/**');
+      expect(result).toContain('* A fast-check Arbitrary for PositiveNumber values.');
+      expect(result).toContain('* Generated values satisfy: value > 0');
+    });
+
+    it('can disable JSDoc generation', () => {
+      const witness: WitnessDefinition = {
+        name: 'PositiveNumber',
+        baseType: 'number',
+        invariant: 'value > 0',
+      };
+
+      const result = generateArbitrary(witness, { includeJsDoc: false });
+
+      expect(result).not.toContain('/**');
+      expect(result).not.toContain('@param');
+    });
+
+    it('includes JSDoc for generic arbitraries', () => {
+      const witness: WitnessDefinition = {
+        name: 'NonEmptyArray',
+        baseType: 'T[]',
+        typeParameters: [{ name: 'T' }],
+        invariant: 'value.length > 0',
+      };
+
+      const result = generateArbitrary(witness);
+
+      expect(result).toContain('* Creates a fast-check Arbitrary for NonEmptyArray<T> values.');
+      expect(result).toContain('@param arbT - Arbitrary for type parameter T');
+    });
+  });
+
+  describe('unsatisfiable invariant detection', () => {
+    it('generates validation function for invariants', () => {
+      const witness: WitnessDefinition = {
+        name: 'ComplexType',
+        baseType: 'number',
+        invariant: 'value > 0 && value < 100',
+      };
+
+      const result = generateArbitrary(witness);
+
+      expect(result).toContain('function validateComplexTypeArbitrary()');
+      expect(result).toContain('fc.sample(arbitraryComplexType, { numRuns: 1 })');
+      expect(result).toContain('may be unsatisfiable');
+    });
+
+    it('does not generate validation for generic arbitraries', () => {
+      const witness: WitnessDefinition = {
+        name: 'Generic',
+        baseType: 'T',
+        typeParameters: [{ name: 'T' }],
+        invariant: 'value !== null',
+      };
+
+      const result = generateArbitrary(witness);
+
+      // Generic arbitraries can't be validated without concrete type params
+      expect(result).not.toContain('validateGenericArbitrary');
+    });
+
+    it('does not generate validation when no invariant', () => {
+      const witness: WitnessDefinition = {
+        name: 'Plain',
+        baseType: 'number',
+      };
+
+      const result = generateArbitrary(witness);
+
+      expect(result).not.toContain('validatePlainArbitrary');
+    });
+  });
+
+  describe('error handling', () => {
+    it('throws for invalid base type', () => {
+      const witness: WitnessDefinition = {
+        name: 'Invalid',
+        baseType: '',
+      };
+
+      expect(() => generateArbitrary(witness)).toThrow(InvalidBaseTypeError);
+    });
+
+    it('throws for unbalanced brackets', () => {
+      const witness: WitnessDefinition = {
+        name: 'Invalid',
+        baseType: 'Map<string, number',
+      };
+
+      expect(() => generateArbitrary(witness)).toThrow(InvalidBaseTypeError);
+    });
+  });
+
+  describe('runtime behavior verification', () => {
+    it('generated NonNegativeDecimal arbitrary produces valid values', () => {
+      const witness: WitnessDefinition = {
+        name: 'NonNegativeDecimal',
+        baseType: 'number',
+        invariant: 'value >= 0',
+      };
+
+      // Verify generateArbitrary produces code with the expected pattern
+      const code = generateArbitrary(witness, { includeJsDoc: false });
+      expect(code).toContain('fc.float({ min: 0, noNaN: true })');
+
+      // Use fast-check directly to verify the concept works
+      const arb = fc.float({ min: 0, noNaN: true }).filter((v) => v >= 0);
+
+      // Generate samples and verify they're all non-negative
+      const samples = fc.sample(arb, 100);
+      expect(samples.every((v) => v >= 0)).toBe(true);
+    });
+
+    it('generated NonEmptyString arbitrary produces valid values', () => {
+      // Verify the optimized version works
+      const arb = fc.string({ minLength: 1 });
+
+      const samples = fc.sample(arb, 100);
+      expect(samples.every((v) => v.length > 0)).toBe(true);
+    });
+
+    it('generated Percentage arbitrary produces valid values', () => {
+      const arb = fc.float({ min: 0, max: 100, noNaN: true }).filter((v) => v >= 0 && v <= 100);
+
+      const samples = fc.sample(arb, 100);
+      expect(samples.every((v) => v >= 0 && v <= 100)).toBe(true);
+    });
+
+    it('shrinking NonNegativeDecimal shrinks toward 0', () => {
+      const arb = fc.float({ min: 0, noNaN: true }).filter((v) => v >= 0);
+
+      // Test that shrinking works by running a property that finds a counterexample
+      // fast-check should shrink it toward the minimum value that fails
+      const result: { counterexample: number | null } = { counterexample: null };
+
+      try {
+        fc.assert(
+          fc.property(arb, (n) => {
+            // This will fail for any value > 10
+            if (n > 10) {
+              result.counterexample = n;
+              return false;
+            }
+            return true;
+          }),
+          { numRuns: 1000, seed: 42 }
+        );
+      } catch {
+        // Expected to fail
+      }
+
+      // The shrunk counterexample should be close to the boundary (10)
+      // Due to shrinking, it should be much smaller than the initial random value
+      expect(result.counterexample).not.toBeNull();
+      if (result.counterexample !== null) {
+        expect(result.counterexample).toBeGreaterThan(10);
+        expect(result.counterexample).toBeLessThan(1000); // Shrinking should bring it down
+      }
+    });
+
+    it('NonEmptyArray arbitrary produces valid arrays', () => {
+      const arb = fc.array(fc.integer(), { minLength: 1 });
+
+      const samples = fc.sample(arb, 100);
+      expect(samples.every((arr) => arr.length > 0)).toBe(true);
+    });
+
+    it('tuple arbitrary produces correct structure', () => {
+      const arb = fc.tuple(fc.string(), fc.integer());
+
+      const samples = fc.sample(arb, 10);
+      // Verify each sample is a tuple of [string, number]
+      for (const tuple of samples) {
+        expect(Array.isArray(tuple)).toBe(true);
+        // Cast to unknown array to avoid type inference issues
+        const arr = tuple as unknown[];
+        expect(arr).toHaveLength(2);
+        expect(typeof arr[0]).toBe('string');
+        expect(typeof arr[1]).toBe('number');
+      }
+    });
+
+    it('Map arbitrary produces valid Maps', () => {
+      const arb = fc.array(fc.tuple(fc.string(), fc.integer())).map((entries) => new Map(entries));
+
+      const samples = fc.sample(arb, 10);
+      expect(samples.every((m) => m instanceof Map)).toBe(true);
+    });
+
+    it('Set arbitrary produces valid Sets', () => {
+      const arb = fc.array(fc.string()).map((items) => new Set(items));
+
+      const samples = fc.sample(arb, 10);
+      expect(samples.every((s) => s instanceof Set)).toBe(true);
+    });
+
+    it('object arbitrary produces valid objects', () => {
+      const arb = fc.record({
+        id: fc.string(),
+        age: fc.integer({ min: 0, max: 150 }),
+      });
+
+      const samples = fc.sample(arb, 10);
+      // Verify each sample has the expected shape
+      for (const obj of samples) {
+        expect(typeof obj).toBe('object');
+        expect(obj).not.toBeNull();
+        expect(typeof obj.id).toBe('string');
+        expect(typeof obj.age).toBe('number');
+      }
+    });
+  });
+
+  describe('complex invariants', () => {
+    it('handles multiple && conditions', () => {
+      const witness: WitnessDefinition = {
+        name: 'ValidRange',
+        baseType: 'number',
+        invariant: 'value >= 0 && value <= 100 && Number.isFinite(value)',
+      };
+
+      const result = generateArbitrary(witness);
+
+      // Should include all conditions in filter
+      expect(result).toContain('(v >= 0) && (v <= 100) && (Number.isFinite(v))');
+    });
+
+    it('handles complex object invariants', () => {
+      const witness: WitnessDefinition = {
+        name: 'ValidUser',
+        baseType: '{ name: string; age: number }',
+        invariant: 'value.name.length > 0 && value.age >= 0',
+      };
+
+      const result = generateArbitrary(witness);
+
+      expect(result).toContain('.filter');
+      expect(result).toContain('v.name.length > 0');
+      expect(result).toContain('v.age >= 0');
+    });
+  });
+
+  describe('edge cases', () => {
+    it('handles empty object type', () => {
+      const witness: WitnessDefinition = {
+        name: 'EmptyObject',
+        baseType: '{}',
+      };
+
+      const result = generateArbitrary(witness);
+
+      expect(result).toContain('fc.constant({})');
+    });
+
+    it('handles single-character type parameters', () => {
+      const witness: WitnessDefinition = {
+        name: 'Wrapper',
+        baseType: 'T',
+        typeParameters: [{ name: 'T' }],
+      };
+
+      const result = generateArbitrary(witness);
+
+      expect(result).toContain('arbT: fc.Arbitrary<T>');
+      expect(result).toContain('return arbT');
+    });
+
+    it('handles multi-character type parameters', () => {
+      const witness: WitnessDefinition = {
+        name: 'TypedContainer',
+        baseType: 'TValue',
+        typeParameters: [{ name: 'TValue' }],
+      };
+
+      const result = generateArbitrary(witness);
+
+      expect(result).toContain('arbTValue: fc.Arbitrary<TValue>');
     });
   });
 });

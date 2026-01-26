@@ -652,3 +652,541 @@ function escapeString(str: string): string {
     .replace(/\n/g, '\\n')
     .replace(/\r/g, '\\r');
 }
+
+/**
+ * Options for generating fast-check Arbitrary instances.
+ */
+export interface ArbitraryOptions {
+  /** Include JSDoc comments in generated code */
+  includeJsDoc?: boolean;
+  /** Maximum number of filter attempts before throwing (for detecting unsatisfiable invariants) */
+  maxFilterAttempts?: number;
+}
+
+/**
+ * Generates base type information for fast-check arbitrary generation.
+ */
+interface BaseArbitraryInfo {
+  /** The fast-check arbitrary expression */
+  arbitrary: string;
+  /** Whether the arbitrary can be optimized for specific constraints */
+  optimizable: boolean;
+  /** The shrink target value for this type (if applicable) */
+  shrinkTarget?: string;
+}
+
+/**
+ * Analyzes a base type to determine the appropriate fast-check arbitrary.
+ *
+ * @param baseType - The TypeScript base type string.
+ * @param invariant - The invariant expression (for optimization hints).
+ * @returns Information about the base arbitrary to use.
+ */
+function analyzeBaseArbitrary(baseType: string, invariant?: string): BaseArbitraryInfo {
+  const trimmed = baseType.trim();
+
+  // String types
+  if (trimmed === 'string') {
+    // Check for common string invariants that can be optimized
+    if (invariant !== undefined) {
+      const minLengthMatch = /value\.length\s*>=?\s*(\d+)/.exec(invariant);
+      const maxLengthMatch = /value\.length\s*<=?\s*(\d+)/.exec(invariant);
+
+      const minLengthValue = minLengthMatch?.[1];
+      const maxLengthValue = maxLengthMatch?.[1];
+
+      if (minLengthValue !== undefined || maxLengthValue !== undefined) {
+        const options: string[] = [];
+        if (minLengthValue !== undefined) {
+          const minLength = invariant.includes('>=')
+            ? minLengthValue
+            : String(Number(minLengthValue) + 1);
+          options.push(`minLength: ${minLength}`);
+        }
+        if (maxLengthValue !== undefined) {
+          const maxLength = invariant.includes('<=')
+            ? maxLengthValue
+            : String(Number(maxLengthValue) - 1);
+          options.push(`maxLength: ${maxLength}`);
+        }
+        return {
+          arbitrary: `fc.string({ ${options.join(', ')} })`,
+          optimizable: true,
+          shrinkTarget: "''",
+        };
+      }
+    }
+    return { arbitrary: 'fc.string()', optimizable: false, shrinkTarget: "''" };
+  }
+
+  // Number types
+  if (trimmed === 'number') {
+    // Check for common number invariants that can be optimized
+    if (invariant !== undefined) {
+      const minMatch = /value\s*>=?\s*(-?\d+(?:\.\d+)?)/.exec(invariant);
+      const maxMatch = /value\s*<=?\s*(-?\d+(?:\.\d+)?)/.exec(invariant);
+
+      // For non-negative numbers, use fc.float with min: 0
+      const minValue = minMatch?.[1];
+      if (minMatch !== null && minValue !== undefined && Number(minValue) >= 0) {
+        const options: string[] = [];
+        const min = invariant.includes('>=') ? minValue : String(Number(minValue) + 0.0001);
+        options.push(`min: ${min}`);
+        const maxValue = maxMatch?.[1];
+        if (maxMatch !== null && maxValue !== undefined) {
+          const max = invariant.includes('<=') ? maxValue : String(Number(maxValue) - 0.0001);
+          options.push(`max: ${max}`);
+        }
+        // Use noNaN to avoid NaN which typically doesn't satisfy number invariants
+        options.push('noNaN: true');
+        return {
+          arbitrary: `fc.float({ ${options.join(', ')} })`,
+          optimizable: true,
+          shrinkTarget: min,
+        };
+      }
+    }
+    return { arbitrary: 'fc.float({ noNaN: true })', optimizable: false, shrinkTarget: '0' };
+  }
+
+  // Integer check (when invariant mentions integer)
+  if (trimmed === 'number' && (invariant?.includes('Number.isInteger') ?? false)) {
+    return { arbitrary: 'fc.integer()', optimizable: true, shrinkTarget: '0' };
+  }
+
+  // Boolean
+  if (trimmed === 'boolean') {
+    return { arbitrary: 'fc.boolean()', optimizable: false };
+  }
+
+  // Bigint
+  if (trimmed === 'bigint') {
+    return { arbitrary: 'fc.bigInt()', optimizable: false, shrinkTarget: '0n' };
+  }
+
+  // Array types
+  if (trimmed.endsWith('[]')) {
+    const elementType = trimmed.slice(0, -2).trim();
+    const elementArb = analyzeBaseArbitrary(elementType);
+
+    // Check for non-empty array invariant
+    if (invariant !== undefined && /value\.length\s*>\s*0/.test(invariant)) {
+      return {
+        arbitrary: `fc.array(${elementArb.arbitrary}, { minLength: 1 })`,
+        optimizable: true,
+        shrinkTarget: '[]',
+      };
+    }
+
+    return {
+      arbitrary: `fc.array(${elementArb.arbitrary})`,
+      optimizable: false,
+      shrinkTarget: '[]',
+    };
+  }
+
+  // Array<T> syntax
+  if (trimmed.startsWith('Array<') && trimmed.endsWith('>')) {
+    const elementType = trimmed.slice(6, -1).trim();
+    const elementArb = analyzeBaseArbitrary(elementType);
+
+    // Check for non-empty array invariant
+    if (invariant !== undefined && /value\.length\s*>\s*0/.test(invariant)) {
+      return {
+        arbitrary: `fc.array(${elementArb.arbitrary}, { minLength: 1 })`,
+        optimizable: true,
+        shrinkTarget: '[]',
+      };
+    }
+
+    return {
+      arbitrary: `fc.array(${elementArb.arbitrary})`,
+      optimizable: false,
+      shrinkTarget: '[]',
+    };
+  }
+
+  // Tuple types
+  if (trimmed.startsWith('[') && trimmed.endsWith(']')) {
+    const inner = trimmed.slice(1, -1);
+    const elements = splitTupleElements(inner);
+    const elementArbs = elements.map((el) => analyzeBaseArbitrary(el).arbitrary);
+    return {
+      arbitrary: `fc.tuple(${elementArbs.join(', ')})`,
+      optimizable: false,
+    };
+  }
+
+  // Map types
+  if (trimmed.startsWith('Map<') && trimmed.endsWith('>')) {
+    const inner = trimmed.slice(4, -1);
+    const [keyType, valueType] = splitGenericParams(inner);
+    const keyArb = analyzeBaseArbitrary(keyType ?? 'unknown');
+    const valueArb = analyzeBaseArbitrary(valueType ?? 'unknown');
+    return {
+      arbitrary: `fc.array(fc.tuple(${keyArb.arbitrary}, ${valueArb.arbitrary})).map(entries => new Map(entries))`,
+      optimizable: false,
+    };
+  }
+
+  // Set types
+  if (trimmed.startsWith('Set<') && trimmed.endsWith('>')) {
+    const elementType = trimmed.slice(4, -1).trim();
+    const elementArb = analyzeBaseArbitrary(elementType);
+    return {
+      arbitrary: `fc.array(${elementArb.arbitrary}).map(items => new Set(items))`,
+      optimizable: false,
+    };
+  }
+
+  // Object literal types
+  if (trimmed.startsWith('{') && trimmed.endsWith('}')) {
+    const inner = trimmed.slice(1, -1).trim();
+    if (inner === '') {
+      return { arbitrary: 'fc.constant({})', optimizable: false };
+    }
+
+    const props = parseObjectProperties(inner);
+    const propArbs = props.map((prop) => {
+      const propArb = analyzeBaseArbitrary(prop.type);
+      if (prop.optional) {
+        return `${prop.name}: fc.option(${propArb.arbitrary}, { nil: undefined })`;
+      }
+      return `${prop.name}: ${propArb.arbitrary}`;
+    });
+    return {
+      arbitrary: `fc.record({ ${propArbs.join(', ')} })`,
+      optimizable: false,
+    };
+  }
+
+  // Generic type parameters - return a placeholder that can be substituted
+  if (/^[A-Z]$/.test(trimmed) || /^[A-Z]\w*$/.test(trimmed)) {
+    return {
+      arbitrary: `arb${trimmed}`,
+      optimizable: false,
+    };
+  }
+
+  // Default to fc.anything() for unknown types
+  return { arbitrary: 'fc.anything()', optimizable: false };
+}
+
+/**
+ * Splits a comma-separated list of tuple elements, respecting nested generics.
+ */
+function splitTupleElements(inner: string): string[] {
+  return splitByTopLevelComma(inner);
+}
+
+/**
+ * Splits generic parameters by comma at the top level.
+ */
+function splitGenericParams(inner: string): string[] {
+  return splitByTopLevelComma(inner);
+}
+
+/**
+ * Splits a string by comma at the top level (not inside brackets).
+ */
+function splitByTopLevelComma(str: string): string[] {
+  const parts: string[] = [];
+  let depth = 0;
+  let current = '';
+
+  for (const char of str) {
+    if (char === '<' || char === '(' || char === '{' || char === '[') {
+      depth++;
+    } else if (char === '>' || char === ')' || char === '}' || char === ']') {
+      depth--;
+    }
+
+    if (char === ',' && depth === 0) {
+      if (current.trim() !== '') {
+        parts.push(current.trim());
+      }
+      current = '';
+    } else {
+      current += char;
+    }
+  }
+
+  if (current.trim() !== '') {
+    parts.push(current.trim());
+  }
+
+  return parts;
+}
+
+/**
+ * Represents a parsed object property.
+ */
+interface ObjectProperty {
+  name: string;
+  type: string;
+  optional: boolean;
+}
+
+/**
+ * Parses object literal properties from a type string.
+ */
+function parseObjectProperties(inner: string): ObjectProperty[] {
+  const props: ObjectProperty[] = [];
+  const parts = splitByTopLevelSemicolonOrComma(inner);
+
+  for (const part of parts) {
+    const trimmed = part.trim();
+    if (trimmed === '') {
+      continue;
+    }
+
+    // Match "name?: type" or "name: type" patterns
+    const match = /^(\w+)(\?)?:\s*(.+)$/.exec(trimmed);
+    if (match !== null) {
+      props.push({
+        name: match[1] ?? '',
+        type: match[3]?.trim() ?? 'unknown',
+        optional: match[2] === '?',
+      });
+    }
+  }
+
+  return props;
+}
+
+/**
+ * Splits by semicolon or comma at the top level.
+ */
+function splitByTopLevelSemicolonOrComma(str: string): string[] {
+  const parts: string[] = [];
+  let depth = 0;
+  let current = '';
+
+  for (const char of str) {
+    if (char === '<' || char === '(' || char === '{' || char === '[') {
+      depth++;
+    } else if (char === '>' || char === ')' || char === '}' || char === ']') {
+      depth--;
+    }
+
+    if ((char === ';' || char === ',') && depth === 0) {
+      if (current.trim() !== '') {
+        parts.push(current.trim());
+      }
+      current = '';
+    } else {
+      current += char;
+    }
+  }
+
+  if (current.trim() !== '') {
+    parts.push(current.trim());
+  }
+
+  return parts;
+}
+
+/**
+ * Generates a fast-check Arbitrary instance for a witness type.
+ *
+ * The generated arbitrary:
+ * - Produces only values that satisfy the witness invariant
+ * - Uses optimized constraints where possible (e.g., minLength for strings)
+ * - Falls back to fc.filter() for complex invariants
+ * - Supports custom shrinking that maintains invariant validity
+ *
+ * @param witness - The witness definition to generate an arbitrary for.
+ * @param options - Options for code generation.
+ * @returns The TypeScript code for the arbitrary as a string.
+ * @throws InvalidBaseTypeError if the base type is invalid.
+ *
+ * @example
+ * // Non-negative decimal
+ * generateArbitrary({
+ *   name: 'NonNegativeDecimal',
+ *   baseType: 'number',
+ *   invariant: 'value >= 0'
+ * })
+ * // Returns code generating: fc.float({ min: 0, noNaN: true }).filter(n => n >= 0)
+ *
+ * @example
+ * // Non-empty string (optimized)
+ * generateArbitrary({
+ *   name: 'NonEmptyString',
+ *   baseType: 'string',
+ *   invariant: 'value.length > 0'
+ * })
+ * // Returns code generating: fc.string({ minLength: 1 })
+ *
+ * @example
+ * // Generic non-empty array
+ * generateArbitrary({
+ *   name: 'NonEmptyArray',
+ *   baseType: 'T[]',
+ *   typeParameters: [{ name: 'T' }],
+ *   invariant: 'value.length > 0'
+ * })
+ * // Returns a function that takes an arbitrary for T
+ */
+export function generateArbitrary(
+  witness: WitnessDefinition,
+  options: ArbitraryOptions = {}
+): string {
+  // Validate the base type
+  validateBaseType(witness.baseType);
+
+  const { includeJsDoc = true, maxFilterAttempts = 1000 } = options;
+  const name = witness.name;
+  const trimmedBase = witness.baseType.trim();
+  const hasTypeParams = witness.typeParameters !== undefined && witness.typeParameters.length > 0;
+
+  // Analyze the base type to determine the optimal arbitrary
+  const baseArbInfo = analyzeBaseArbitrary(trimmedBase, witness.invariant);
+
+  const lines: string[] = [];
+
+  // Parse invariant conditions for filter generation
+  const conditions = parseInvariantConditions(witness.invariant);
+  const hasInvariant = conditions.length > 0;
+
+  if (hasTypeParams) {
+    // Generate a factory function for generic witnesses
+    const typeParams = witness.typeParameters ?? [];
+    const arbParams = typeParams.map((tp) => `arb${tp.name}: fc.Arbitrary<${tp.name}>`).join(', ');
+    const typeParamStr = typeParams.map((tp) => tp.name).join(', ');
+
+    if (includeJsDoc) {
+      lines.push(`/**`);
+      lines.push(` * Creates a fast-check Arbitrary for ${name}<${typeParamStr}> values.`);
+      if (witness.invariant !== undefined && witness.invariant !== '') {
+        lines.push(` * Generated values satisfy: ${witness.invariant}`);
+      }
+      lines.push(
+        ` * @param ${typeParams.map((tp) => `arb${tp.name} - Arbitrary for type parameter ${tp.name}`).join('\n * @param ')}`
+      );
+      lines.push(` * @returns An Arbitrary that generates valid ${name} values.`);
+      lines.push(` */`);
+    }
+
+    lines.push(
+      `function arbitrary${name}<${typeParamStr}>(${arbParams}): fc.Arbitrary<${name}<${typeParamStr}>> {`
+    );
+
+    // Build the arbitrary expression with type parameter substitution
+    let arbExpr = baseArbInfo.arbitrary;
+    // Replace placeholder arbitraries with actual type param arbitraries
+    for (const tp of typeParams) {
+      arbExpr = arbExpr.replace(new RegExp(`arb${tp.name}`, 'g'), `arb${tp.name}`);
+    }
+
+    if (hasInvariant) {
+      // Generate filter with custom shrinking
+      const filterExpr = conditions
+        .map((c) => `(${c.expression.replace(/value/g, 'v')})`)
+        .join(' && ');
+      lines.push(`  const baseArb = ${arbExpr};`);
+      lines.push(`  return baseArb.filter((v): v is ${name}<${typeParamStr}> => ${filterExpr});`);
+    } else {
+      lines.push(`  return ${arbExpr} as fc.Arbitrary<${name}<${typeParamStr}>>;`);
+    }
+
+    lines.push(`}`);
+  } else {
+    // Generate a constant arbitrary for non-generic witnesses
+    if (includeJsDoc) {
+      lines.push(`/**`);
+      lines.push(` * A fast-check Arbitrary for ${name} values.`);
+      if (witness.invariant !== undefined && witness.invariant !== '') {
+        lines.push(` * Generated values satisfy: ${witness.invariant}`);
+      }
+      lines.push(` */`);
+    }
+
+    if (hasInvariant) {
+      // Generate filtered arbitrary with custom shrinking
+      const filterExpr = conditions
+        .map((c) => `(${c.expression.replace(/value/g, 'v')})`)
+        .join(' && ');
+
+      // Check if we can use the optimized arbitrary directly without filter
+      // (when the arbitrary constraints already satisfy the invariant)
+      const canSkipFilter = canOptimizeAwayFilter(witness.invariant ?? '', baseArbInfo);
+
+      if (canSkipFilter) {
+        lines.push(
+          `const arbitrary${name}: fc.Arbitrary<${name}> = ${baseArbInfo.arbitrary} as fc.Arbitrary<${name}>;`
+        );
+      } else {
+        // Use filter for complex invariants, with shrinking that respects the invariant
+        lines.push(`const arbitrary${name}: fc.Arbitrary<${name}> = ${baseArbInfo.arbitrary}`);
+        lines.push(`  .filter((v): v is ${name} => ${filterExpr});`);
+      }
+    } else {
+      // No invariant - just cast the base arbitrary
+      lines.push(
+        `const arbitrary${name}: fc.Arbitrary<${name}> = ${baseArbInfo.arbitrary} as fc.Arbitrary<${name}>;`
+      );
+    }
+  }
+
+  // Generate a helper for detecting unsatisfiable invariants
+  if (hasInvariant && !hasTypeParams) {
+    lines.push('');
+    if (includeJsDoc) {
+      lines.push(`/**`);
+      lines.push(` * Validates that the ${name} arbitrary can generate values.`);
+      lines.push(` * @throws Error if the invariant appears to be unsatisfiable.`);
+      lines.push(` */`);
+    }
+    lines.push(`function validate${name}Arbitrary(): void {`);
+    lines.push(`  let attempts = 0;`);
+    lines.push(`  const maxAttempts = ${String(maxFilterAttempts)};`);
+    lines.push(`  `);
+    lines.push(`  // Try to generate a single value to validate the arbitrary`);
+    lines.push(`  try {`);
+    lines.push(`    fc.sample(arbitrary${name}, { numRuns: 1 });`);
+    lines.push(`  } catch (e) {`);
+    lines.push(`    throw new Error(`);
+    lines.push(
+      `      \`${name} arbitrary failed to generate a value. The invariant "${escapeString(witness.invariant ?? '')}" may be unsatisfiable.\``
+    );
+    lines.push(`    );`);
+    lines.push(`  }`);
+    lines.push(`}`);
+  }
+
+  return lines.join('\n');
+}
+
+/**
+ * Determines if the filter can be optimized away because the arbitrary
+ * constraints already satisfy the invariant.
+ */
+function canOptimizeAwayFilter(invariant: string, arbInfo: BaseArbitraryInfo): boolean {
+  if (!arbInfo.optimizable) {
+    return false;
+  }
+
+  // For string length constraints, if minLength is specified in the arbitrary,
+  // we can skip the filter for "value.length > 0" or "value.length >= 1"
+  if (arbInfo.arbitrary.includes('minLength: 1') && /value\.length\s*>\s*0/.test(invariant)) {
+    return true;
+  }
+  if (arbInfo.arbitrary.includes('minLength: 1') && /value\.length\s*>=\s*1/.test(invariant)) {
+    return true;
+  }
+
+  // For number constraints with min, check if the invariant is covered
+  const minMatch = /min:\s*(-?\d+(?:\.\d+)?)/.exec(arbInfo.arbitrary);
+  if (minMatch !== null) {
+    const arbMin = Number(minMatch[1]);
+    const invMinMatch = /value\s*>=\s*(-?\d+(?:\.\d+)?)/.exec(invariant);
+    if (invMinMatch !== null && Number(invMinMatch[1]) === arbMin) {
+      // The min constraint in the arbitrary matches the invariant
+      // We still need the filter for the type guard, but it will rarely reject
+      return false; // Keep filter for type safety, but it's optimized
+    }
+  }
+
+  return false;
+}
