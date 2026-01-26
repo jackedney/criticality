@@ -39,7 +39,7 @@ export type ComplexityClass = 'O(1)' | 'O(log n)' | 'O(n)' | 'O(n log n)' | 'O(n
  * Basic string escaping for generated code.
  */
 function escapeString(str: string): string {
-  return str.replace(/'/g, "\\'").replace(/\n/g, '\\n');
+  return str.replace(/\\/g, '\\\\').replace(/'/g, "\\'").replace(/\n/g, '\\n');
 }
 
 /**

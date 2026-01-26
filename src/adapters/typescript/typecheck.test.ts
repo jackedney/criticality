@@ -67,7 +67,7 @@ describe('runTypeCheck', () => {
 
       expect(result.success).toBe(true);
       expect(result.errorCount).toBe(0);
-    });
+    }, 15000); // Extended timeout for file-specific tsc invocation
   });
 
   describe('custom tsconfig', () => {
