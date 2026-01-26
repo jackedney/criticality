@@ -2,8 +2,7 @@
 
 **A Context-Shedding Architecture for Autonomous Software Synthesis**
 
-![Status: Phase 1 - Core Infrastructure](https://img.shields.io/badge/Status-Phase_1:_Core_Infrastructure-blue)
-![License: MIT](https://img.shields.io/badge/License-MIT-green)
+![Status: Phase 2 - TypeScript Adapter Complete](https://img.shields.io/badge/Status-Phase_2:_TypeScript_Adapter_Complete-green)
 ![TypeScript](https://img.shields.io/badge/Language-TypeScript-3178C6)
 
 ---
@@ -60,11 +59,12 @@ The protocol utilizes a swarm of specialized sub-agents, each with restricted pe
 
 ## Development Status
 
-The project is currently in **Phase 1: Core Infrastructure**.
+The project is currently in **Phase 2: TypeScript Target Adapter**.
 
 -   [x] **Protocol State Machine**: Phase transitions and blocking states defined.
 -   [x] **Model Routing**: Unified interface for Claude Code and OpenCode backends.
 -   [x] **MCP Servers**: Artifact and Toolchain servers implemented.
+-   [x] **TypeScript Adapter**: AST manipulation, witness generation, and contract parsing implemented.
 -   [ ] **Phase Implementation**: Ignition and Lattice phases are next.
 
 See [ROADMAP.md](./ROADMAP.md) for the detailed development plan.

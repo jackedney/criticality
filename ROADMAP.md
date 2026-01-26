@@ -5,15 +5,17 @@
 
 ---
 
-## Current Status: Phase 1 Complete
+## Current Status: Phase 2 Complete
 
-Phase 0 (Design) and Phase 1 (Core Infrastructure) are complete. The codebase includes:
+Phase 0 (Design), Phase 1 (Core Infrastructure), and Phase 2 (TypeScript Adapter) are complete. The codebase includes:
 - Full configuration system with TOML parsing and environment overrides
 - Append-only decision ledger with dependency tracking and cascade invalidation
 - Protocol state machine with blocking, persistence, and checkpoint/resume
 - Model router with Claude Code and OpenCode clients, retry logic, and context budgeting
 - MCP servers for artifacts and toolchain
 - Agent skills registry and subagent swarm access policies
+- Complete TypeScript adapter with AST manipulation, compiler integration, witness generation, and contract parsing
+- Property and behavioral test generators using fast-check and vitest
 
 ---
 
@@ -96,37 +98,37 @@ Phase 0 (Design) and Phase 1 (Core Infrastructure) are complete. The codebase in
 ### Milestones
 
 #### 2.1 AST Operations
-- [ ] Integrate `ts-morph` for AST manipulation
-- [ ] Implement function body injection
-- [ ] Implement `throw new Error('TODO')` detection
-- [ ] Implement signature extraction
-- [ ] Implement type extraction
+- [x] Integrate `ts-morph` for AST manipulation
+- [x] Implement function body injection
+- [x] Implement `throw new Error('TODO')` detection
+- [x] Implement signature extraction
+- [x] Implement type extraction
 
 #### 2.2 Compiler Integration
-- [ ] Implement `tsc` wrapper
-- [ ] Parse compiler errors into structured format
-- [ ] Extract type information from errors
-- [ ] Implement `vitest` test runner wrapper
-- [ ] Parse test results
+- [x] Implement `tsc` wrapper
+- [x] Parse compiler errors into structured format
+- [x] Extract type information from errors
+- [x] Implement `vitest` test runner wrapper
+- [x] Parse test results
 
 #### 2.3 Type Witness Generator
-- [ ] Implement branded type witness generation
-- [ ] Generate validation factory functions
-- [ ] Generate runtime assertions
-- [ ] Generate fast-check Arbitrary instances
+- [x] Implement branded type witness generation
+- [x] Generate validation factory functions
+- [x] Generate runtime assertions
+- [x] Generate fast-check Arbitrary instances
 
 #### 2.4 Micro-Contract Parser
-- [ ] Parse contract JSDoc comments
-- [ ] Extract @requires/@ensures/etc tags
-- [ ] Validate contract syntax
-- [ ] Generate contract objects for prompts
+- [x] Parse contract JSDoc comments
+- [x] Extract @requires/@ensures/etc tags
+- [x] Validate contract syntax
+- [x] Generate contract objects for prompts
 
 #### 2.5 Property Test Generator
-- [ ] Implement claim parser (LLM-based)
-- [ ] Generate fast-check tests for invariant claims
-- [ ] Generate integration tests for behavioral claims
-- [ ] Generate concurrent tests with workers
-- [ ] Generate benchmark tests
+- [x] Implement claim parser (LLM-based)
+- [x] Generate fast-check tests for invariant claims
+- [x] Generate integration tests for behavioral claims
+- [x] Generate concurrent tests with workers
+- [x] Generate benchmark tests
 
 ---
 
