@@ -129,6 +129,26 @@ The following decisions exist in DECISIONS.toml but are not directly relevant to
 - `witness_*`: Type witness schema (witness.ts implements generation, schema defined elsewhere)
 - `contract_*`: Contract grammar (contracts.ts implements parsing per grammar)
 
+## US-012 Verification Audit (2026-01-26)
+
+**Summary:** US-012 requires fixing any DECISIONS.toml violations identified in US-003. After reviewing the compliance report above, **no violations were found** - all 7 relevant decisions passed verification.
+
+**Verification performed:**
+
+1. **Re-verified code evidence for each decision:**
+   - `orch_002`: Confirmed ts-morph imports in all adapter modules (ast.ts, contracts.ts, signature.ts, types.ts, index.ts)
+   - `inject_006`: Confirmed `topologicalSort()` at ast.ts:338, `findStronglyConnectedComponents()` at ast.ts:271, `buildCallGraph()` at ast.ts:228
+   - `routing_005`: Confirmed exact formula at signature.ts:418: `genericParams * 2 + unionMembers + nestedTypeDepth + paramCount * 0.5`
+   - `test_005`: Confirmed `DEFAULT_INPUT_SIZES = [10, 100, 1000, 10000]` and `DEFAULT_VARIANCE = 0.2` at benchmark-test-generator.ts:28-29
+
+2. **Quality gates verified:**
+   - `npm run typecheck` -> PASS
+   - `npm run lint` -> PASS
+   - `npm run test` -> PASS (1869 tests)
+   - `npm run format:check` -> PASS
+
+3. **Conclusion:** No code changes required. The TypeScript adapter implementation is fully compliant with all relevant DECISIONS.toml constraints.
+
 ## Conclusion
 
 All relevant DECISIONS.toml constraints are honored in the TypeScript adapter implementation. The adapter correctly uses:
