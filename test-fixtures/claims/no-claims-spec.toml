@@ -1,0 +1,8 @@
+# Minimal spec with no claims section
+
+[meta]
+version = "1.0.0"
+created = "2024-01-24T12:00:00Z"
+
+[system]
+name = "empty-system"

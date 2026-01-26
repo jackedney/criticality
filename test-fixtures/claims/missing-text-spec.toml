@@ -1,0 +1,11 @@
+# Spec with claim missing required text field
+
+[meta]
+version = "1.0.0"
+created = "2024-01-24T12:00:00Z"
+
+[system]
+name = "test-system"
+
+[claims.bad_claim]
+type = "invariant"

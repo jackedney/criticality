@@ -589,7 +589,7 @@ type = "invariant"
         }
       });
 
-      it('should error when claim type is missing', () => {
+      it('should default claim type to behavioral when missing', () => {
         const toml = `
 [meta]
 version = "1.0.0"
@@ -601,15 +601,8 @@ name = "my-system"
 [claims.test]
 text = "Test claim"
 `;
-        expect(() => parseSpec(toml)).toThrow(SpecParseError);
-
-        try {
-          parseSpec(toml);
-        } catch (error) {
-          expect((error as SpecParseError).message).toContain(
-            "Missing required field: 'claims.test.type'"
-          );
-        }
+        const spec = parseSpec(toml);
+        expect(spec.claims?.test?.type).toBe('behavioral');
       });
 
       it('should error when witness name is missing', () => {

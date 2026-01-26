@@ -544,8 +544,13 @@ function parseConstraints(raw: Record<string, unknown> | undefined): SpecConstra
   return constraints;
 }
 
+/** Default claim type when not specified. */
+const DEFAULT_CLAIM_TYPE: ClaimType = 'behavioral';
+
 /**
  * Parses a claim definition from raw TOML data.
+ *
+ * If the type field is missing, it defaults to 'behavioral' as per the protocol.
  *
  * @param raw - Raw TOML object for a claim.
  * @param claimPath - Base path for error messages.
@@ -556,13 +561,14 @@ function parseClaim(raw: Record<string, unknown>, claimPath: string): SpecClaim 
   if (!('text' in raw)) {
     throw new SpecParseError(`Missing required field: '${claimPath}.text'`);
   }
-  if (!('type' in raw)) {
-    throw new SpecParseError(`Missing required field: '${claimPath}.type'`);
-  }
+
+  // Type defaults to 'behavioral' if not specified
+  const claimType: ClaimType =
+    'type' in raw ? validateClaimType(raw.type, `${claimPath}.type`) : DEFAULT_CLAIM_TYPE;
 
   const claim: SpecClaim = {
     text: validateString(raw.text, `${claimPath}.text`),
-    type: validateClaimType(raw.type, `${claimPath}.type`),
+    type: claimType,
   };
 
   if ('testable' in raw) {
