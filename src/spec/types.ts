@@ -28,6 +28,30 @@ export type ClaimType =
 export type TrustLevel = 'safe' | 'unsafe';
 
 /**
+ * Feature classification determines how a feature is handled in Lattice.
+ *
+ * @remarks
+ * - Core: Full implementation in Lattice phase
+ * - Foundational: Skeleton/extension points in Lattice (e.g., tenant_id in schema even if not used in MVP)
+ * - Bolt-on: Not in Lattice, documented for future implementation
+ */
+export type SpecFeatureClassification = 'core' | 'foundational' | 'bolt-on';
+
+/**
+ * A feature in the specification with its classification.
+ */
+export interface SpecFeature {
+  /** Feature name. */
+  name: string;
+  /** Description of the feature. */
+  description: string;
+  /** Classification determining how the feature is handled in Lattice. */
+  classification: SpecFeatureClassification;
+  /** Optional rationale for the classification. */
+  rationale?: string;
+}
+
+/**
  * Metadata about the specification.
  */
 export interface SpecMeta {
@@ -239,6 +263,8 @@ export interface Spec {
   system: SpecSystem;
   /** System boundary definitions. */
   boundaries?: SpecBoundaries;
+  /** Features with their classifications (core/foundational/bolt-on). */
+  features?: Record<string, SpecFeature>;
   /** Enumeration type definitions. */
   enums?: Record<string, SpecEnum>;
   /** Domain data model definitions. */

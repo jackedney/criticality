@@ -56,6 +56,7 @@ function createMockInterviewState(
     currentPhase: 'Approval',
     completedPhases: ['Discovery', 'Architecture', 'Constraints', 'DesignPreferences', 'Synthesis'],
     extractedRequirements: requirements,
+    features: [],
     delegationPoints: [],
     transcriptEntryCount: 0,
     createdAt: new Date().toISOString(),

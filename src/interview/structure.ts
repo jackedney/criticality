@@ -19,8 +19,16 @@ import type {
   DelegationPoint,
   ExtractedRequirement,
   TranscriptEntry,
+  Feature,
+  FeatureClassification,
 } from './types.js';
-import { createTranscriptEntry, getNextInterviewPhase, INTERVIEW_PHASES } from './types.js';
+import {
+  createTranscriptEntry,
+  getNextInterviewPhase,
+  INTERVIEW_PHASES,
+  FEATURE_CLASSIFICATIONS,
+  isValidFeatureClassification,
+} from './types.js';
 import type { Ledger } from '../ledger/ledger.js';
 import type { DecisionInput, ConfidenceLevel } from '../ledger/types.js';
 
@@ -203,6 +211,8 @@ export interface ContradictionCheckResult {
 export interface InterviewStateUpdate {
   /** New requirements to add. */
   readonly newRequirements: readonly ExtractedRequirement[];
+  /** New features to add. */
+  readonly newFeatures: readonly Feature[];
   /** New transcript entries to add. */
   readonly transcriptEntries: readonly TranscriptEntry[];
   /** Delegation point if delegation occurred. */
@@ -357,6 +367,7 @@ export function applyStateUpdate(
     currentPhase: update.nextPhase ?? state.currentPhase,
     completedPhases,
     extractedRequirements: [...state.extractedRequirements, ...update.newRequirements],
+    features: [...state.features, ...update.newFeatures],
     delegationPoints,
     transcriptEntryCount: state.transcriptEntryCount + update.transcriptEntries.length,
     createdAt: state.createdAt,
@@ -881,5 +892,206 @@ export function resetToPhase(state: InterviewState, targetPhase: InterviewPhase)
     currentPhase: targetPhase,
     completedPhases: newCompleted,
     updatedAt: new Date().toISOString(),
+  };
+}
+
+/**
+ * Feature classification question for the Architecture phase.
+ */
+export interface FeatureClassificationQuestion {
+  /** The feature being classified. */
+  readonly featureName: string;
+  /** Description of the feature. */
+  readonly featureDescription: string;
+  /** The question text. */
+  readonly questionText: string;
+  /** Available classification options. */
+  readonly options: readonly FeatureClassificationOption[];
+}
+
+/**
+ * A classification option with description.
+ */
+export interface FeatureClassificationOption {
+  /** The classification value. */
+  readonly classification: FeatureClassification;
+  /** Human-readable label. */
+  readonly label: string;
+  /** Description of what this classification means. */
+  readonly description: string;
+  /** Example scenario. */
+  readonly example: string;
+}
+
+/**
+ * Standard classification options provided during feature classification.
+ */
+export const FEATURE_CLASSIFICATION_OPTIONS: readonly FeatureClassificationOption[] = [
+  {
+    classification: 'core',
+    label: 'Core',
+    description: 'Full implementation in Lattice phase - essential for MVP',
+    example: 'User authentication for a login-required app',
+  },
+  {
+    classification: 'foundational',
+    label: 'Foundational',
+    description:
+      'Skeleton/extension points in Lattice - architecture supports it even if not fully used in MVP',
+    example:
+      'Multi-tenancy: database schema includes tenant_id columns even if single-tenant initially',
+  },
+  {
+    classification: 'bolt-on',
+    label: 'Bolt-on',
+    description: 'Not in Lattice - documented for future implementation, no code generated',
+    example: 'Social media integration for a utility app',
+  },
+] as const;
+
+/**
+ * Creates a feature classification question.
+ *
+ * @param featureName - Name of the feature to classify.
+ * @param featureDescription - Description of the feature.
+ * @returns A feature classification question.
+ */
+export function createFeatureClassificationQuestion(
+  featureName: string,
+  featureDescription: string
+): FeatureClassificationQuestion {
+  return {
+    featureName,
+    featureDescription,
+    questionText: `How should "${featureName}" be classified for the initial implementation?`,
+    options: FEATURE_CLASSIFICATION_OPTIONS,
+  };
+}
+
+/**
+ * Response to a feature classification question.
+ */
+export interface FeatureClassificationResponse {
+  /** The feature name being classified. */
+  readonly featureName: string;
+  /** The chosen classification. */
+  readonly classification: FeatureClassification;
+  /** Optional rationale for the classification. */
+  readonly rationale?: string;
+}
+
+/**
+ * Validates a feature classification response.
+ *
+ * @param response - The response to validate.
+ * @returns Validation result with errors if invalid.
+ */
+export function validateFeatureClassificationResponse(response: FeatureClassificationResponse): {
+  readonly valid: boolean;
+  readonly errors: readonly string[];
+} {
+  const errors: string[] = [];
+
+  if (typeof response.featureName !== 'string' || response.featureName.trim() === '') {
+    errors.push('Feature name must be a non-empty string');
+  }
+
+  if (!isValidFeatureClassification(response.classification)) {
+    errors.push(
+      `Classification must be one of: ${FEATURE_CLASSIFICATIONS.join(', ')}. Got: ${String(response.classification)}`
+    );
+  }
+
+  return {
+    valid: errors.length === 0,
+    errors,
+  };
+}
+
+/**
+ * Creates transcript entries for a feature classification.
+ *
+ * @param featureName - The feature being classified.
+ * @param classification - The chosen classification.
+ * @param rationale - Optional rationale.
+ * @returns Transcript entries for the classification.
+ */
+export function createFeatureClassificationTranscriptEntries(
+  featureName: string,
+  classification: FeatureClassification,
+  rationale?: string
+): TranscriptEntry[] {
+  const entries: TranscriptEntry[] = [];
+
+  // User's classification decision
+  let userContent = `[Feature Classification] ${featureName}: ${classification}`;
+  if (rationale !== undefined) {
+    userContent += `\nRationale: ${rationale}`;
+  }
+  entries.push(createTranscriptEntry('Architecture', 'user', userContent));
+
+  // System acknowledgment
+  const option = FEATURE_CLASSIFICATION_OPTIONS.find((o) => o.classification === classification);
+  const systemContent = `Feature "${featureName}" classified as ${classification}: ${option?.description ?? 'Unknown classification'}`;
+  entries.push(createTranscriptEntry('Architecture', 'system', systemContent));
+
+  return entries;
+}
+
+/**
+ * Records a feature classification in the DecisionLedger.
+ *
+ * @param ledger - The ledger to record to.
+ * @param featureName - The feature being classified.
+ * @param classification - The chosen classification.
+ * @param rationale - Optional rationale.
+ */
+export function recordFeatureClassificationInLedger(
+  ledger: Ledger,
+  featureName: string,
+  classification: FeatureClassification,
+  rationale?: string
+): void {
+  const constraint = `Feature "${featureName}" is classified as ${classification}`;
+  const option = FEATURE_CLASSIFICATION_OPTIONS.find((o) => o.classification === classification);
+
+  const input: DecisionInput = {
+    category: 'interface',
+    constraint,
+    source: 'user_explicit',
+    confidence: 'canonical',
+    phase: 'ignition',
+  };
+
+  if (rationale !== undefined) {
+    input.rationale = `${option?.description ?? ''} | User rationale: ${rationale}`;
+  } else if (option !== undefined) {
+    input.rationale = option.description;
+  }
+
+  ledger.append(input);
+}
+
+/**
+ * Checks if all features have valid classifications.
+ *
+ * @param features - The features to check.
+ * @returns Object indicating if valid and any unclassified features.
+ */
+export function validateAllFeaturesClassified(features: readonly Feature[]): {
+  readonly valid: boolean;
+  readonly unclassifiedFeatures: readonly string[];
+} {
+  const unclassified: string[] = [];
+
+  for (const feature of features) {
+    if (!isValidFeatureClassification(feature.classification)) {
+      unclassified.push(feature.name);
+    }
+  }
+
+  return {
+    valid: unclassified.length === 0,
+    unclassifiedFeatures: unclassified,
   };
 }

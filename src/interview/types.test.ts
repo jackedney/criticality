@@ -13,6 +13,12 @@ import {
   createInitialInterviewState,
   createTranscriptEntry,
   type InterviewState,
+  type Feature,
+  FEATURE_CLASSIFICATIONS,
+  isValidFeatureClassification,
+  createFeature,
+  getUnclassifiedFeatures,
+  getFeaturesByClassification,
 } from './types.js';
 
 describe('InterviewPhase constants', () => {
@@ -89,6 +95,7 @@ describe('isInterviewComplete', () => {
         'Approval',
       ],
       extractedRequirements: [],
+      features: [],
       delegationPoints: [],
       transcriptEntryCount: 0,
       createdAt: '2024-01-15T10:00:00Z',
@@ -105,6 +112,7 @@ describe('isInterviewComplete', () => {
       currentPhase: 'Synthesis',
       completedPhases: ['Discovery', 'Architecture'],
       extractedRequirements: [],
+      features: [],
       delegationPoints: [],
       transcriptEntryCount: 0,
       createdAt: '2024-01-15T10:00:00Z',
@@ -133,6 +141,7 @@ describe('createInitialInterviewState', () => {
     expect(state.currentPhase).toBe('Discovery');
     expect(state.completedPhases).toEqual([]);
     expect(state.extractedRequirements).toEqual([]);
+    expect(state.features).toEqual([]);
     expect(state.delegationPoints).toEqual([]);
     expect(state.transcriptEntryCount).toBe(0);
     expect(state.createdAt).toBe('2024-01-15T10:00:00.000Z');
@@ -210,6 +219,7 @@ describe('InterviewState type structure', () => {
           extractedAt: '2024-01-15T10:30:00Z',
         },
       ],
+      features: [],
       delegationPoints: [
         {
           phase: 'Constraints',
@@ -236,6 +246,7 @@ describe('InterviewState type structure', () => {
       currentPhase: 'Synthesis',
       completedPhases: ['Discovery', 'Architecture', 'Constraints', 'DesignPreferences'],
       extractedRequirements: [],
+      features: [],
       delegationPoints: [
         {
           phase: 'DesignPreferences',
@@ -250,5 +261,243 @@ describe('InterviewState type structure', () => {
     };
 
     expect(state.delegationPoints[0]?.notes).toBe('Prefer React for frontend');
+  });
+});
+
+describe('FeatureClassification', () => {
+  describe('FEATURE_CLASSIFICATIONS', () => {
+    it('should have all classification types', () => {
+      expect(FEATURE_CLASSIFICATIONS).toEqual(['core', 'foundational', 'bolt-on']);
+    });
+
+    it('should be readonly', () => {
+      expect(FEATURE_CLASSIFICATIONS.length).toBe(3);
+    });
+  });
+
+  describe('isValidFeatureClassification', () => {
+    it('should return true for valid classifications', () => {
+      expect(isValidFeatureClassification('core')).toBe(true);
+      expect(isValidFeatureClassification('foundational')).toBe(true);
+      expect(isValidFeatureClassification('bolt-on')).toBe(true);
+    });
+
+    it('should return false for invalid classifications', () => {
+      expect(isValidFeatureClassification('invalid')).toBe(false);
+      expect(isValidFeatureClassification('')).toBe(false);
+      expect(isValidFeatureClassification('Core')).toBe(false); // case sensitive
+      expect(isValidFeatureClassification('CORE')).toBe(false);
+    });
+  });
+});
+
+describe('createFeature', () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2024-01-15T10:30:00.000Z'));
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it('should create a feature with all required fields', () => {
+    const feature = createFeature(
+      'User Authentication',
+      'Allow users to log in with email/password',
+      'core',
+      'Discovery'
+    );
+
+    expect(feature.id).toMatch(/^feature_\d+_[a-z0-9]+$/);
+    expect(feature.name).toBe('User Authentication');
+    expect(feature.description).toBe('Allow users to log in with email/password');
+    expect(feature.classification).toBe('core');
+    expect(feature.sourcePhase).toBe('Discovery');
+    expect(feature.identifiedAt).toBe('2024-01-15T10:30:00.000Z');
+    expect(feature.classificationRationale).toBeUndefined();
+  });
+
+  it('should include rationale when provided', () => {
+    const feature = createFeature(
+      'Multi-tenancy',
+      'Support multiple organizations',
+      'foundational',
+      'Architecture',
+      'Database schema should include tenant_id even if not used in MVP'
+    );
+
+    expect(feature.classification).toBe('foundational');
+    expect(feature.classificationRationale).toBe(
+      'Database schema should include tenant_id even if not used in MVP'
+    );
+  });
+
+  it('should create bolt-on features', () => {
+    const feature = createFeature(
+      'Social Login',
+      'Allow login via Google/Facebook',
+      'bolt-on',
+      'Architecture'
+    );
+
+    expect(feature.classification).toBe('bolt-on');
+  });
+
+  it('should create unique IDs', () => {
+    const feature1 = createFeature('Feature 1', 'Desc 1', 'core', 'Discovery');
+    const feature2 = createFeature('Feature 2', 'Desc 2', 'core', 'Discovery');
+
+    expect(feature1.id).not.toBe(feature2.id);
+  });
+});
+
+describe('getUnclassifiedFeatures', () => {
+  it('should return empty array when all features are classified', () => {
+    const features: Feature[] = [
+      {
+        id: 'feature_1',
+        name: 'Auth',
+        description: 'Authentication',
+        classification: 'core',
+        sourcePhase: 'Discovery',
+        identifiedAt: '2024-01-15T10:00:00Z',
+      },
+      {
+        id: 'feature_2',
+        name: 'Tenancy',
+        description: 'Multi-tenancy',
+        classification: 'foundational',
+        sourcePhase: 'Architecture',
+        identifiedAt: '2024-01-15T10:00:00Z',
+      },
+    ];
+
+    expect(getUnclassifiedFeatures(features)).toEqual([]);
+  });
+
+  it('should return empty array for empty input', () => {
+    expect(getUnclassifiedFeatures([])).toEqual([]);
+  });
+});
+
+describe('getFeaturesByClassification', () => {
+  const features: Feature[] = [
+    {
+      id: 'feature_1',
+      name: 'Auth',
+      description: 'Authentication',
+      classification: 'core',
+      sourcePhase: 'Discovery',
+      identifiedAt: '2024-01-15T10:00:00Z',
+    },
+    {
+      id: 'feature_2',
+      name: 'Tenancy',
+      description: 'Multi-tenancy',
+      classification: 'foundational',
+      sourcePhase: 'Architecture',
+      identifiedAt: '2024-01-15T10:00:00Z',
+    },
+    {
+      id: 'feature_3',
+      name: 'Payments',
+      description: 'Payment processing',
+      classification: 'core',
+      sourcePhase: 'Discovery',
+      identifiedAt: '2024-01-15T10:00:00Z',
+    },
+    {
+      id: 'feature_4',
+      name: 'Social Login',
+      description: 'OAuth providers',
+      classification: 'bolt-on',
+      sourcePhase: 'Architecture',
+      identifiedAt: '2024-01-15T10:00:00Z',
+    },
+  ];
+
+  it('should return core features', () => {
+    const coreFeatures = getFeaturesByClassification(features, 'core');
+    expect(coreFeatures).toHaveLength(2);
+    expect(coreFeatures.map((f) => f.name)).toEqual(['Auth', 'Payments']);
+  });
+
+  it('should return foundational features', () => {
+    const foundationalFeatures = getFeaturesByClassification(features, 'foundational');
+    expect(foundationalFeatures).toHaveLength(1);
+    expect(foundationalFeatures[0]?.name).toBe('Tenancy');
+  });
+
+  it('should return bolt-on features', () => {
+    const boltOnFeatures = getFeaturesByClassification(features, 'bolt-on');
+    expect(boltOnFeatures).toHaveLength(1);
+    expect(boltOnFeatures[0]?.name).toBe('Social Login');
+  });
+
+  it('should return empty array when no features match', () => {
+    const coreOnly: Feature[] = [
+      {
+        id: 'feature_1',
+        name: 'Auth',
+        description: 'Authentication',
+        classification: 'core',
+        sourcePhase: 'Discovery',
+        identifiedAt: '2024-01-15T10:00:00Z',
+      },
+    ];
+    expect(getFeaturesByClassification(coreOnly, 'bolt-on')).toEqual([]);
+  });
+});
+
+describe('InterviewState with features', () => {
+  it('should include features array in initial state', () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2024-01-15T10:00:00.000Z'));
+
+    const state = createInitialInterviewState('test-project');
+    expect(state.features).toEqual([]);
+
+    vi.useRealTimers();
+  });
+
+  it('should allow state with features', () => {
+    const state: InterviewState = {
+      version: '1.0.0',
+      projectId: 'test-project',
+      currentPhase: 'Architecture',
+      completedPhases: ['Discovery'],
+      extractedRequirements: [],
+      features: [
+        {
+          id: 'feature_1',
+          name: 'User Auth',
+          description: 'Email/password authentication',
+          classification: 'core',
+          sourcePhase: 'Discovery',
+          identifiedAt: '2024-01-15T10:30:00Z',
+        },
+        {
+          id: 'feature_2',
+          name: 'Multi-tenancy',
+          description: 'Support for multiple organizations',
+          classification: 'foundational',
+          sourcePhase: 'Discovery',
+          identifiedAt: '2024-01-15T10:30:00Z',
+          classificationRationale: 'Include tenant_id in schema for future expansion',
+        },
+      ],
+      delegationPoints: [],
+      transcriptEntryCount: 5,
+      createdAt: '2024-01-15T10:00:00Z',
+      updatedAt: '2024-01-15T10:30:00Z',
+    };
+
+    expect(state.features).toHaveLength(2);
+    expect(state.features[0]?.classification).toBe('core');
+    expect(state.features[1]?.classification).toBe('foundational');
+    expect(state.features[1]?.classificationRationale).toBe(
+      'Include tenant_id in schema for future expansion'
+    );
   });
 });

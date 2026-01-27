@@ -10,8 +10,16 @@
 import * as TOML from '@iarna/toml';
 import { writeFile, readFile, mkdir, readdir } from 'node:fs/promises';
 import { join, dirname } from 'node:path';
-import type { ClaimType, Spec, SpecBoundaries, SpecClaim, SpecConstraints } from '../spec/types.js';
-import type { ExtractedRequirement, InterviewState } from './types.js';
+import type {
+  ClaimType,
+  Spec,
+  SpecBoundaries,
+  SpecClaim,
+  SpecConstraints,
+  SpecFeature,
+} from '../spec/types.js';
+import type { ExtractedRequirement, Feature, InterviewState } from './types.js';
+import { FEATURE_CLASSIFICATIONS, isValidFeatureClassification } from './types.js';
 import { getInterviewDir } from './persistence.js';
 
 /**
@@ -369,6 +377,40 @@ function extractTrustBoundaries(requirements: readonly ExtractedRequirement[]): 
 }
 
 /**
+ * Converts interview features to spec features.
+ *
+ * @param features - Features from the interview state.
+ * @returns Record of spec features keyed by generated ID.
+ */
+function convertFeaturesToSpec(features: readonly Feature[]): Record<string, SpecFeature> {
+  const specFeatures: Record<string, SpecFeature> = {};
+
+  features.forEach((feature, index) => {
+    // Generate a kebab-case ID from the feature name
+    const featureId = feature.name
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, '-')
+      .replace(/^-|-$/g, '');
+    const uniqueId = `${featureId || 'feature'}_${String(index + 1).padStart(3, '0')}`;
+
+    const specFeature: SpecFeature = {
+      name: feature.name,
+      description: feature.description,
+      classification: feature.classification,
+    };
+
+    // Only add rationale if present
+    if (feature.classificationRationale !== undefined) {
+      specFeature.rationale = feature.classificationRationale;
+    }
+
+    specFeatures[uniqueId] = specFeature;
+  });
+
+  return specFeatures;
+}
+
+/**
  * Generates a spec from interview state.
  *
  * @param state - The completed interview state.
@@ -422,6 +464,11 @@ export function generateSpec(state: InterviewState, options?: SpecGeneratorOptio
     spec.boundaries = boundaries;
   }
 
+  // Convert features to spec format
+  if (state.features.length > 0) {
+    spec.features = convertFeaturesToSpec(state.features);
+  }
+
   // Extract constraints
   const constraints = extractConstraints(requirements);
   if (
@@ -470,6 +517,24 @@ export function validateSpec(spec: Spec): SpecValidationResult {
     errors.push(
       `Invalid system name: '${spec.system.name}' must be kebab-case starting with lowercase letter`
     );
+  }
+
+  // Validate features
+  if (spec.features !== undefined) {
+    for (const [featureId, feature] of Object.entries(spec.features)) {
+      if (!feature.name) {
+        errors.push(`Feature '${featureId}' missing required field: 'name'`);
+      }
+      if (!feature.description) {
+        errors.push(`Feature '${featureId}' missing required field: 'description'`);
+      }
+      if (!isValidFeatureClassification(feature.classification)) {
+        errors.push(
+          `Feature '${featureId}' has invalid classification: '${String(feature.classification)}'. ` +
+            `Must be one of: ${FEATURE_CLASSIFICATIONS.join(', ')}`
+        );
+      }
+    }
   }
 
   // Validate claims
@@ -522,6 +587,11 @@ export function serializeSpec(spec: Spec): string {
   // Boundaries section (optional)
   if (spec.boundaries !== undefined) {
     tomlObj.boundaries = { ...spec.boundaries };
+  }
+
+  // Features section (optional)
+  if (spec.features !== undefined) {
+    tomlObj.features = { ...spec.features };
   }
 
   // Enums section (optional)

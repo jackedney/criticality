@@ -915,6 +915,7 @@ export class InterviewCli {
       currentPhase: 'Discovery',
       completedPhases: [],
       extractedRequirements: [],
+      features: [],
       delegationPoints: [],
       transcriptEntryCount: 0,
       createdAt: now,

@@ -187,6 +187,7 @@ describe('Interview Structure', () => {
     it('should apply empty update', () => {
       const update: InterviewStateUpdate = {
         newRequirements: [],
+        newFeatures: [],
         transcriptEntries: [],
         completedPhases: [],
       };
@@ -199,6 +200,7 @@ describe('Interview Structure', () => {
       const req = createExtractedRequirement('Discovery', 'functional', 'Test', 'high');
       const update: InterviewStateUpdate = {
         newRequirements: [req],
+        newFeatures: [],
         transcriptEntries: [],
         completedPhases: [],
       };
@@ -210,6 +212,7 @@ describe('Interview Structure', () => {
     it('should update transcript entry count', () => {
       const update: InterviewStateUpdate = {
         newRequirements: [],
+        newFeatures: [],
         transcriptEntries: [
           { id: '1', phase: 'Discovery', role: 'user', content: 'test', timestamp: '' },
         ],
@@ -222,6 +225,7 @@ describe('Interview Structure', () => {
     it('should add completed phases', () => {
       const update: InterviewStateUpdate = {
         newRequirements: [],
+        newFeatures: [],
         transcriptEntries: [],
         completedPhases: ['Discovery'],
       };
@@ -232,6 +236,7 @@ describe('Interview Structure', () => {
     it('should update current phase', () => {
       const update: InterviewStateUpdate = {
         newRequirements: [],
+        newFeatures: [],
         transcriptEntries: [],
         completedPhases: [],
         nextPhase: 'Architecture',
@@ -244,6 +249,7 @@ describe('Interview Structure', () => {
       const point = createDelegationPoint('Constraints', 'Delegate');
       const update: InterviewStateUpdate = {
         newRequirements: [],
+        newFeatures: [],
         transcriptEntries: [],
         completedPhases: [],
         delegationPoint: point,

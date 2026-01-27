@@ -12,6 +12,7 @@ import type {
   InterviewPhase,
   ExtractedRequirement,
   TranscriptEntry,
+  FeatureClassification,
 } from './types.js';
 import {
   createInitialInterviewState,
@@ -19,6 +20,9 @@ import {
   getNextInterviewPhase,
   isInterviewComplete,
   INTERVIEW_PHASES,
+  createFeature,
+  FEATURE_CLASSIFICATIONS,
+  isValidFeatureClassification,
 } from './types.js';
 import {
   saveInterviewState,
@@ -39,6 +43,7 @@ import {
   getPhasesToRevisit,
   resetToPhase,
   isDelegablePhase,
+  createFeatureClassificationTranscriptEntries,
 } from './structure.js';
 
 /**
@@ -108,7 +113,13 @@ export class InterviewEngineError extends Error {
 /**
  * Question types for interview questions.
  */
-export type QuestionType = 'open' | 'choice' | 'confirmation' | 'delegation' | 'approval';
+export type QuestionType =
+  | 'open'
+  | 'choice'
+  | 'confirmation'
+  | 'delegation'
+  | 'approval'
+  | 'feature_classification';
 
 /**
  * Current question presented by the interview engine.
@@ -181,9 +192,29 @@ export interface ApprovalAnswerResponse extends BaseAnswerResponse {
 }
 
 /**
+ * Feature classification response for classifying features as core/foundational/bolt-on.
+ */
+export interface FeatureClassificationAnswerResponse extends BaseAnswerResponse {
+  /** Response type identifier. */
+  readonly type: 'feature_classification';
+  /** The feature name being classified. */
+  readonly featureName: string;
+  /** Description of the feature. */
+  readonly featureDescription: string;
+  /** The chosen classification. */
+  readonly classification: FeatureClassification;
+  /** Optional rationale for the classification. */
+  readonly rationale?: string;
+}
+
+/**
  * Union type for all answer responses.
  */
-export type AnswerResponse = OpenTextResponse | DelegationAnswerResponse | ApprovalAnswerResponse;
+export type AnswerResponse =
+  | OpenTextResponse
+  | DelegationAnswerResponse
+  | ApprovalAnswerResponse
+  | FeatureClassificationAnswerResponse;
 
 /**
  * Result of an answer operation.
@@ -364,10 +395,10 @@ function validateAnswerResponseShape(
       field: 'type',
       message: 'Type must be a string',
       received: typeof obj.type,
-      expected: "string ('open' | 'delegation' | 'approval')",
+      expected: "string ('open' | 'delegation' | 'approval' | 'feature_classification')",
     });
   } else {
-    const validTypes = ['open', 'delegation', 'approval'];
+    const validTypes = ['open', 'delegation', 'approval', 'feature_classification'];
     if (!validTypes.includes(obj.type)) {
       details.push({
         field: 'type',
@@ -483,6 +514,69 @@ function validateAnswerResponseShape(
               });
             }
           }
+        }
+      }
+
+      if (obj.type === 'feature_classification') {
+        // Validate featureName
+        if (typeof obj.featureName !== 'string') {
+          details.push({
+            field: 'featureName',
+            message: 'Feature name must be a string',
+            received: typeof obj.featureName,
+            expected: 'string',
+          });
+        } else if (obj.featureName.trim() === '') {
+          details.push({
+            field: 'featureName',
+            message: 'Feature name cannot be empty',
+            received: obj.featureName,
+            expected: 'non-empty string',
+          });
+        }
+
+        // Validate featureDescription
+        if (typeof obj.featureDescription !== 'string') {
+          details.push({
+            field: 'featureDescription',
+            message: 'Feature description must be a string',
+            received: typeof obj.featureDescription,
+            expected: 'string',
+          });
+        } else if (obj.featureDescription.trim() === '') {
+          details.push({
+            field: 'featureDescription',
+            message: 'Feature description cannot be empty',
+            received: obj.featureDescription,
+            expected: 'non-empty string',
+          });
+        }
+
+        // Validate classification
+        if (typeof obj.classification !== 'string') {
+          details.push({
+            field: 'classification',
+            message: 'Classification must be a string',
+            received: typeof obj.classification,
+            expected: `string (${FEATURE_CLASSIFICATIONS.join(' | ')})`,
+          });
+        } else if (!isValidFeatureClassification(obj.classification)) {
+          details.push({
+            field: 'classification',
+            message: `Classification "${obj.classification}" is not valid`,
+            received: obj.classification,
+            expected: FEATURE_CLASSIFICATIONS.join(' | '),
+          });
+        }
+
+        // Validate optional rationale
+        if (obj.rationale !== undefined && typeof obj.rationale !== 'string') {
+          details.push({
+            field: 'rationale',
+            message: 'Rationale must be a string if provided',
+            received: typeof obj.rationale,
+            expected: 'string | undefined',
+          });
         }
       }
     }
@@ -655,6 +749,10 @@ export class InterviewEngine {
 
     if (validResponse.type === 'approval') {
       return this.processApprovalResponse(validResponse);
+    }
+
+    if (validResponse.type === 'feature_classification') {
+      return this.processFeatureClassificationResponse(validResponse);
     }
 
     // Process open text response
@@ -1019,6 +1117,67 @@ export class InterviewEngine {
       nextQuestion: discoveryQuestion,
       complete: false,
       phasesToRevisit: INTERVIEW_PHASES.filter((p) => p !== 'Synthesis' && p !== 'Approval'),
+    };
+  }
+
+  /**
+   * Processes a feature classification response.
+   */
+  private async processFeatureClassificationResponse(
+    response: FeatureClassificationAnswerResponse
+  ): Promise<AnswerResult> {
+    if (this.state === undefined) {
+      throw new InterviewEngineError('State is undefined', 'STATE_INCONSISTENT');
+    }
+
+    const phase = this.state.currentPhase;
+
+    // Create the feature
+    const feature = createFeature(
+      response.featureName,
+      response.featureDescription,
+      response.classification,
+      phase,
+      response.rationale
+    );
+
+    // Create transcript entries
+    const transcriptEntries = createFeatureClassificationTranscriptEntries(
+      response.featureName,
+      response.classification,
+      response.rationale
+    );
+
+    // Update state with new feature
+    this.state = {
+      ...this.state,
+      features: [...this.state.features, feature],
+      transcriptEntryCount: this.state.transcriptEntryCount + transcriptEntries.length,
+      updatedAt: new Date().toISOString(),
+    };
+
+    // Persist
+    await saveInterviewState(this.state);
+    for (const entry of transcriptEntries) {
+      await appendTranscriptEntry(this.projectId, entry);
+    }
+
+    // Return with same phase question - user can add more features or answer the main phase question
+    // The engine doesn't automatically advance after feature classification
+    const currentQ = this.currentQuestion;
+    if (currentQ !== undefined) {
+      return {
+        accepted: true,
+        state: this.state,
+        nextQuestion: currentQ,
+        complete: false,
+      };
+    }
+
+    return {
+      accepted: true,
+      state: this.state,
+      complete: false,
     };
   }
 

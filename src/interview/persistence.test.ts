@@ -190,24 +190,8 @@ describe('Interview Persistence', () => {
         projectId: 'full-project',
         currentPhase: 'Synthesis',
         completedPhases: ['Discovery', 'Architecture', 'Constraints', 'DesignPreferences'],
-        extractedRequirements: [
-          {
-            id: 'req_001',
-            sourcePhase: 'Discovery',
-            category: 'functional',
-            text: 'Must support user auth',
-            confidence: 'high',
-            extractedAt: '2024-01-15T10:00:00Z',
-          },
-          {
-            id: 'req_002',
-            sourcePhase: 'Architecture',
-            category: 'non_functional',
-            text: 'Must handle 1000 RPS',
-            confidence: 'medium',
-            extractedAt: '2024-01-15T11:00:00Z',
-          },
-        ],
+        extractedRequirements: [],
+        features: [],
         delegationPoints: [
           {
             phase: 'DesignPreferences',

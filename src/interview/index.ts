@@ -9,6 +9,7 @@
  * - Delegation support for Constraints and DesignPreferences phases
  * - Conditional approval with targeted revision
  * - Contradiction detection for requirements
+ * - Feature classification (core/foundational/bolt-on) for architecture decisions
  *
  * And the CLI interface for:
  * - Interactive interview prompts with clear formatting
@@ -18,6 +19,7 @@
  * And the programmatic API for:
  * - Automated and testable interview processes
  * - Structured responses matching interview question format
+ * - Feature classification responses for categorizing features
  * - Typed errors with validation details
  *
  * And the adversarial auditor for:
@@ -31,6 +33,7 @@
  * - Managing proposal versions (v1.toml, v2.toml, etc.)
  * - Validating specs before writing
  * - Finalizing approved specs to project root
+ * - Including feature classifications in spec output
  *
  * @packageDocumentation
  */

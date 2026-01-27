@@ -8,6 +8,55 @@
  */
 
 /**
+ * Feature classification determines how a feature is handled in Lattice.
+ *
+ * @remarks
+ * - Core: Full implementation in Lattice phase
+ * - Foundational: Skeleton/extension points in Lattice (e.g., tenant_id in schema even if not used in MVP)
+ * - Bolt-on: Not in Lattice, documented for future implementation
+ */
+export type FeatureClassification = 'core' | 'foundational' | 'bolt-on';
+
+/**
+ * Array of all valid feature classifications.
+ */
+export const FEATURE_CLASSIFICATIONS: readonly FeatureClassification[] = [
+  'core',
+  'foundational',
+  'bolt-on',
+] as const;
+
+/**
+ * A feature identified during the interview.
+ */
+export interface Feature {
+  /** Unique identifier for the feature. */
+  readonly id: string;
+  /** Feature name/title. */
+  readonly name: string;
+  /** Description of the feature. */
+  readonly description: string;
+  /** Classification determining how the feature is handled in Lattice. */
+  readonly classification: FeatureClassification;
+  /** Phase where this feature was identified. */
+  readonly sourcePhase: InterviewPhase;
+  /** Timestamp when feature was identified (ISO 8601). */
+  readonly identifiedAt: string;
+  /** Optional rationale for the classification. */
+  readonly classificationRationale?: string;
+}
+
+/**
+ * Checks if a string is a valid FeatureClassification.
+ *
+ * @param value - The string to check.
+ * @returns True if the value is a valid FeatureClassification.
+ */
+export function isValidFeatureClassification(value: string): value is FeatureClassification {
+  return FEATURE_CLASSIFICATIONS.includes(value as FeatureClassification);
+}
+
+/**
  * Interview phases in order of execution.
  *
  * @remarks
@@ -128,6 +177,7 @@ export interface TranscriptEntry {
  *       extractedAt: '2024-01-15T10:30:00Z'
  *     }
  *   ],
+ *   features: [],
  *   delegationPoints: [],
  *   transcript: [],
  *   createdAt: '2024-01-15T10:00:00Z',
@@ -146,6 +196,8 @@ export interface InterviewState {
   readonly completedPhases: readonly InterviewPhase[];
   /** Requirements extracted from the interview. */
   readonly extractedRequirements: readonly ExtractedRequirement[];
+  /** Features identified with their classifications. */
+  readonly features: readonly Feature[];
   /** Points where user delegated to the Architect. */
   readonly delegationPoints: readonly DelegationPoint[];
   /** Reference to transcript (entries stored in separate JSONL file). */
@@ -217,11 +269,71 @@ export function createInitialInterviewState(projectId: string): InterviewState {
     currentPhase: 'Discovery',
     completedPhases: [],
     extractedRequirements: [],
+    features: [],
     delegationPoints: [],
     transcriptEntryCount: 0,
     createdAt: now,
     updatedAt: now,
   };
+}
+
+/**
+ * Creates a new feature.
+ *
+ * @param name - Feature name.
+ * @param description - Feature description.
+ * @param classification - Feature classification.
+ * @param sourcePhase - Phase where the feature was identified.
+ * @param rationale - Optional rationale for the classification.
+ * @returns A new Feature.
+ */
+export function createFeature(
+  name: string,
+  description: string,
+  classification: FeatureClassification,
+  sourcePhase: InterviewPhase,
+  rationale?: string
+): Feature {
+  const base: Feature = {
+    id: `feature_${String(Date.now())}_${Math.random().toString(36).substring(2, 9)}`,
+    name,
+    description,
+    classification,
+    sourcePhase,
+    identifiedAt: new Date().toISOString(),
+  };
+
+  if (rationale !== undefined) {
+    return { ...base, classificationRationale: rationale };
+  }
+
+  return base;
+}
+
+/**
+ * Gets features that need classification (have no classification yet).
+ * This is used to detect unclassified features that need prompting.
+ *
+ * @param features - The features to check.
+ * @returns Features that are missing classification.
+ */
+export function getUnclassifiedFeatures(features: readonly Feature[]): readonly Feature[] {
+  // All features should have a classification, but this guards against future changes
+  return features.filter((f) => !isValidFeatureClassification(f.classification));
+}
+
+/**
+ * Gets features by classification.
+ *
+ * @param features - The features to filter.
+ * @param classification - The classification to filter by.
+ * @returns Features matching the classification.
+ */
+export function getFeaturesByClassification(
+  features: readonly Feature[],
+  classification: FeatureClassification
+): readonly Feature[] {
+  return features.filter((f) => f.classification === classification);
 }
 
 /**
