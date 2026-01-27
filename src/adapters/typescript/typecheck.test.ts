@@ -312,4 +312,110 @@ describe('parseTypeDetails', () => {
       expect(result).toBeNull();
     });
   });
+
+  describe('TS2741 - Property missing from type', () => {
+    it('should extract types from property missing error', () => {
+      const result = parseTypeDetails(
+        'TS2741',
+        "Type '{ name: string; }' is not assignable to type 'User'."
+      );
+      expect(result).toEqual({
+        expected: 'User',
+        actual: '{ name: string; }',
+      });
+    });
+  });
+
+  describe('TS2555 - Expected N arguments, got M', () => {
+    it('should extract expected and actual argument counts', () => {
+      // TS2555 uses the same pattern as TS2554 - "Expected N arguments, but got M"
+      const result = parseTypeDetails('TS2555', 'Expected 3 arguments, but got 1.');
+      expect(result).toEqual({ expected: '3 arguments', actual: '1 arguments' });
+    });
+
+    it('should return null for non-matching TS2555 message format', () => {
+      // "Expected at least" doesn't match the current pattern
+      const result = parseTypeDetails('TS2555', 'Expected at least 2 arguments, but got 1.');
+      expect(result).toBeNull();
+    });
+  });
+
+  describe('Edge cases for pattern matching', () => {
+    it('should handle TS2322 with nested generic types', () => {
+      const result = parseTypeDetails(
+        'TS2322',
+        "Type 'Map<string, Set<number>>' is not assignable to type 'Map<string, Array<string>>'."
+      );
+      expect(result).toEqual({
+        expected: 'Map<string, Array<string>>',
+        actual: 'Map<string, Set<number>>',
+      });
+    });
+
+    it('should handle TS2345 with function types', () => {
+      const result = parseTypeDetails(
+        'TS2345',
+        "Argument of type '(x: string) => void' is not assignable to parameter of type '(x: number) => void'."
+      );
+      expect(result).toEqual({
+        expected: '(x: number) => void',
+        actual: '(x: string) => void',
+      });
+    });
+
+    it('should handle TS2339 with intersection types', () => {
+      const result = parseTypeDetails('TS2339', "Property 'value' does not exist on type 'A & B'.");
+      expect(result).toEqual({
+        expected: "A & B with property 'value'",
+        actual: 'A & B',
+      });
+    });
+
+    it('should handle TS2304 with scoped identifier', () => {
+      const result = parseTypeDetails('TS2304', "Cannot find name 'SomeModule.SomeType'.");
+      expect(result).toEqual({
+        expected: 'SomeModule.SomeType',
+        actual: '<undefined>',
+      });
+    });
+
+    it('should handle TS2551 suggestion with complex type', () => {
+      const result = parseTypeDetails(
+        'TS2551',
+        "Property 'lenght' does not exist on type 'string[]'. Did you mean 'length'?"
+      );
+      expect(result).toEqual({
+        expected: "'length' (suggestion)",
+        actual: "property 'lenght' on string[]",
+      });
+    });
+
+    it('should handle TS2740 with single missing property', () => {
+      const result = parseTypeDetails(
+        'TS2740',
+        "Type '{}' is missing the following properties from type 'User': id"
+      );
+      expect(result).toEqual({
+        expected: 'User (missing: id)',
+        actual: '{}',
+      });
+    });
+
+    it('should handle TS2559 with generic types', () => {
+      const result = parseTypeDetails(
+        'TS2559',
+        "Type 'Array<string>' has no properties in common with type 'Record<string, number>'."
+      );
+      expect(result).toEqual({
+        expected: 'Record<string, number>',
+        actual: 'Array<string>',
+      });
+    });
+
+    it('should handle generic fallback with incomplete Type pattern', () => {
+      // This tests the generic fallback pattern
+      const result = parseTypeDetails('TS9000', "Cannot compare Type 'A' with type 'B'.");
+      expect(result).toEqual({ expected: 'B', actual: 'A' });
+    });
+  });
 });
