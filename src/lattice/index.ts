@@ -17,6 +17,8 @@ export {
 
 export { ModuleGeneratorError } from './types.js';
 
+export { generateTypeDefinitions, generateDomainTypeDefinitions } from './type-generator.js';
+
 export type {
   DomainBoundary,
   DomainModule,
@@ -26,3 +28,11 @@ export type {
   ProjectConventions,
   ModuleGeneratorErrorCode,
 } from './types.js';
+
+export type {
+  TypeGenerationResult,
+  TypeGeneratorOptions,
+  BrandedTypeResult,
+  ConstraintWarning,
+  SupportedConstraintType,
+} from './type-generator.js';
