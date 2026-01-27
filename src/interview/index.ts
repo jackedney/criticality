@@ -20,6 +20,12 @@
  * - Structured responses matching interview question format
  * - Typed errors with validation details
  *
+ * And the adversarial auditor for:
+ * - Challenging Architect proposals for logical consistency
+ * - Detecting temporal contradictions, resource conflicts, invariant violations, precondition gaps
+ * - Presenting findings to user with Architect responses
+ * - Uses auditor_model via ModelRouter
+ *
  * @packageDocumentation
  */
 
@@ -28,3 +34,4 @@ export * from './persistence.js';
 export * from './structure.js';
 export * from './cli.js';
 export * from './engine.js';
+export * from './auditor.js';
