@@ -15,6 +15,11 @@
  * - Resuming with summary display and confirmation
  * - Empty input handling with re-prompts
  *
+ * And the programmatic API for:
+ * - Automated and testable interview processes
+ * - Structured responses matching interview question format
+ * - Typed errors with validation details
+ *
  * @packageDocumentation
  */
 
@@ -22,3 +27,4 @@ export * from './types.js';
 export * from './persistence.js';
 export * from './structure.js';
 export * from './cli.js';
+export * from './engine.js';
