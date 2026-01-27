@@ -19,6 +19,17 @@ export { ModuleGeneratorError } from './types.js';
 
 export { generateTypeDefinitions, generateDomainTypeDefinitions } from './type-generator.js';
 
+export {
+  generateFunctionSignatures,
+  generateFunctionsForInterface,
+  generateFunction,
+  generateFunctionSignature,
+  mapSpecTypeToTypeScript,
+  parseSpecParameter,
+  parseSpecReturnType,
+  InvalidTypeReferenceError,
+} from './function-generator.js';
+
 export type {
   DomainBoundary,
   DomainModule,
@@ -36,3 +47,12 @@ export type {
   ConstraintWarning,
   SupportedConstraintType,
 } from './type-generator.js';
+
+export type {
+  FunctionGenerationResult,
+  FunctionGeneratorOptions,
+  GeneratedFunction,
+  FunctionGenerationWarning,
+  ParsedParameter,
+  ParsedReturnType,
+} from './function-generator.js';
