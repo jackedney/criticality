@@ -1518,11 +1518,10 @@ describe('orderByDependency', () => {
       expect(ordered[1]?.name).toBe('funcInA');
     });
 
-    it('handles complex multi-SCC dependency graph requiring sorted insertion', () => {
-      // Create a dependency graph that requires multiple SCCs to be ordered
-      // and tests the sorted insertion logic in Kahn's algorithm
-      // Structure: sccA -> sccB -> sccC -> sccD (chain of independent SCCs)
-      // Each SCC is independent (no cycles), but has dependencies
+    it('handles complex multi-node dependency graph requiring sorted insertion', () => {
+      // Create a linear dependency chain: A -> B -> C -> D
+      // Tests the sorted insertion logic in topological sort
+      // Structure: sccA -> sccB -> sccC -> sccD (chain without cycles)
       const filePath = addSourceFile(
         'multi-scc-chain.ts',
         `
