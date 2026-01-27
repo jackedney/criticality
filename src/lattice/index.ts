@@ -88,3 +88,24 @@ export type {
   ContractAttachmentResult,
   ContractAttachmentOptions,
 } from './contract-attacher.js';
+
+export {
+  CompilationVerifier,
+  createCompilationVerifier,
+  categorizeError,
+  generateRepairPrompt,
+  parseRepairResponse,
+  verifyNoLogicLeakage,
+  formatVerificationReport as formatCompilationReport,
+} from './compilation-verifier.js';
+
+export type {
+  CompilationErrorCategory,
+  CategorizedError,
+  VerificationAttempt,
+  AppliedRepair,
+  VerificationState,
+  CompilationVerificationResult,
+  CompilationVerifierOptions,
+  LogicLeakageViolation,
+} from './compilation-verifier.js';
