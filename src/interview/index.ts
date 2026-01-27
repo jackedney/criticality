@@ -10,9 +10,15 @@
  * - Conditional approval with targeted revision
  * - Contradiction detection for requirements
  *
+ * And the CLI interface for:
+ * - Interactive interview prompts with clear formatting
+ * - Resuming with summary display and confirmation
+ * - Empty input handling with re-prompts
+ *
  * @packageDocumentation
  */
 
 export * from './types.js';
 export * from './persistence.js';
 export * from './structure.js';
+export * from './cli.js';
