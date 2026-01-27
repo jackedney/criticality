@@ -43,6 +43,7 @@ The TypeScript adapter is organized as a facade that coordinates multiple specia
 | `testrunner.ts` | Vitest wrapper with structured results |
 | `claims.ts` | Spec claim parsing for test generation |
 | `claim-parser.ts` | LLM-based claim parsing |
+| `validation.ts` | Contract validation with semantic error checking |
 | `*-test-generator.ts` | Test generators for different claim types |
 
 ## The TargetAdapter Interface
@@ -93,15 +94,14 @@ await adapter.initialize('./project');
 
 // Find all functions with TODO bodies
 const todos = adapter.findTodoFunctions();
-// Returns: [{ name, filePath, line, signature, callers, callees }, ...]
+// Returns: [{ name, filePath, line, signature, hasTodoBody }, ...]
 
 // Functions are already sorted topologically (leaves first)
 ```
 
 TODO functions are identified by their body content:
-- `throw new Error('TODO')`
-- `throw new Error('TODO: description')`
-- `throw new Error('Not implemented')`
+- `throw new Error('TODO')` or `throw new Error("TODO")`
+- `// todo!()` comment pattern (macro-style)
 
 ### Injection Phase
 
