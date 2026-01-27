@@ -1519,9 +1519,9 @@ describe('orderByDependency', () => {
     });
 
     it('handles complex multi-node dependency graph requiring sorted insertion', () => {
-      // Create a linear dependency chain: A -> B -> C -> D
+      // Create a linear dependency chain: D <- C <- B <- A (call direction)
       // Tests the sorted insertion logic in topological sort
-      // Structure: sccA -> sccB -> sccC -> sccD (chain without cycles)
+      // Structure: simple DAG where A calls B calls C calls D (no cycles)
       const filePath = addSourceFile(
         'multi-scc-chain.ts',
         `
