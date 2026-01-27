@@ -72,3 +72,19 @@ export type {
   WitnessGenerationResult,
   WitnessGeneratorOptions,
 } from './witness-generator.js';
+
+export {
+  attachContracts,
+  attachContractsForInterface,
+  formatContractReport,
+  serializeContract,
+  attachContractsToCode,
+} from './contract-attacher.js';
+
+export type {
+  ContractClause,
+  GeneratedContract,
+  UnmatchedClaimWarning,
+  ContractAttachmentResult,
+  ContractAttachmentOptions,
+} from './contract-attacher.js';
