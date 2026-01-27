@@ -26,6 +26,12 @@
  * - Presenting findings to user with Architect responses
  * - Uses auditor_model via ModelRouter
  *
+ * And the spec artifact generator for:
+ * - Transforming interview requirements into spec.toml
+ * - Managing proposal versions (v1.toml, v2.toml, etc.)
+ * - Validating specs before writing
+ * - Finalizing approved specs to project root
+ *
  * @packageDocumentation
  */
 
@@ -35,3 +41,4 @@ export * from './structure.js';
 export * from './cli.js';
 export * from './engine.js';
 export * from './auditor.js';
+export * from './spec-generator.js';
