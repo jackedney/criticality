@@ -56,3 +56,19 @@ export type {
   ParsedParameter,
   ParsedReturnType,
 } from './function-generator.js';
+
+export {
+  generateWitnessIntegration,
+  generateDomainWitnessIntegration,
+  formatVerificationReport,
+} from './witness-generator.js';
+
+export type {
+  WitnessVerificationTier,
+  InvariantAnalysis,
+  WitnessCodeResult,
+  WitnessWarning,
+  WitnessVerificationReport,
+  WitnessGenerationResult,
+  WitnessGeneratorOptions,
+} from './witness-generator.js';
