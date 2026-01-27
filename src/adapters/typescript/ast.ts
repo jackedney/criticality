@@ -499,22 +499,6 @@ export function orderByDependency(functions: TodoFunction[], project: Project): 
 }
 
 /**
- * Finds all functions containing TODO markers in a project.
- *
- * Detects the following patterns as TODO markers:
- * - `throw new Error('TODO')`
- * - `throw new Error("TODO")`
- * - `// todo!()` macro-style comments
- *
- * @param project - The ts-morph Project to scan.
- * @returns Array of TodoFunction objects sorted in topological order (leaves first).
- *
- * @example
- * const project = createProject('./tsconfig.json');
- * const todos = findTodoFunctions(project);
- * // Returns functions like: { name: 'add', filePath: '/src/math.ts', line: 5, ... }
- */
-/**
  * Error thrown when attempting to inject into a function that doesn't exist.
  */
 export class FunctionNotFoundError extends Error {
@@ -737,6 +721,22 @@ export function injectFunctionBody(
   sourceFile.saveSync();
 }
 
+/**
+ * Finds all functions containing TODO markers in a project.
+ *
+ * Detects the following patterns as TODO markers:
+ * - `throw new Error('TODO')`
+ * - `throw new Error("TODO")`
+ * - `// todo!()` macro-style comments
+ *
+ * @param project - The ts-morph Project to scan.
+ * @returns Array of TodoFunction objects sorted in topological order (leaves first).
+ *
+ * @example
+ * const project = createProject('./tsconfig.json');
+ * const todos = findTodoFunctions(project);
+ * // Returns functions like: { name: 'add', filePath: '/src/math.ts', line: 5, ... }
+ */
 export function findTodoFunctions(project: Project): TodoFunction[] {
   const todoFunctions: TodoFunction[] = [];
   const allFunctions: FunctionLike[] = [];

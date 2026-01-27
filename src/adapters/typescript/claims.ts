@@ -172,27 +172,6 @@ export function parseClaims(specPath: string): Claim[] {
 }
 
 /**
- * Parses claims from a spec.toml file with optional type defaulting.
- *
- * This variant supports specs where the claim type may be missing,
- * defaulting to 'behavioral' as per the acceptance criteria.
- *
- * Note: The current spec parser requires the type field. This function
- * provides a wrapper that could handle cases where type is optional
- * in future spec schema updates.
- *
- * @param specPath - Path to the spec.toml file.
- * @returns Array of parsed claims with type defaulting applied.
- * @throws ClaimParseError if the file cannot be read or has invalid TOML syntax.
- */
-export function parseClaimsWithDefaults(specPath: string): Claim[] {
-  // For now, this is identical to parseClaims since the spec parser
-  // already requires type. This function exists as a placeholder for
-  // future support of optional claim types.
-  return parseClaims(specPath);
-}
-
-/**
  * Links function names to claims based on CLAIM_REF associations.
  *
  * This function takes a set of claims and a mapping of function names to

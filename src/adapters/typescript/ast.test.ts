@@ -1517,5 +1517,202 @@ describe('orderByDependency', () => {
       expect(ordered[0]?.name).toBe('funcInB');
       expect(ordered[1]?.name).toBe('funcInA');
     });
+
+    it('handles complex multi-node dependency graph requiring sorted insertion', () => {
+      // Create a linear dependency chain: D <- C <- B <- A (call direction)
+      // Tests the sorted insertion logic in topological sort
+      // Structure: simple DAG where A calls B calls C calls D (no cycles)
+      const filePath = addSourceFile(
+        'multi-scc-chain.ts',
+        `
+        export function sccD(): number {
+          return 1;
+        }
+
+        export function sccC(): number {
+          return sccD() + 1;
+        }
+
+        export function sccB(): number {
+          return sccC() + 1;
+        }
+
+        export function sccA(): number {
+          return sccB() + 1;
+        }
+      `
+      );
+
+      const todos: TodoFunction[] = [
+        createTodoFunction('sccA', filePath, 14),
+        createTodoFunction('sccB', filePath, 10),
+        createTodoFunction('sccC', filePath, 6),
+        createTodoFunction('sccD', filePath, 2),
+      ];
+
+      const ordered = orderByDependency(todos, project);
+
+      expect(ordered).toHaveLength(4);
+      // Should be in order: D, C, B, A (leaves first)
+      expect(ordered[0]?.name).toBe('sccD');
+      expect(ordered[1]?.name).toBe('sccC');
+      expect(ordered[2]?.name).toBe('sccB');
+      expect(ordered[3]?.name).toBe('sccA');
+    });
+
+    it('handles multiple independent subgraphs that merge', () => {
+      // Two independent chains that merge: (A -> C) and (B -> C)
+      // This tests sorted insertion when multiple nodes become ready
+      const filePath = addSourceFile(
+        'merge-subgraphs.ts',
+        `
+        export function chainA(): number {
+          return common() + 1;
+        }
+
+        export function chainB(): number {
+          return common() + 2;
+        }
+
+        export function common(): number {
+          return 42;
+        }
+      `
+      );
+
+      const todos: TodoFunction[] = [
+        createTodoFunction('chainA', filePath, 2),
+        createTodoFunction('chainB', filePath, 6),
+        createTodoFunction('common', filePath, 10),
+      ];
+
+      const ordered = orderByDependency(todos, project);
+
+      expect(ordered).toHaveLength(3);
+      // common should come first (leaf)
+      expect(ordered[0]?.name).toBe('common');
+      // chainA and chainB both depend on common, should be sorted alphabetically
+      expect(ordered[1]?.name).toBe('chainA');
+      expect(ordered[2]?.name).toBe('chainB');
+    });
+
+    it('handles TODO function calling non-TODO function that calls another TODO function', () => {
+      // A (TODO) -> helper (not TODO) -> B (TODO)
+      // Tests that call graph correctly identifies direct dependencies only
+      const filePath = addSourceFile(
+        'indirect-deps.ts',
+        `
+        export function todoA(): number {
+          return helper() + 1;
+        }
+
+        function helper(): number {
+          return todoB() + 1;
+        }
+
+        export function todoB(): number {
+          return 42;
+        }
+      `
+      );
+
+      const todos: TodoFunction[] = [
+        createTodoFunction('todoA', filePath, 2),
+        createTodoFunction('todoB', filePath, 10),
+      ];
+
+      const ordered = orderByDependency(todos, project);
+
+      expect(ordered).toHaveLength(2);
+      // todoA doesn't directly call todoB (it calls helper)
+      // so they should be sorted alphabetically as independent
+      const names = ordered.map((f) => f.name);
+      expect(names).toContain('todoA');
+      expect(names).toContain('todoB');
+    });
+
+    it('handles multiple cycles that depend on each other', () => {
+      // Cycle1: (A <-> B), Cycle2: (C <-> D), where A calls C
+      // Tests that cycles are properly ordered when one cycle depends on another
+      const filePath = addSourceFile(
+        'dependent-cycles.ts',
+        `
+        export function cycleA1(): number {
+          return cycleA2() + cycleB1();
+        }
+
+        export function cycleA2(): number {
+          return cycleA1() - 1;
+        }
+
+        export function cycleB1(): number {
+          return cycleB2() + 1;
+        }
+
+        export function cycleB2(): number {
+          return cycleB1() - 1;
+        }
+      `
+      );
+
+      const todos: TodoFunction[] = [
+        createTodoFunction('cycleA1', filePath, 2),
+        createTodoFunction('cycleA2', filePath, 6),
+        createTodoFunction('cycleB1', filePath, 10),
+        createTodoFunction('cycleB2', filePath, 14),
+      ];
+
+      const ordered = orderByDependency(todos, project);
+
+      expect(ordered).toHaveLength(4);
+      // Cycle B (B1, B2) should come before cycle A (A1, A2)
+      // because cycle A depends on cycle B
+      const names = ordered.map((f) => f.name);
+
+      // B1 and B2 should appear before A1 and A2
+      const indexB1 = names.indexOf('cycleB1');
+      const indexB2 = names.indexOf('cycleB2');
+      const indexA1 = names.indexOf('cycleA1');
+      const indexA2 = names.indexOf('cycleA2');
+
+      // Both B functions should come before both A functions
+      expect(indexB1).toBeLessThan(indexA1);
+      expect(indexB1).toBeLessThan(indexA2);
+      expect(indexB2).toBeLessThan(indexA1);
+      expect(indexB2).toBeLessThan(indexA2);
+    });
+
+    it('filters calls correctly when TODO function calls both TODO and non-TODO functions', () => {
+      // todoFunc calls both todoOther (in TODO list) and helper (not in TODO list)
+      // The dependency on helper should be ignored
+      const filePath = addSourceFile(
+        'mixed-calls.ts',
+        `
+        export function todoFunc(): number {
+          return todoOther() + helper();
+        }
+
+        export function todoOther(): number {
+          return 42;
+        }
+
+        function helper(): number {
+          return 1;
+        }
+      `
+      );
+
+      const todos: TodoFunction[] = [
+        createTodoFunction('todoFunc', filePath, 2),
+        createTodoFunction('todoOther', filePath, 6),
+      ];
+
+      const ordered = orderByDependency(todos, project);
+
+      expect(ordered).toHaveLength(2);
+      // todoOther is a leaf (called by todoFunc)
+      expect(ordered[0]?.name).toBe('todoOther');
+      expect(ordered[1]?.name).toBe('todoFunc');
+    });
   });
 });
