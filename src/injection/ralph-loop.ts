@@ -24,11 +24,16 @@ import {
   orderByDependency,
   type TodoFunction,
 } from '../adapters/typescript/ast.js';
-import { parseContracts, serializeContractForPrompt } from '../adapters/typescript/contracts.js';
+import { serializeContractForPrompt } from '../adapters/typescript/contracts.js';
 import { type MicroContract } from '../adapters/typescript/assertions.js';
 import { runTypeCheck, type TypeCheckResult } from '../adapters/typescript/typecheck.js';
 import { runTests, type TestRunResult } from '../adapters/typescript/testrunner.js';
 import type { ModelRouter, ModelRouterRequest } from '../router/types.js';
+import {
+  extractContext,
+  type ExtractedContext,
+  type ContextSizeMetrics,
+} from './context-extractor.js';
 
 /**
  * Local context for a single function implementation.
@@ -48,6 +53,10 @@ export interface FunctionContext {
   readonly filePath: string;
   /** The function name. */
   readonly functionName: string;
+  /** Context size metrics for model routing decisions. */
+  readonly sizeMetrics?: ContextSizeMetrics;
+  /** Whether circular references were detected. */
+  readonly hadCircularReferences?: boolean;
 }
 
 /**
@@ -369,6 +378,14 @@ export function extractWitnessTypes(
 /**
  * Builds the minimal local context for a function.
  *
+ * Uses the new context extraction module which provides:
+ * - Function signature extraction from AST
+ * - Micro-contract extraction from JSDoc
+ * - Required type definitions (with transitive dependencies)
+ * - Witness type definitions
+ * - Context size metrics for model routing
+ * - Circular reference detection
+ *
  * @param project - The ts-morph Project.
  * @param todoFunction - The TODO function to build context for.
  * @returns The function context.
@@ -377,37 +394,37 @@ export function buildFunctionContext(
   project: Project,
   todoFunction: TodoFunction
 ): FunctionContext {
-  // Parse contracts from the file
-  const allContracts = parseContracts(project, todoFunction.filePath);
+  // Use the new context extractor for comprehensive extraction
+  const extracted = extractContext(project, todoFunction);
 
-  // Find contracts for this specific function
-  const functionContracts = allContracts.filter((c) => c.functionName === todoFunction.name);
-
-  // Extract required types
-  const requiredTypes = extractRequiredTypes(project, todoFunction);
-
-  // Extract type names from signature for witness lookup
-  const typeNames = new Set<string>();
-  const typePattern = /:\s*([A-Z][a-zA-Z0-9]*)/g;
-  let match;
-  while ((match = typePattern.exec(todoFunction.signature)) !== null) {
-    const typeName = match[1];
-    if (typeName !== undefined) {
-      typeNames.add(typeName);
-    }
-  }
-
-  // Extract witness types
-  const witnessDefinitions = extractWitnessTypes(project, todoFunction.filePath, typeNames);
-
+  // Convert ExtractedContext to FunctionContext for backward compatibility
   return {
-    signature: todoFunction.signature,
-    contracts: functionContracts,
-    requiredTypes,
-    witnessDefinitions,
-    filePath: todoFunction.filePath,
-    functionName: todoFunction.name,
+    signature: extracted.signatureText,
+    contracts: extracted.contracts,
+    requiredTypes: extracted.requiredTypes.map((t) => t.definition),
+    witnessDefinitions: extracted.witnessDefinitions.map((w) => w.definition),
+    filePath: extracted.filePath,
+    functionName: extracted.functionName,
+    sizeMetrics: extracted.sizeMetrics,
+    hadCircularReferences: extracted.hadCircularReferences,
   };
+}
+
+/**
+ * Builds context using the new extractor and returns the full extracted context.
+ *
+ * This is useful when you need access to all the extracted information,
+ * including structured type definitions and detailed size metrics.
+ *
+ * @param project - The ts-morph Project.
+ * @param todoFunction - The TODO function to build context for.
+ * @returns The full extracted context.
+ */
+export function buildExtractedContext(
+  project: Project,
+  todoFunction: TodoFunction
+): ExtractedContext {
+  return extractContext(project, todoFunction);
 }
 
 /**
@@ -850,3 +867,14 @@ export function formatRalphLoopReport(result: RalphLoopResult): string {
 
   return lines.join('\n');
 }
+
+// Re-export context extraction utilities for external use
+export {
+  extractContext,
+  serializeContextForPrompt,
+  shouldEscalateToLargerModel,
+  type ExtractedContext,
+  type ContextSizeMetrics,
+  type ExtractedTypeDefinition,
+  type ContextExtractionOptions,
+} from './context-extractor.js';
