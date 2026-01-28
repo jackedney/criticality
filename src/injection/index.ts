@@ -12,9 +12,20 @@ export {
   extractRequiredTypes,
   extractWitnessTypes,
   buildFunctionContext,
+  buildExtractedContext,
   formatRalphLoopReport,
   type FunctionContext,
   type ImplementationAttempt,
   type RalphLoopResult,
   type RalphLoopOptions,
 } from './ralph-loop.js';
+
+export {
+  extractContext,
+  serializeContextForPrompt,
+  shouldEscalateToLargerModel,
+  type ExtractedContext,
+  type ExtractedTypeDefinition,
+  type ContextSizeMetrics,
+  type ContextExtractionOptions,
+} from './context-extractor.js';
