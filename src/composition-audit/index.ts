@@ -26,3 +26,4 @@ export * from './prompts.js';
 export * from './detector.js';
 export * from './report-parser.js';
 export * from './report-storage.js';
+export * from './phase-regression.js';
