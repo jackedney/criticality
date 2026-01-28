@@ -29,3 +29,13 @@ export {
   type ContextSizeMetrics,
   type ContextExtractionOptions,
 } from './context-extractor.js';
+
+export {
+  generateMinimalPrompt,
+  generateMinimalPromptFromComponents,
+  estimateTokenCount,
+  shouldTriggerModelUpgrade,
+  DEFAULT_TOKEN_LIMIT,
+  type MinimalPromptResult,
+  type MinimalPromptOptions,
+} from './prompt-generator.js';
