@@ -726,6 +726,102 @@ describe('add', () => {
     expect(result.attempts[0]?.rejectionReason).toContain('Tests failed');
   });
 
+  it('should reject implementation with syntax error before injection (syntax validation)', async () => {
+    // Create project with TODO function
+    const srcDir = path.join(tempDir, 'src');
+    await fs.mkdir(srcDir, { recursive: true });
+    await fs.writeFile(
+      path.join(srcDir, 'sort.ts'),
+      `export function sortArray(arr: number[]): number[] {
+  throw new Error('TODO');
+}
+`
+    );
+
+    // Create tsconfig
+    await fs.writeFile(
+      path.join(tempDir, 'tsconfig.json'),
+      JSON.stringify({
+        compilerOptions: {
+          target: 'ES2020',
+          module: 'NodeNext',
+          strict: true,
+        },
+        include: ['src/**/*.ts'],
+      })
+    );
+
+    // Return syntactically invalid code - missing closing parenthesis
+    const mockRouter = createMockModelRouter('return arr.sort((a, b) => a - b;');
+    // TypeCheck should NOT be called because syntax validation fails first
+    mockRunTypeCheck.mockResolvedValue(createSuccessTypeCheck());
+
+    const loop = createRalphLoop({
+      projectPath: tempDir,
+      modelRouter: mockRouter,
+      logger: (): void => undefined,
+    });
+
+    const result = await loop.run();
+
+    expect(result.success).toBe(false);
+    expect(result.failedCount).toBe(1);
+    expect(result.attempts[0]?.accepted).toBe(false);
+    expect(result.attempts[0]?.rejectionReason).toContain('Failed to inject');
+
+    // Verify the original file is NOT modified (syntax error caught before write)
+    const content = await fs.readFile(path.join(srcDir, 'sort.ts'), 'utf-8');
+    expect(content).toContain("throw new Error('TODO')");
+  });
+
+  it('should accept valid implementation like "return arr.sort()"', async () => {
+    // Create project with TODO function
+    const srcDir = path.join(tempDir, 'src');
+    await fs.mkdir(srcDir, { recursive: true });
+    await fs.writeFile(
+      path.join(srcDir, 'sort.ts'),
+      `export function sortArray(arr: number[]): number[] {
+  throw new Error('TODO');
+}
+`
+    );
+
+    // Create tsconfig
+    await fs.writeFile(
+      path.join(tempDir, 'tsconfig.json'),
+      JSON.stringify({
+        compilerOptions: {
+          target: 'ES2020',
+          module: 'NodeNext',
+          strict: true,
+        },
+        include: ['src/**/*.ts'],
+      })
+    );
+
+    // Return valid implementation - example from acceptance criteria
+    const mockRouter = createMockModelRouter('return arr.sort();');
+    mockRunTypeCheck.mockResolvedValue(createSuccessTypeCheck());
+
+    const loop = createRalphLoop({
+      projectPath: tempDir,
+      modelRouter: mockRouter,
+      logger: (): void => undefined,
+    });
+
+    const result = await loop.run();
+
+    expect(result.success).toBe(true);
+    expect(result.implementedCount).toBe(1);
+    expect(result.failedCount).toBe(0);
+    expect(result.attempts[0]?.accepted).toBe(true);
+
+    // Verify the implementation was injected
+    const content = await fs.readFile(path.join(srcDir, 'sort.ts'), 'utf-8');
+    expect(content).toContain('return arr.sort();');
+    expect(content).not.toContain("throw new Error('TODO')");
+  });
+
   it('should handle model errors gracefully', async () => {
     // Create project with TODO function
     const srcDir = path.join(tempDir, 'src');
