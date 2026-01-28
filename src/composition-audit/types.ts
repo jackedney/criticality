@@ -173,3 +173,119 @@ export const CONTRADICTION_TYPE_DESCRIPTIONS: Readonly<Record<ContradictionType,
   postcondition_conflict:
     'Postconditions of one operation that conflict with constraints or preconditions of another',
 };
+
+/**
+ * A structured contradiction report for storage and programmatic handling.
+ *
+ * This is the main output type for contradiction detection, designed to be
+ * persisted to disk and processed by downstream phases.
+ */
+export interface ContradictionReport {
+  /** Unique report identifier. */
+  readonly id: string;
+  /** Project identifier this report belongs to. */
+  readonly projectId: string;
+  /** Version of the report format. */
+  readonly version: string;
+  /** When the report was generated. */
+  readonly generatedAt: string;
+  /** Summary of findings. */
+  readonly summary: string;
+  /** Whether cross-verification was performed. */
+  readonly crossVerified: boolean;
+  /** Statistics about the audit. */
+  readonly stats: ContradictionReportStats;
+  /** The detected contradictions. */
+  readonly contradictions: readonly Contradiction[];
+}
+
+/**
+ * Statistics for a contradiction report.
+ */
+export interface ContradictionReportStats {
+  /** Total number of contradictions found. */
+  readonly total: number;
+  /** Number of critical contradictions. */
+  readonly critical: number;
+  /** Number of warning-level contradictions. */
+  readonly warning: number;
+  /** Count by contradiction type. */
+  readonly byType: Readonly<Record<ContradictionType, number>>;
+}
+
+/**
+ * Error type for contradiction report parsing operations.
+ */
+export type ContradictionReportParseErrorType =
+  | 'parse_error'
+  | 'schema_error'
+  | 'validation_error'
+  | 'malformed_output'
+  | 'retry_exhausted';
+
+/**
+ * Error class for contradiction report parsing errors.
+ */
+export class ContradictionReportParseError extends Error {
+  /** The type of parse error. */
+  public readonly errorType: ContradictionReportParseErrorType;
+  /** Additional details about the error. */
+  public readonly details: string | undefined;
+  /** The raw content that failed to parse. */
+  public readonly rawContent: string | undefined;
+  /** Number of retry attempts made. */
+  public readonly retryAttempts: number;
+
+  /**
+   * Creates a new ContradictionReportParseError.
+   *
+   * @param message - Human-readable error message.
+   * @param errorType - The type of parse error.
+   * @param options - Additional error options.
+   */
+  constructor(
+    message: string,
+    errorType: ContradictionReportParseErrorType,
+    options?: {
+      details?: string | undefined;
+      rawContent?: string | undefined;
+      retryAttempts?: number | undefined;
+    }
+  ) {
+    super(message);
+    this.name = 'ContradictionReportParseError';
+    this.errorType = errorType;
+    this.details = options?.details;
+    this.rawContent = options?.rawContent;
+    this.retryAttempts = options?.retryAttempts ?? 0;
+  }
+}
+
+/**
+ * Options for parsing LLM contradiction output.
+ */
+export interface ContradictionParseOptions {
+  /** Maximum retry attempts on malformed output. Default: 2. */
+  readonly maxRetries?: number;
+  /** Whether to attempt YAML parsing if JSON fails. Default: true. */
+  readonly tryYaml?: boolean;
+  /** Custom logger for warnings. */
+  readonly logger?: (message: string) => void;
+}
+
+/**
+ * Result of parsing LLM contradiction output.
+ */
+export type ContradictionParseResult =
+  | { success: true; contradictions: Contradiction[]; summary: string; hasContradictions: boolean }
+  | { success: false; error: ContradictionReportParseError };
+
+/**
+ * Options for storing contradiction reports.
+ */
+export interface ContradictionReportStorageOptions {
+  /** Format for storing the report. Default: 'json'. */
+  readonly format?: 'json' | 'yaml';
+  /** Pretty-print the output. Default: true. */
+  readonly pretty?: boolean;
+}
