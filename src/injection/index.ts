@@ -39,3 +39,17 @@ export {
   type MinimalPromptResult,
   type MinimalPromptOptions,
 } from './prompt-generator.js';
+
+export {
+  executeFunctionTest,
+  executeFunctionTestsBatch,
+  findTestFile,
+  runCompilationVerification,
+  runFunctionTests,
+  formatFunctionTestResult,
+  summarizeFunctionTestResults,
+  TestTimeoutError,
+  DEFAULT_TEST_TIMEOUT,
+  type FunctionTestResult,
+  type FunctionTestOptions,
+} from './test-executor.js';
