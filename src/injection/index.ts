@@ -53,3 +53,44 @@ export {
   type FunctionTestResult,
   type FunctionTestOptions,
 } from './test-executor.js';
+
+export {
+  // Configuration
+  DEFAULT_CIRCUIT_BREAKER_CONFIG,
+  // State creation
+  createCircuitBreakerState,
+  createFunctionState,
+  // State updates
+  registerFunction,
+  recordAttemptStart,
+  recordSuccess,
+  recordEscalation,
+  recordFailure,
+  // Circuit checking
+  checkCircuitBreaker,
+  tripCircuit,
+  addWarnings,
+  // Statistics
+  computeStatistics,
+  computeModuleStatistics,
+  // Report generation
+  generateStructuralDefectReport,
+  // Formatting
+  formatTripReason,
+  formatStructuralDefectReport,
+  // High-level class
+  CircuitBreaker,
+  createCircuitBreaker,
+  // Types
+  type CircuitBreakerConfig,
+  type CircuitTripReason,
+  type CircuitWarning,
+  type FunctionStatus,
+  type FunctionState,
+  type CircuitBreakerState,
+  type CircuitCheckResult,
+  type StructuralDefect,
+  type StructuralDefectReport,
+  type ModuleSummary,
+  type CircuitStatistics,
+} from './circuit-breaker.js';

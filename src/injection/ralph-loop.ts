@@ -34,6 +34,12 @@ import {
   type ExtractedContext,
   type ContextSizeMetrics,
 } from './context-extractor.js';
+import {
+  CircuitBreaker,
+  createCircuitBreaker,
+  type StructuralDefectReport,
+  type CircuitBreakerConfig,
+} from './circuit-breaker.js';
 
 /**
  * Local context for a single function implementation.
@@ -80,7 +86,7 @@ export interface ImplementationAttempt {
 }
 
 /**
- * Result of the full Ralph Loop execution.
+ * Result of full Ralph Loop execution.
  */
 export interface RalphLoopResult {
   /** Whether all functions were successfully implemented. */
@@ -97,13 +103,17 @@ export interface RalphLoopResult {
   readonly totalDurationMs: number;
   /** Functions that remain unimplemented. */
   readonly remainingTodos: readonly TodoFunction[];
+  /** Circuit breaker structural defect report (if circuit tripped). */
+  readonly structuralDefectReport?: StructuralDefectReport;
+  /** Whether the circuit breaker tripped. */
+  readonly circuitTripped: boolean;
 }
 
 /**
- * Options for the Ralph Loop.
+ * Options for Ralph Loop.
  */
 export interface RalphLoopOptions {
-  /** Path to the project directory. */
+  /** Path to project directory. */
   readonly projectPath: string;
   /** Path to tsconfig.json (optional). */
   readonly tsconfigPath?: string;
@@ -117,6 +127,8 @@ export interface RalphLoopOptions {
   readonly testPattern?: string;
   /** Logger for progress messages. */
   readonly logger?: (message: string) => void;
+  /** Circuit breaker configuration (optional, uses defaults if not provided). */
+  readonly circuitBreakerConfig?: CircuitBreakerConfig;
 }
 
 /**
@@ -431,13 +443,17 @@ export function buildExtractedContext(
  * Ralph Loop for atomic function implementation.
  *
  * Iterates over TODO functions in dependency order (leaves first),
- * extracts minimal context, prompts the worker model, injects the
+ * extracts minimal context, prompts worker model, injects
  * implementation, and verifies through compilation + tests.
  */
 export class RalphLoop {
-  private readonly options: Required<Omit<RalphLoopOptions, 'testPattern'>> & {
+  private readonly options: Required<
+    Omit<RalphLoopOptions, 'testPattern' | 'circuitBreakerConfig'>
+  > & {
     testPattern: string | undefined;
+    circuitBreakerConfig: CircuitBreakerConfig | undefined;
   };
+  private readonly circuitBreaker: CircuitBreaker;
 
   constructor(options: RalphLoopOptions) {
     this.options = {
@@ -449,11 +465,13 @@ export class RalphLoop {
       testPattern: options.testPattern,
       // eslint-disable-next-line no-console
       logger: options.logger ?? console.log,
+      circuitBreakerConfig: options.circuitBreakerConfig ?? undefined,
     };
+    this.circuitBreaker = createCircuitBreaker(options.circuitBreakerConfig);
   }
 
   /**
-   * Runs the Ralph Loop on the project.
+   * Runs Ralph Loop on project.
    *
    * 1. Find all TODO functions
    * 2. Order by dependency (leaves first)
@@ -464,6 +482,8 @@ export class RalphLoop {
    *    d. Verify compilation
    *    e. Verify tests (if compilation passes)
    *    f. Accept if both pass, discard otherwise
+   * 4. Check circuit breaker after each attempt
+   * 5. If circuit trips, return to Lattice with structural defect report
    *
    * @returns The loop result with all attempt details.
    */
@@ -484,6 +504,12 @@ export class RalphLoop {
     // Find all TODO functions
     let todoFunctions = findTodoFunctions(project);
 
+    // Register all functions with circuit breaker
+    for (const todo of todoFunctions) {
+      const functionId = `${todo.filePath}:${todo.name}`;
+      this.circuitBreaker.registerFunction(functionId, todo.filePath);
+    }
+
     // Filter to specific files if provided
     if (this.options.files.length > 0) {
       const absoluteFiles = this.options.files.map((f) =>
@@ -503,6 +529,7 @@ export class RalphLoop {
         attempts: [],
         totalDurationMs: Date.now() - startTime,
         remainingTodos: [],
+        circuitTripped: false,
       };
     }
 
@@ -518,18 +545,81 @@ export class RalphLoop {
     for (const todoFunction of orderedFunctions) {
       this.options.logger(`Processing: ${todoFunction.name}`);
 
+      const functionId = `${todoFunction.filePath}:${todoFunction.name}`;
       const attempt = await this.implementFunction(project, todoFunction);
       attempts.push(attempt);
 
       if (attempt.accepted) {
         implementedCount++;
         this.options.logger(`  Accepted: ${todoFunction.name}`);
+        this.circuitBreaker.recordSuccess(functionId);
       } else {
         failedCount++;
         remainingTodos.push(todoFunction);
         this.options.logger(
           `  Rejected: ${todoFunction.name} - ${attempt.rejectionReason ?? 'unknown reason'}`
         );
+
+        let failure:
+          | {
+              type: 'test';
+              failingTests: readonly {
+                testName: string;
+                expected: string;
+                actual: string;
+                errorMessage?: string;
+              }[];
+            }
+          | { type: 'type'; compilerError: string };
+
+        if (attempt.testResult !== undefined && !attempt.testResult.success) {
+          failure = {
+            type: 'test',
+            failingTests: attempt.testResult.tests
+              .filter((t) => t.status === 'failed' && t.error !== undefined)
+              .map((t) => ({
+                testName: t.name,
+                expected: '<unknown>',
+                actual: '<unknown>',
+                errorMessage: t.error?.message ?? 'Test failed',
+              })),
+          };
+        } else {
+          failure = {
+            type: 'type',
+            compilerError: attempt.rejectionReason ?? 'Unknown error',
+          };
+        }
+
+        this.circuitBreaker.recordFailure(functionId, failure);
+      }
+
+      // Check circuit breaker after each attempt
+      const circuitCheck = this.circuitBreaker.check();
+
+      if (circuitCheck.shouldTrip) {
+        const tripType = circuitCheck.tripReason?.type ?? 'unknown';
+        this.options.logger(`[CIRCUIT BREAKER TRIPPED] ${tripType}`);
+
+        const report = this.circuitBreaker.generateReport();
+
+        if (report === undefined) {
+          throw new Error('Circuit breaker tripped but no report generated');
+        }
+
+        const result: RalphLoopResult = {
+          success: false,
+          totalFunctions: todoFunctions.length,
+          implementedCount,
+          failedCount,
+          attempts,
+          totalDurationMs: Date.now() - startTime,
+          remainingTodos,
+          circuitTripped: true,
+          structuralDefectReport: report,
+        };
+
+        return result;
       }
     }
 
@@ -541,6 +631,7 @@ export class RalphLoop {
       attempts,
       totalDurationMs: Date.now() - startTime,
       remainingTodos,
+      circuitTripped: false,
     };
 
     this.options.logger(

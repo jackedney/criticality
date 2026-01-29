@@ -900,6 +900,7 @@ describe('formatRalphLoopReport', () => {
       ],
       totalDurationMs: 250,
       remainingTodos: [],
+      circuitTripped: false,
     };
 
     const report = formatRalphLoopReport(result);
@@ -957,6 +958,7 @@ describe('formatRalphLoopReport', () => {
           hasTodoBody: true,
         },
       ],
+      circuitTripped: false,
     };
 
     const report = formatRalphLoopReport(result);
