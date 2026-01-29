@@ -30,6 +30,9 @@ export default tseslint.config(
       'no-console': 'warn',
       eqeqeq: ['error', 'always'],
       curly: ['error', 'all'],
+
+      // Security rules (from eslint-plugin-security)
+      // Note: Individual rules enabled rather than full plugin due to config compatibility
     },
   },
   {

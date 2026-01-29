@@ -40,6 +40,11 @@ import {
   type StructuralDefectReport,
   type CircuitBreakerConfig,
 } from './circuit-breaker.js';
+import {
+  runSecurityScan,
+  securityScanToFailure,
+  type SecurityScanResult,
+} from './security-scanner.js';
 
 /**
  * Local context for a single function implementation.
@@ -718,7 +723,7 @@ export class RalphLoop {
       if (!compilationResult.success) {
         // Rollback: restore original file
         await fs.writeFile(todoFunction.filePath, originalContent, 'utf-8');
-        // Refresh the project to pick up the restored file
+        // Refresh to pick up the restored file
         void project.getSourceFile(todoFunction.filePath)?.refreshFromFileSystem();
 
         const errorMessages = compilationResult.errors
@@ -736,7 +741,35 @@ export class RalphLoop {
         };
       }
 
-      // Verify tests (only if compilation passes)
+      // Verify security scan (only if compilation passes)
+      const securityScanResult = await this.runSecurityVerification(todoFunction);
+
+      if (securityScanResult.hasCriticalVulnerabilities) {
+        const failure = securityScanToFailure(securityScanResult);
+
+        if (failure !== undefined) {
+          // Rollback: restore original file
+          await fs.writeFile(todoFunction.filePath, originalContent, 'utf-8');
+          void project.getSourceFile(todoFunction.filePath)?.refreshFromFileSystem();
+
+          const vulnSummary = securityScanResult.vulnerabilities
+            .filter((v) => v.severity === 'critical')
+            .slice(0, 3)
+            .map((v) => `${v.cweId ?? 'unknown'}: ${v.message}`)
+            .join('; ');
+
+          return {
+            function: todoFunction,
+            accepted: false,
+            generatedBody,
+            compilationResult,
+            rejectionReason: `Security vulnerabilities: ${vulnSummary}`,
+            durationMs: Date.now() - startTime,
+          };
+        }
+      }
+
+      // Verify tests (only if compilation passes and no critical vulnerabilities)
       const testResult = await this.runTestVerification(todoFunction);
 
       if (testResult !== undefined && !testResult.success) {
@@ -826,6 +859,25 @@ export class RalphLoop {
       });
     }
     return runTypeCheck(this.options.projectPath, {});
+  }
+
+  /**
+   * Runs security verification for a function.
+   *
+   * @param todoFunction - The function being verified.
+   * @returns Security scan result.
+   */
+  private async runSecurityVerification(todoFunction: TodoFunction): Promise<SecurityScanResult> {
+    this.options.logger(`  Running security scan for ${todoFunction.name}...`);
+
+    const scanResult = await runSecurityScan({
+      projectPath: this.options.projectPath,
+      files: [todoFunction.filePath],
+      failFastOnCritical: false, // We handle critical vulnerabilities ourselves
+      logger: this.options.logger,
+    });
+
+    return scanResult;
   }
 
   /**

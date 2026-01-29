@@ -55,6 +55,21 @@ export {
 } from './test-executor.js';
 
 export {
+  // Security scanning
+  runSecurityScan,
+  securityScanToFailure,
+  formatVulnerability,
+  formatSecurityScanReport,
+  // Types and constants
+  OWASP_TOP_10,
+  CWE_MAPPINGS,
+  type VulnerabilityDetails,
+  type SecurityScanResult,
+  type SecurityScanOptions,
+  type VulnerabilitySeverity,
+} from './security-scanner.js';
+
+export {
   // Configuration
   DEFAULT_CIRCUIT_BREAKER_CONFIG,
   // State creation
