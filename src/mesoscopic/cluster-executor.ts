@@ -112,35 +112,33 @@ function mapTestsToClaims(
       return testName.includes(claimId.toLowerCase());
     });
 
-    const claimResult: ClaimResult = {
-      claimId,
-      status: testsForClaim.length === 0 ? 'skipped' : 'passed',
-      testCount: testsForClaim.length,
-      passedCount: 0,
-      failedCount: 0,
-      failedTests: [],
-      durationMs: 0,
-    };
+    let totalDurationMs = 0;
+    let passedCount = 0;
+    let failedCount = 0;
+    const failedTests: string[] = [];
 
     for (const test of testsForClaim) {
-      claimResult.durationMs += test.durationMs;
+      totalDurationMs += test.durationMs;
 
       if (test.status === 'passed') {
-        claimResult.passedCount++;
+        passedCount++;
       } else if (test.status === 'failed') {
-        claimResult.failedCount++;
-        claimResult.failedTests = [...claimResult.failedTests, test.fullName];
-        claimResult.status = 'failed';
+        failedCount++;
+        failedTests.push(test.fullName);
       }
     }
 
-    if (testsForClaim.length > 0) {
-      if (claimResult.failedCount === 0 && claimResult.passedCount > 0) {
-        claimResult.status = 'passed';
-      } else if (claimResult.failedCount > 0) {
-        claimResult.status = 'failed';
-      }
-    }
+    const status = testsForClaim.length === 0 ? 'skipped' : failedCount > 0 ? 'failed' : 'passed';
+
+    const claimResult: ClaimResult = {
+      claimId,
+      status,
+      testCount: testsForClaim.length,
+      passedCount,
+      failedCount,
+      failedTests,
+      durationMs: totalDurationMs,
+    };
 
     claimResults.set(claimId, claimResult);
   }
@@ -172,9 +170,7 @@ async function executeCluster(
     const claimResults = mapTestsToClaims(testRunResult, cluster.claimIds);
     const claimResultsArray = Array.from(claimResults.values());
 
-    const totalPassed = claimResultsArray.filter((r) => r.status === 'passed').length;
     const totalFailed = claimResultsArray.filter((r) => r.status === 'failed').length;
-    const skipped = claimResultsArray.filter((r) => r.status === 'skipped').length;
 
     const success = totalFailed === 0 && claimResultsArray.length > 0;
 
@@ -198,17 +194,28 @@ async function executeCluster(
     const hasNotFoundError = errorMessage.includes('not found') || errorMessage.includes('ENOENT');
 
     if (hasNotFoundError) {
+      const infrastructureFailure: {
+        type: InfrastructureFailureType;
+        message: string;
+        stack?: string;
+        retryable: boolean;
+        attempts: number;
+      } = {
+        type: 'TEST_RUNNER_NOT_FOUND',
+        message: errorMessage,
+        retryable: false,
+        attempts: 1,
+      };
+
+      if (stack !== undefined) {
+        infrastructureFailure.stack = stack;
+      }
+
       throw new ClusterExecutionError(
-        'Test runner not found for cluster ' + cluster.id + "': " + errorMessage,
+        `Test runner not found for cluster '${cluster.id}': ${errorMessage}`,
         'TEST_RUNNER_ERROR',
         errorMessage,
-        {
-          type: 'TEST_RUNNER_NOT_FOUND',
-          message: errorMessage,
-          stack,
-          retryable: false,
-          attempts: 1,
-        }
+        infrastructureFailure
       );
     }
 
@@ -247,22 +254,24 @@ async function executeClusterWithRetry(
     return await executeCluster(cluster, options);
   } catch (error) {
     const isClusterExecutionError = error instanceof ClusterExecutionError;
-    
+
     if (isClusterExecutionError) {
       const clusterError = error as ClusterExecutionError;
       const failure = clusterError.infrastructureFailure;
 
       if (failure !== undefined) {
         if (attempt < maxRetries && failure.retryable) {
+          // eslint-disable-next-line no-console
           console.warn(
-            '[ClusterExecutor] Infrastructure failure for cluster ' + cluster.id + "' (attempt " + attempt + "/" + maxRetries + "): " + failure.type + ". Retrying..."
+            `[ClusterExecutor] Infrastructure failure for cluster '${cluster.id}' (attempt ${String(attempt)}/${String(maxRetries)}): ${failure.type}. Retrying...`
           );
           await new Promise((resolve) => setTimeout(resolve, 1000 * attempt));
           return executeClusterWithRetry(cluster, options, attempt + 1);
         }
 
+        // eslint-disable-next-line no-console
         console.error(
-          '[ClusterExecutor] Infrastructure failure for cluster ' + cluster.id + "' after " + attempt + " attempts: " + failure.type
+          `[ClusterExecutor] Infrastructure failure for cluster '${cluster.id}' after ${String(attempt)} attempts: ${failure.type}`
         );
       }
 
@@ -305,17 +314,20 @@ export async function executeClusters(
       const result = await executeClusterWithRetry(cluster, options);
       clusterResults.push(result);
 
+      // eslint-disable-next-line no-console
       console.log(
-        "[ClusterExecutor] Cluster '" + cluster.name + "' completed: " + (result.success ? 'PASSED' : 'FAILED') + " (" + result.durationMs + "ms)"
+        `[ClusterExecutor] Cluster '${cluster.name}' completed: ${result.success ? 'PASSED' : 'FAILED'} (${String(result.durationMs)}ms)`
       );
 
       for (const claimResult of result.claimResults) {
+        // eslint-disable-next-line no-console
         console.log(
-          "[ClusterExecutor]   Claim '" + claimResult.claimId + "': " + claimResult.status + " (" + claimResult.testCount + " tests, " + claimResult.passedCount + " passed, " + claimResult.failedCount + " failed)"
+          `[ClusterExecutor]   Claim '${claimResult.claimId}': ${claimResult.status} (${String(claimResult.testCount)} tests, ${String(claimResult.passedCount)} passed, ${String(claimResult.failedCount)} failed)`
         );
       }
 
       if (!result.success && options.continueOnFailure !== true) {
+        // eslint-disable-next-line no-console
         console.log(
           '[ClusterExecutor] Stopping execution due to cluster failure (continueOnFailure=false)'
         );
@@ -324,9 +336,8 @@ export async function executeClusters(
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error);
 
-      console.error(
-        "[ClusterExecutor] Error executing cluster '" + cluster.name + "': " + errorMessage
-      );
+      // eslint-disable-next-line no-console
+      console.error(`[ClusterExecutor] Error executing cluster '${cluster.name}': ${errorMessage}`);
 
       const failedClaimResults: ClaimResult[] = cluster.claimIds.map((claimId) => ({
         claimId,
@@ -358,20 +369,35 @@ export async function executeClusters(
 
   const totalDurationMs = Date.now() - startTime;
   const totalClaims = clusterResults.flatMap((r) => r.claimResults).length;
-  const passedClaims = clusterResults.flatMap((r) => r.claimResults).filter((r) => r.status === 'passed').length;
-  const failedClaims = clusterResults.flatMap((r) => r.claimResults).filter((r) => r.status === 'failed').length;
-  const skippedClaims = clusterResults.flatMap((r) => r.claimResults).filter((r) => r.status === 'skipped').length;
-  const errorClaims = clusterResults.flatMap((r) => r.claimResults).filter((r) => r.status === 'error').length;
+  const passedClaims = clusterResults
+    .flatMap((r) => r.claimResults)
+    .filter((r) => r.status === 'passed').length;
+  const failedClaims = clusterResults
+    .flatMap((r) => r.claimResults)
+    .filter((r) => r.status === 'failed').length;
+  const skippedClaims = clusterResults
+    .flatMap((r) => r.claimResults)
+    .filter((r) => r.status === 'skipped').length;
+  const errorClaims = clusterResults
+    .flatMap((r) => r.claimResults)
+    .filter((r) => r.status === 'error').length;
 
   const success = failedClaims === 0 && errorClaims === 0;
 
-  console.log('[ClusterExecutor] Execution complete: ' + (success ? 'SUCCESS' : 'FAILED'));
-  console.log('[ClusterExecutor] Total claims: ' + totalClaims);
-  console.log('[ClusterExecutor] Passed claims: ' + passedClaims);
-  console.log('[ClusterExecutor] Failed claims: ' + failedClaims);
-  console.log('[ClusterExecutor] Skipped claims: ' + skippedClaims);
-  console.log('[ClusterExecutor] Error claims: ' + errorClaims);
-  console.log('[ClusterExecutor] Total duration: ' + totalDurationMs + 'ms');
+  // eslint-disable-next-line no-console
+  console.log(`[ClusterExecutor] Execution complete: ${success ? 'SUCCESS' : 'FAILED'}`);
+  // eslint-disable-next-line no-console
+  console.log(`[ClusterExecutor] Total claims: ${String(totalClaims)}`);
+  // eslint-disable-next-line no-console
+  console.log(`[ClusterExecutor] Passed claims: ${String(passedClaims)}`);
+  // eslint-disable-next-line no-console
+  console.log(`[ClusterExecutor] Failed claims: ${String(failedClaims)}`);
+  // eslint-disable-next-line no-console
+  console.log(`[ClusterExecutor] Skipped claims: ${String(skippedClaims)}`);
+  // eslint-disable-next-line no-console
+  console.log(`[ClusterExecutor] Error claims: ${String(errorClaims)}`);
+  // eslint-disable-next-line no-console
+  console.log(`[ClusterExecutor] Total duration: ${String(totalDurationMs)}ms`);
 
   return {
     clusters: clusterResults,

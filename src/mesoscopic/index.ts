@@ -36,3 +36,16 @@ export {
   DEFAULT_TIMEOUT,
   DEFAULT_MAX_RETRIES,
 } from './cluster-executor.js';
+
+export type {
+  ClusterVerdict,
+  VerdictOptions,
+  VerdictResult,
+  FunctionToReinject,
+} from './verdict-handler.js';
+
+export {
+  handleClusterVerdict,
+  processClusterVerdict,
+  recordViolatedClaimsInLedger,
+} from './verdict-handler.js';
