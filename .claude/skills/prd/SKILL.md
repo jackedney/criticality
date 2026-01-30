@@ -161,7 +161,7 @@ After saving, tell the user:
 
 If the prompt provides a **directory** (not a filename), choose a short filename:
 - `prd-<short-slug>.json` where `<short-slug>` is 1–3 meaningful words (avoid filler like “i want to”).
-- Examples: `prd-workout-tracker.json`, `prd-usage-billing.json`
+- Examples: `prd-Workout-Tracker.json`, `prd-Usage-Billing.json`
 
 ---
 
