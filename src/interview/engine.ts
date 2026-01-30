@@ -28,7 +28,7 @@ import {
   saveInterviewState,
   loadInterviewState,
   interviewStateExists,
-  appendTranscriptEntry,
+  appendTranscriptEntryAndUpdateState,
   loadTranscript,
   InterviewPersistenceError,
 } from './persistence.js';
@@ -683,7 +683,7 @@ export class InterviewEngine {
 
     // Record start in transcript
     const entry = createTranscriptEntry(this.state.currentPhase, 'system', 'Interview started');
-    await appendTranscriptEntry(this.projectId, entry);
+    this.state = await appendTranscriptEntryAndUpdateState(this.projectId, entry, this.state);
 
     return {
       accepted: true,
@@ -817,7 +817,7 @@ export class InterviewEngine {
         'system',
         `Interview resumed at ${this.state.currentPhase} phase`
       );
-      await appendTranscriptEntry(this.projectId, entry);
+      this.state = await appendTranscriptEntryAndUpdateState(this.projectId, entry, this.state);
 
       return {
         accepted: true,
@@ -873,18 +873,16 @@ export class InterviewEngine {
       `Recorded requirement: "${response.text.substring(0, 50)}${response.text.length > 50 ? '...' : ''}"`
     );
 
-    // Update state
+    // Update state with requirement
     this.state = {
       ...this.state,
       extractedRequirements: [...this.state.extractedRequirements, requirement],
-      transcriptEntryCount: this.state.transcriptEntryCount + 2,
       updatedAt: new Date().toISOString(),
     };
 
-    // Persist
-    await saveInterviewState(this.state);
-    await appendTranscriptEntry(this.projectId, userEntry);
-    await appendTranscriptEntry(this.projectId, systemEntry);
+    // Persist entries and update count atomically
+    this.state = await appendTranscriptEntryAndUpdateState(this.projectId, userEntry, this.state);
+    this.state = await appendTranscriptEntryAndUpdateState(this.projectId, systemEntry, this.state);
 
     // Advance to next phase
     return this.advancePhase();
@@ -924,7 +922,7 @@ export class InterviewEngine {
     if (response.decision === 'Continue') {
       // Create a transcript entry for the decision
       const entry = createTranscriptEntry(phase, 'user', '[Decision] Continue providing input');
-      await appendTranscriptEntry(this.projectId, entry);
+      this.state = await appendTranscriptEntryAndUpdateState(this.projectId, entry, this.state);
 
       // Don't advance, return same question - use conditional to handle exactOptionalPropertyTypes
       if (this.currentQuestion !== undefined) {
@@ -958,18 +956,16 @@ export class InterviewEngine {
       `Phase "${phase}" delegated to Architect`
     );
 
-    // Update state
+    // Update state with delegation point
     this.state = {
       ...this.state,
       delegationPoints: [...this.state.delegationPoints, { ...delegationPoint, phase }],
-      transcriptEntryCount: this.state.transcriptEntryCount + 2,
       updatedAt: new Date().toISOString(),
     };
 
-    // Persist
-    await saveInterviewState(this.state);
-    await appendTranscriptEntry(this.projectId, userEntry);
-    await appendTranscriptEntry(this.projectId, systemEntry);
+    // Persist entries and update count atomically
+    this.state = await appendTranscriptEntryAndUpdateState(this.projectId, userEntry, this.state);
+    this.state = await appendTranscriptEntryAndUpdateState(this.projectId, systemEntry, this.state);
 
     // Advance to next phase
     return this.advancePhase();
@@ -1031,14 +1027,13 @@ export class InterviewEngine {
       content += `\nFeedback: ${feedback}`;
     }
     const userEntry = createTranscriptEntry('Approval', 'user', content);
-    await appendTranscriptEntry(this.projectId, userEntry);
+    this.state = await appendTranscriptEntryAndUpdateState(this.projectId, userEntry, this.state);
 
     if (response.decision === 'Approve') {
       // Complete the interview
       this.state = {
         ...this.state,
         completedPhases: [...this.state.completedPhases, 'Approval'],
-        transcriptEntryCount: this.state.transcriptEntryCount + 1,
         updatedAt: new Date().toISOString(),
       };
       await saveInterviewState(this.state);
@@ -1060,7 +1055,6 @@ export class InterviewEngine {
         this.state = {
           ...this.state,
           completedPhases: [...this.state.completedPhases, 'Approval'],
-          transcriptEntryCount: this.state.transcriptEntryCount + 1,
           updatedAt: new Date().toISOString(),
         };
         await saveInterviewState(this.state);
@@ -1103,10 +1097,6 @@ export class InterviewEngine {
 
     // RejectWithFeedback - reset to Discovery
     this.state = resetToPhase(this.state, 'Discovery');
-    this.state = {
-      ...this.state,
-      transcriptEntryCount: this.state.transcriptEntryCount + 1,
-    };
     await saveInterviewState(this.state);
     const discoveryQuestion = createQuestionForPhase('Discovery');
     this.currentQuestion = discoveryQuestion;
@@ -1152,17 +1142,15 @@ export class InterviewEngine {
     this.state = {
       ...this.state,
       features: [...this.state.features, feature],
-      transcriptEntryCount: this.state.transcriptEntryCount + transcriptEntries.length,
       updatedAt: new Date().toISOString(),
     };
 
-    // Persist
-    await saveInterviewState(this.state);
+    // Persist entries and update count atomically
     for (const entry of transcriptEntries) {
-      await appendTranscriptEntry(this.projectId, entry);
+      this.state = await appendTranscriptEntryAndUpdateState(this.projectId, entry, this.state);
     }
 
-    // Return with same phase question - user can add more features or answer the main phase question
+    // Return with same phase question - user can add more features or answer to main phase question
     // The engine doesn't automatically advance after feature classification
     const currentQ = this.currentQuestion;
     if (currentQ !== undefined) {
@@ -1234,7 +1222,7 @@ export class InterviewEngine {
 
     // Record phase transition
     const entry = createTranscriptEntry(nextPhase, 'system', `Advanced to ${nextPhase} phase`);
-    await appendTranscriptEntry(this.projectId, entry);
+    this.state = await appendTranscriptEntryAndUpdateState(this.projectId, entry, this.state);
 
     return {
       accepted: true,

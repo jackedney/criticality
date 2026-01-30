@@ -640,6 +640,38 @@ export async function appendTranscriptEntry(
 }
 
 /**
+ * Appends a transcript entry and updates state with incremented count.
+ *
+ * This helper function centralizes the pattern of:
+ * 1. Append entry to transcript
+ * 2. Increment transcriptEntryCount
+ * 3. Update updatedAt timestamp
+ * 4. Save state
+ *
+ * @param projectId - The project identifier.
+ * @param entry - The transcript entry to append.
+ * @param state - The interview state to update.
+ * @returns The updated interview state.
+ * @throws InterviewPersistenceError if entry or state cannot be saved.
+ */
+export async function appendTranscriptEntryAndUpdateState(
+  projectId: string,
+  entry: TranscriptEntry,
+  state: InterviewState
+): Promise<InterviewState> {
+  await appendTranscriptEntry(projectId, entry);
+
+  const updatedState: InterviewState = {
+    ...state,
+    transcriptEntryCount: state.transcriptEntryCount + 1,
+    updatedAt: new Date().toISOString(),
+  };
+
+  await saveInterviewState(updatedState);
+  return updatedState;
+}
+
+/**
  * Loads all transcript entries from the JSONL file.
  *
  * @param projectId - The project identifier.
