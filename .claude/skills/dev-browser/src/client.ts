@@ -1,12 +1,12 @@
-import { chromium, type Browser, type Page, type ElementHandle } from "playwright";
+import { chromium, type Browser, type Page, type ElementHandle } from 'playwright';
 import type {
   GetPageRequest,
   GetPageResponse,
   ListPagesResponse,
   ServerInfoResponse,
   ViewportSize,
-} from "./types";
-import { getSnapshotScript } from "./snapshot/browser-script";
+} from './types';
+import { getSnapshotScript } from './snapshot/browser-script';
 
 /**
  * Options for waiting for page load
@@ -84,7 +84,7 @@ export async function waitForPageLoad(
       lastState = await getPageLoadState(page);
 
       // Check if document is complete
-      const documentReady = lastState.documentReadyState === "complete";
+      const documentReady = lastState.documentReadyState === 'complete';
 
       // Check if network is idle (no pending critical requests)
       const networkIdle = !waitForNetworkIdle || lastState.pendingRequests.length === 0;
@@ -108,7 +108,7 @@ export async function waitForPageLoad(
   // Timeout reached - return current state
   return {
     success: false,
-    readyState: lastState?.documentReadyState ?? "unknown",
+    readyState: lastState?.documentReadyState ?? 'unknown',
     pendingRequests: lastState?.pendingRequests.length ?? 0,
     waitTimeMs: Date.now() - startTime,
     timedOut: true,
@@ -129,39 +129,39 @@ async function getPageLoadState(page: Page): Promise<PageLoadState> {
     const doc = g.document!;
 
     const now = perf.now();
-    const resources = perf.getEntriesByType("resource");
+    const resources = perf.getEntriesByType('resource');
     const pending: Array<{ url: string; loadingDurationMs: number; resourceType: string }> = [];
 
     // Common ad/tracking domains and patterns to filter out
     const adPatterns = [
-      "doubleclick.net",
-      "googlesyndication.com",
-      "googletagmanager.com",
-      "google-analytics.com",
-      "facebook.net",
-      "connect.facebook.net",
-      "analytics",
-      "ads",
-      "tracking",
-      "pixel",
-      "hotjar.com",
-      "clarity.ms",
-      "mixpanel.com",
-      "segment.com",
-      "newrelic.com",
-      "nr-data.net",
-      "/tracker/",
-      "/collector/",
-      "/beacon/",
-      "/telemetry/",
-      "/log/",
-      "/events/",
-      "/track.",
-      "/metrics/",
+      'doubleclick.net',
+      'googlesyndication.com',
+      'googletagmanager.com',
+      'google-analytics.com',
+      'facebook.net',
+      'connect.facebook.net',
+      'analytics',
+      'ads',
+      'tracking',
+      'pixel',
+      'hotjar.com',
+      'clarity.ms',
+      'mixpanel.com',
+      'segment.com',
+      'newrelic.com',
+      'nr-data.net',
+      '/tracker/',
+      '/collector/',
+      '/beacon/',
+      '/telemetry/',
+      '/log/',
+      '/events/',
+      '/track.',
+      '/metrics/',
     ];
 
     // Non-critical resource types
-    const nonCriticalTypes = ["img", "image", "icon", "font"];
+    const nonCriticalTypes = ['img', 'image', 'icon', 'font'];
 
     for (const entry of resources) {
       // Resources with responseEnd === 0 are still loading
@@ -173,14 +173,14 @@ async function getPageLoadState(page: Page): Promise<PageLoadState> {
         if (isAd) continue;
 
         // Filter out data: URLs and very long URLs
-        if (url.startsWith("data:") || url.length > 500) continue;
+        if (url.startsWith('data:') || url.length > 500) continue;
 
         const loadingDuration = now - entry.startTime;
 
         // Skip requests loading > 10 seconds (likely stuck/polling)
         if (loadingDuration > 10000) continue;
 
-        const resourceType = entry.initiatorType || "unknown";
+        const resourceType = entry.initiatorType || 'unknown';
 
         // Filter out non-critical resources loading > 3 seconds
         if (nonCriticalTypes.includes(resourceType) && loadingDuration > 3000) continue;
@@ -199,7 +199,7 @@ async function getPageLoadState(page: Page): Promise<PageLoadState> {
 
     return {
       documentReadyState: doc.readyState,
-      documentLoading: doc.readyState !== "complete",
+      documentLoading: doc.readyState !== 'complete',
       pendingRequests: pending,
     };
   });
@@ -210,7 +210,7 @@ async function getPageLoadState(page: Page): Promise<PageLoadState> {
 /** Server mode information */
 export interface ServerInfo {
   wsEndpoint: string;
-  mode: "launch" | "extension";
+  mode: 'launch' | 'extension';
   extensionConnected?: boolean;
 }
 
@@ -244,7 +244,7 @@ export interface DevBrowserClient {
   getServerInfo: () => Promise<ServerInfo>;
 }
 
-export async function connect(serverUrl = "http://localhost:9222"): Promise<DevBrowserClient> {
+export async function connect(serverUrl = 'http://localhost:9222'): Promise<DevBrowserClient> {
   let browser: Browser | null = null;
   let wsEndpoint: string | null = null;
   let connectingPromise: Promise<Browser> | null = null;
@@ -289,14 +289,14 @@ export async function connect(serverUrl = "http://localhost:9222"): Promise<DevB
         let cdpSession;
         try {
           cdpSession = await context.newCDPSession(page);
-          const { targetInfo } = await cdpSession.send("Target.getTargetInfo");
+          const { targetInfo } = await cdpSession.send('Target.getTargetInfo');
           if (targetInfo.targetId === targetId) {
             return page;
           }
         } catch (err) {
           // Only ignore "target closed" errors, log unexpected ones
           const msg = err instanceof Error ? err.message : String(err);
-          if (!msg.includes("Target closed") && !msg.includes("Session closed")) {
+          if (!msg.includes('Target closed') && !msg.includes('Session closed')) {
             console.warn(`Unexpected error checking page target: ${msg}`);
           }
         } finally {
@@ -317,8 +317,8 @@ export async function connect(serverUrl = "http://localhost:9222"): Promise<DevB
   async function getPage(name: string, options?: PageOptions): Promise<Page> {
     // Request the page from server (creates if doesn't exist)
     const res = await fetch(`${serverUrl}/pages`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ name, viewport: options?.viewport } satisfies GetPageRequest),
     });
 
@@ -335,7 +335,7 @@ export async function connect(serverUrl = "http://localhost:9222"): Promise<DevB
     // Check if we're in extension mode
     const infoRes = await fetch(serverUrl);
     const info = (await infoRes.json()) as { mode?: string };
-    const isExtensionMode = info.mode === "extension";
+    const isExtensionMode = info.mode === 'extension';
 
     if (isExtensionMode) {
       // In extension mode, DON'T use findPageByTargetId as it corrupts page state
@@ -385,7 +385,7 @@ export async function connect(serverUrl = "http://localhost:9222"): Promise<DevB
 
     async close(name: string): Promise<void> {
       const res = await fetch(`${serverUrl}/pages/${encodeURIComponent(name)}`, {
-        method: "DELETE",
+        method: 'DELETE',
       });
 
       if (!res.ok) {
@@ -405,19 +405,25 @@ export async function connect(serverUrl = "http://localhost:9222"): Promise<DevB
       // Get the page
       const page = await getPage(name);
 
-      // Inject the snapshot script and call getAISnapshot
-      const snapshotScript = getSnapshotScript();
-      const snapshot = await page.evaluate((script: string) => {
-        // Inject script if not already present
-        // Note: page.evaluate runs in browser context where window exists
+      // Check if the snapshot script is already loaded
+      const isLoaded = await page.evaluate(() => {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const w = globalThis as any;
-        if (!w.__devBrowser_getAISnapshot) {
-          // eslint-disable-next-line no-eval
-          eval(script);
-        }
+        return !!w.__devBrowser_getAISnapshot;
+      });
+
+      // Inject the script if not already present
+      if (!isLoaded) {
+        const snapshotScript = getSnapshotScript();
+        await page.addScriptTag({ content: snapshotScript });
+      }
+
+      // Call the snapshot function
+      const snapshot = await page.evaluate(() => {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const w = globalThis as any;
         return w.__devBrowser_getAISnapshot();
-      }, snapshotScript);
+      });
 
       return snapshot;
     },
@@ -433,12 +439,12 @@ export async function connect(serverUrl = "http://localhost:9222"): Promise<DevB
         const w = globalThis as any;
         const refs = w.__devBrowserRefs;
         if (!refs) {
-          throw new Error("No snapshot refs found. Call getAISnapshot first.");
+          throw new Error('No snapshot refs found. Call getAISnapshot first.');
         }
         const element = refs[refId];
         if (!element) {
           throw new Error(
-            `Ref "${refId}" not found. Available refs: ${Object.keys(refs).join(", ")}`
+            `Ref "${refId}" not found. Available refs: ${Object.keys(refs).join(', ')}`
           );
         }
         return element;
@@ -466,7 +472,7 @@ export async function connect(serverUrl = "http://localhost:9222"): Promise<DevB
       };
       return {
         wsEndpoint: info.wsEndpoint,
-        mode: (info.mode as "launch" | "extension") ?? "launch",
+        mode: (info.mode as 'launch' | 'extension') ?? 'launch',
         extensionConnected: info.extensionConnected,
       };
     },
