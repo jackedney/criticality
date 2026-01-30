@@ -130,7 +130,11 @@ function generateImports(witnesses: WitnessDefinition[], hasSkippedTests: boolea
  * @param witnesses - Witnesses to use for input generation.
  * @returns The test property code.
  */
-function generateTestProperty(claim: Claim, witnesses: WitnessDefinition[]): string {
+function generateTestProperty(
+  claim: Claim,
+  witnesses: WitnessDefinition[],
+  numRuns: number
+): string {
   const lines: string[] = [];
 
   // If we have witnesses, use them to generate inputs
@@ -167,16 +171,19 @@ function generateTestProperty(claim: Claim, witnesses: WitnessDefinition[]): str
     lines.push(`      ),`);
   } else {
     // No witnesses - use a simple property
-    lines.push(`    fc.assert(`);
-    lines.push(`      fc.property(`);
-    lines.push(`        fc.anything(),`);
-    lines.push(`        (input) => {`);
-    lines.push(`          // Invariant: ${claim.description}`);
-    lines.push(`          // TODO: Implement invariant check`);
-    lines.push(`          expect(input).toBeDefined();`);
-    lines.push(`          return true;`);
-    lines.push(`        }`);
-    lines.push(`      ),`);
+    lines.push('    fc.assert(');
+    lines.push('      fc.property(');
+    lines.push('        fc.anything(),');
+    lines.push('          (input) => {');
+    lines.push('          // Invariant: ' + claim.description);
+    lines.push('          // TODO: Implement invariant check');
+    lines.push('          // For example, if this is a "balance never negative" claim:');
+    lines.push('          // expect(balance).toBeGreaterThanOrEqual(0);');
+    lines.push('          return true;');
+    lines.push('        }');
+    lines.push('      ),');
+    lines.push('      { numRuns: ' + String(numRuns) + ' }');
+    lines.push('    );');
   }
 
   return lines.join('\n');
@@ -298,7 +305,7 @@ export function generateInvariantTest(
     lines.push(`    () => {`);
 
     // Add the property test
-    lines.push(generateTestProperty(claim, witnesses));
+    lines.push(generateTestProperty(claim, witnesses, numRuns));
 
     // Close the fc.assert call
     lines.push(`      { numRuns: ${String(numRuns)} }`);

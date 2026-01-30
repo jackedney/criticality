@@ -16,3 +16,9 @@ export type {
   ClusterDefinitionOptions,
   ClusterDefinitionError,
 } from './types.js';
+
+export {
+  generateSpecDrivenTests,
+  SpecDrivenTestOptions,
+  SpecDrivenTestError,
+} from './spec-driven-test-generator.js';
