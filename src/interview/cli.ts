@@ -13,7 +13,12 @@ import type {
   ExtractedRequirement,
   TranscriptEntry,
 } from './types.js';
-import { INTERVIEW_PHASES, isInterviewComplete, getNextInterviewPhase } from './types.js';
+import {
+  INTERVIEW_PHASES,
+  isInterviewComplete,
+  getNextInterviewPhase,
+  createInitialInterviewState,
+} from './types.js';
 import {
   loadInterviewState,
   saveInterviewState,
@@ -907,20 +912,7 @@ export class InterviewCli {
    * @returns True if interview completed, false if quit early.
    */
   private async startNew(): Promise<boolean> {
-    // Create initial state
-    const now = new Date().toISOString();
-    this.state = {
-      version: '1.0.0',
-      projectId: this.projectId,
-      currentPhase: 'Discovery',
-      completedPhases: [],
-      extractedRequirements: [],
-      features: [],
-      delegationPoints: [],
-      transcriptEntryCount: 0,
-      createdAt: now,
-      updatedAt: now,
-    };
+    this.state = createInitialInterviewState(this.projectId);
 
     await saveInterviewState(this.state);
 
