@@ -137,7 +137,7 @@ BREAKING CHANGE: Response envelope changed from `{ data }` to `{ data: { type, i
 
 Triggers major version bump in semantic-release.
 
-## Merge Commits (PR Closure)
+## Pull Request Description Format
 
 For PRs, use extended description with sections:
 
