@@ -181,7 +181,7 @@ export interface TranscriptEntry {
  *   ],
  *   features: [],
  *   delegationPoints: [],
- *   transcript: [],
+ *   transcriptEntryCount: 0,
  *   createdAt: '2024-01-15T10:00:00Z',
  *   updatedAt: '2024-01-15T10:30:00Z'
  * };
