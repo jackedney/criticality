@@ -349,7 +349,13 @@ export async function serveRelay(options: RelayOptions = {}): Promise<RelayServe
 
   // Get or create a named page
   app.post('/pages', async (c) => {
-    const body = await c.req.json();
+    let body;
+    try {
+      body = await c.req.json();
+    } catch {
+      return c.json({ error: 'Invalid JSON' }, 400);
+    }
+
     const name = body.name as string;
 
     if (!name) {
@@ -391,13 +397,17 @@ export async function serveRelay(options: RelayOptions = {}): Promise<RelayServe
         params: { method: 'Target.createTarget', params: { url: 'about:blank' } },
       })) as { targetId: string };
 
-      // Wait for Target.attachedToTarget event to register the new target
-      await new Promise((resolve) => setTimeout(resolve, 200));
+      // Poll for target registration with bounded timeout
+      const pollStart = Date.now();
+      const pollInterval = 100;
+      const timeoutMs = 4000;
+      let target: ConnectedTarget | undefined;
 
-      // Find and name the new target
-      for (const [sessionId, target] of connectedTargets) {
-        if (target.targetId === result.targetId) {
-          namedPages.set(name, sessionId);
+      while (Date.now() - pollStart < timeoutMs) {
+        target = Array.from(connectedTargets.values()).find((t) => t.targetId === result.targetId);
+
+        if (target) {
+          namedPages.set(name, target.sessionId);
           // Activate the tab so it becomes the active tab
           await sendToExtension({
             method: 'forwardCDPCommand',
@@ -413,9 +423,13 @@ export async function serveRelay(options: RelayOptions = {}): Promise<RelayServe
             url: target.targetInfo.url,
           });
         }
+
+        await new Promise((resolve) => setTimeout(resolve, pollInterval));
       }
 
-      throw new Error('Target created but not found in registry');
+      // Timeout: remove namedPages entry and return 500
+      namedPages.delete(name);
+      return c.json({ error: `Target ${result.targetId} not found after ${timeoutMs}ms` }, 500);
     } catch (err) {
       log('Error creating tab:', err);
       return c.json({ error: (err as Error).message }, 500);
