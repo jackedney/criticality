@@ -453,14 +453,18 @@ describe('getFeaturesByClassification', () => {
 });
 
 describe('InterviewState with features', () => {
-  it('should include features array in initial state', () => {
+  beforeEach(() => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date('2024-01-15T10:00:00.000Z'));
+  });
 
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it('should include features array in initial state', () => {
     const state = createInitialInterviewState('test-project');
     expect(state.features).toEqual([]);
-
-    vi.useRealTimers();
   });
 
   it('should allow state with features', () => {
