@@ -367,15 +367,17 @@ export class OpenCodeClient implements ModelRouter {
   }
 
   /**
-   * Executes an OpenCode subprocess and returns the result.
+   * Executes a subprocess and returns result.
    *
    * @param args - CLI arguments.
    * @param request - The original request (for error context).
+   * @param requestTimeoutMs - Optional timeout in milliseconds for this request.
    * @returns The parsed model router result.
    */
   private async executeSubprocess(
     args: string[],
-    request: ModelRouterRequest
+    request: ModelRouterRequest,
+    requestTimeoutMs?: number
   ): Promise<ModelRouterResult> {
     const startTime = Date.now();
 
@@ -383,12 +385,12 @@ export class OpenCodeClient implements ModelRouter {
       const result =
         this.cwd !== undefined
           ? await execa(this.executablePath, args, {
-              timeout: this.timeoutMs,
+              timeout: requestTimeoutMs ?? this.timeoutMs,
               reject: false,
               cwd: this.cwd,
             })
           : await execa(this.executablePath, args, {
-              timeout: this.timeoutMs,
+              timeout: requestTimeoutMs ?? this.timeoutMs,
               reject: false,
             });
 
@@ -474,12 +476,17 @@ export class OpenCodeClient implements ModelRouter {
    *
    * @param modelAlias - The model alias to route to.
    * @param prompt - The prompt text.
+   * @param timeoutMs - Optional timeout in milliseconds for this request.
    * @returns A result containing the response or an error.
    */
-  async prompt(modelAlias: ModelAlias, prompt: string): Promise<ModelRouterResult> {
+  async prompt(
+    modelAlias: ModelAlias,
+    prompt: string,
+    timeoutMs?: number
+  ): Promise<ModelRouterResult> {
     const request: ModelRouterRequest = { modelAlias, prompt };
     const args = this.buildArgs(request);
-    return this.executeSubprocess(args, request);
+    return this.executeSubprocess(args, request, timeoutMs);
   }
 
   /**
