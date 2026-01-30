@@ -123,7 +123,7 @@ Addresses: Req N
 | `Closes #N` | Same as Fixes |
 | `Co-authored-by: Name <email>` | Credit co-contributors |
 
-Place trailers at end of body after blank line. See `references/commit_examples.md` for examples.
+Place trailers at end of body after blank line. See [references/commit_examples.md](references/commit_examples.md) for examples.
 
 ## Breaking Changes
 
@@ -216,4 +216,4 @@ feat(security): improve things.  # has period, vague
 
 ## References
 
-- `references/commit_examples.md` - Extended examples by type
+- [references/commit_examples.md](references/commit_examples.md) - Extended examples by type
