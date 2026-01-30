@@ -4,7 +4,10 @@
 SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
 
 # Change to the script directory
-cd "$SCRIPT_DIR"
+cd "$SCRIPT_DIR" || {
+    echo "Failed to cd to $SCRIPT_DIR"
+    exit 1
+}
 
 # Parse command line arguments
 HEADLESS=false
