@@ -745,9 +745,9 @@ export async function serveRelay(options: RelayOptions = {}): Promise<RelayServe
       for (const client of playwrightClients.values()) {
         client.ws.close(1000, 'Server stopped');
       }
-      playwrightClients.clear();
       extensionWs?.close(1000, 'Server stopped');
-      server.close();
+      await server.close();
+      playwrightClients.clear();
     },
   };
 }
