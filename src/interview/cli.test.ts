@@ -5,7 +5,6 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { mkdir, rm } from 'node:fs/promises';
 import { join } from 'node:path';
-import { tmpdir } from 'node:os';
 import { homedir } from 'node:os';
 import {
   formatSectionHeader,
@@ -619,7 +618,6 @@ describe('Interview CLI', () => {
   });
 
   describe('InterviewCli', () => {
-    let testDir: string;
     let projectId: string;
     let mockReader: InputReader;
     let mockWriter: OutputWriter;
@@ -627,7 +625,6 @@ describe('Interview CLI', () => {
     let inputQueue: string[];
 
     beforeEach(async () => {
-      testDir = join(tmpdir(), `interview-cli-test-${String(Date.now())}`);
       projectId = `test-project-${String(Date.now())}`;
 
       // Create mock project directory
@@ -661,9 +658,6 @@ describe('Interview CLI', () => {
       // Clean up project directory
       const critDir = join(homedir(), '.criticality', 'projects', projectId);
       await rm(critDir, { recursive: true, force: true }).catch((): void => {
-        // Ignore cleanup errors
-      });
-      await rm(testDir, { recursive: true, force: true }).catch((): void => {
         // Ignore cleanup errors
       });
     });
