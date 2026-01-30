@@ -36,8 +36,15 @@ function findPackageManager(): { name: string; command: string } | null {
 }
 
 function isChromiumInstalled(): boolean {
-  const homeDir = process.env.HOME || process.env.USERPROFILE || '';
-  const playwrightCacheDir = join(homeDir, '.cache', 'ms-playwright');
+  let playwrightCacheDir: string;
+
+  if (process.platform === 'win32') {
+    const localAppData = process.env.LOCALAPPDATA ?? process.env.USERPROFILE ?? '';
+    playwrightCacheDir = join(localAppData, 'ms-playwright');
+  } else {
+    const homeDir = process.env.HOME ?? process.env.USERPROFILE ?? '';
+    playwrightCacheDir = join(homeDir, '.cache', 'ms-playwright');
+  }
 
   if (!existsSync(playwrightCacheDir)) {
     return false;
@@ -115,4 +122,6 @@ console.log(`\nReady`);
 console.log(`\nPress Ctrl+C to stop`);
 
 // Keep the process running
-await new Promise(() => {});
+await new Promise<void>(() => {
+  // Keep the process running indefinitely
+});
