@@ -309,7 +309,9 @@ describe('createFeature', () => {
       'Discovery'
     );
 
-    expect(feature.id).toMatch(/^feature_\d+_[a-z0-9]+$/);
+    expect(feature.id).toMatch(
+      /^feature_[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
+    );
     expect(feature.name).toBe('User Authentication');
     expect(feature.description).toBe('Allow users to log in with email/password');
     expect(feature.classification).toBe('core');

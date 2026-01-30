@@ -7,6 +7,8 @@
  * @packageDocumentation
  */
 
+import { randomUUID } from 'node:crypto';
+
 /**
  * Feature classification determines how a feature is handled in Lattice.
  *
@@ -295,7 +297,7 @@ export function createFeature(
   rationale?: string
 ): Feature {
   const base: Feature = {
-    id: `feature_${String(Date.now())}_${Math.random().toString(36).substring(2, 9)}`,
+    id: `feature_${randomUUID()}`,
     name,
     description,
     classification,
