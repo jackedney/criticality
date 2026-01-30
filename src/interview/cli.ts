@@ -24,6 +24,7 @@ import {
   saveInterviewState,
   loadTranscript,
   appendTranscriptEntry,
+  appendTranscriptEntryAndUpdateState,
   interviewStateExists,
   InterviewPersistenceError,
 } from './persistence.js';
@@ -1093,7 +1094,6 @@ export class InterviewCli {
 
     // Record the response (use actualAnswer if provided from Continue re-prompt)
     const userEntry = createTranscriptEntry(phase, 'user', actualAnswer ?? result.input);
-    await appendTranscriptEntry(this.projectId, userEntry);
 
     // For now, extract a simple requirement
     // This will be enhanced with the full interview engine
@@ -1107,14 +1107,13 @@ export class InterviewCli {
         extractedAt: new Date().toISOString(),
       };
 
-      this.state = {
+      // Update state with requirement and append user entry (increments count)
+      this.state = await appendTranscriptEntryAndUpdateState(this.projectId, userEntry, {
         ...this.state,
         extractedRequirements: [...this.state.extractedRequirements, requirement],
-        transcriptEntryCount: this.state.transcriptEntryCount + 1,
-        updatedAt: new Date().toISOString(),
-      };
-
-      await saveInterviewState(this.state);
+      });
+    } else {
+      await appendTranscriptEntry(this.projectId, userEntry);
     }
 
     // Acknowledge
@@ -1123,7 +1122,11 @@ export class InterviewCli {
       'assistant',
       `Got it! I've recorded your input for ${getPhaseDisplayName(phase)}.`
     );
-    await appendTranscriptEntry(this.projectId, ackEntry);
+    if (this.state !== undefined) {
+      this.state = await appendTranscriptEntryAndUpdateState(this.projectId, ackEntry, this.state);
+    } else {
+      await appendTranscriptEntry(this.projectId, ackEntry);
+    }
 
     this.writeLine(formatSuccess(`Response recorded for ${getPhaseDisplayName(phase)} phase.`));
 
@@ -1210,7 +1213,7 @@ export class InterviewCli {
         'user',
         '[Approval] Approved - all items confirmed'
       );
-      await appendTranscriptEntry(this.projectId, entry);
+      this.state = await appendTranscriptEntryAndUpdateState(this.projectId, entry, this.state);
 
       this.writeLine(formatSuccess('Specification approved!'));
       return true;
@@ -1232,7 +1235,7 @@ export class InterviewCli {
         'user',
         `[Approval] Approved with conditions: ${conditionsResult.input}`
       );
-      await appendTranscriptEntry(this.projectId, entry);
+      this.state = await appendTranscriptEntryAndUpdateState(this.projectId, entry, this.state);
 
       this.writeLine(formatSuccess('Specification conditionally approved.'));
       this.writeLine(formatInfo('Conditions will be addressed in targeted revision.'));
@@ -1255,7 +1258,7 @@ export class InterviewCli {
       'user',
       `[Approval] Rejected with feedback: ${feedbackResult.input}`
     );
-    await appendTranscriptEntry(this.projectId, entry);
+    this.state = await appendTranscriptEntryAndUpdateState(this.projectId, entry, this.state);
 
     this.writeLine(formatWarning('Specification rejected. Returning to earlier phases.'));
 
