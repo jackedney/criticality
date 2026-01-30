@@ -1,15 +1,15 @@
-import express, { type Express, type Request, type Response } from "express";
-import { chromium, type BrowserContext, type Page } from "playwright";
-import { mkdirSync } from "fs";
-import { join } from "path";
-import type { Socket } from "net";
+import express, { type Express, type Request, type Response } from 'express';
+import { chromium, type BrowserContext, type Page } from 'playwright';
+import { mkdirSync } from 'fs';
+import { join } from 'path';
+import type { Socket } from 'net';
 import type {
   ServeOptions,
   GetPageRequest,
   GetPageResponse,
   ListPagesResponse,
   ServerInfoResponse,
-} from "./types";
+} from './types';
 
 export type { ServeOptions, GetPageResponse, ListPagesResponse, ServerInfoResponse };
 
@@ -29,7 +29,9 @@ async function fetchWithRetry(
   for (let i = 0; i < maxRetries; i++) {
     try {
       const res = await fetch(url);
-      if (res.ok) return res;
+      if (res.ok) {
+        return res;
+      }
       throw new Error(`HTTP ${res.status}: ${res.statusText}`);
     } catch (err) {
       lastError = err instanceof Error ? err : new Error(String(err));
@@ -46,7 +48,9 @@ function withTimeout<T>(promise: Promise<T>, ms: number, message: string): Promi
   return Promise.race([
     promise,
     new Promise<never>((_, reject) =>
-      setTimeout(() => reject(new Error(`Timeout: ${message}`)), ms)
+      setTimeout(() => {
+        reject(new Error(`Timeout: ${message}`));
+      }, ms)
     ),
   ]);
 }
@@ -65,26 +69,26 @@ export async function serve(options: ServeOptions = {}): Promise<DevBrowserServe
     throw new Error(`Invalid cdpPort: ${cdpPort}. Must be between 1 and 65535`);
   }
   if (port === cdpPort) {
-    throw new Error("port and cdpPort must be different");
+    throw new Error('port and cdpPort must be different');
   }
 
   // Determine user data directory for persistent context
   const userDataDir = profileDir
-    ? join(profileDir, "browser-data")
-    : join(process.cwd(), ".browser-data");
+    ? join(profileDir, 'browser-data')
+    : join(process.cwd(), '.browser-data');
 
   // Create directory if it doesn't exist
   mkdirSync(userDataDir, { recursive: true });
   console.log(`Using persistent browser profile: ${userDataDir}`);
 
-  console.log("Launching browser with persistent context...");
+  console.log('Launching browser with persistent context...');
 
   // Launch persistent context - this persists cookies, localStorage, cache, etc.
   const context: BrowserContext = await chromium.launchPersistentContext(userDataDir, {
     headless,
     args: [`--remote-debugging-port=${cdpPort}`],
   });
-  console.log("Browser launched with persistent profile...");
+  console.log('Browser launched with persistent profile...');
 
   // Get the CDP WebSocket endpoint from Chrome's JSON API (with retry for slow startup)
   const cdpResponse = await fetchWithRetry(`http://127.0.0.1:${cdpPort}/json/version`);
@@ -105,7 +109,7 @@ export async function serve(options: ServeOptions = {}): Promise<DevBrowserServe
   async function getTargetId(page: Page): Promise<string> {
     const cdpSession = await context.newCDPSession(page);
     try {
-      const { targetInfo } = await cdpSession.send("Target.getTargetInfo");
+      const { targetInfo } = await cdpSession.send('Target.getTargetInfo');
       return targetInfo.targetId;
     } finally {
       await cdpSession.detach();
@@ -117,13 +121,13 @@ export async function serve(options: ServeOptions = {}): Promise<DevBrowserServe
   app.use(express.json());
 
   // GET / - server info
-  app.get("/", (_req: Request, res: Response) => {
+  app.get('/', (_req: Request, res: Response) => {
     const response: ServerInfoResponse = { wsEndpoint };
     res.json(response);
   });
 
   // GET /pages - list all pages
-  app.get("/pages", (_req: Request, res: Response) => {
+  app.get('/pages', (_req: Request, res: Response) => {
     const response: ListPagesResponse = {
       pages: Array.from(registry.keys()),
     };
@@ -131,22 +135,22 @@ export async function serve(options: ServeOptions = {}): Promise<DevBrowserServe
   });
 
   // POST /pages - get or create page
-  app.post("/pages", async (req: Request, res: Response) => {
+  app.post('/pages', async (req: Request, res: Response) => {
     const body = req.body as GetPageRequest;
     const { name, viewport } = body;
 
-    if (!name || typeof name !== "string") {
-      res.status(400).json({ error: "name is required and must be a string" });
+    if (!name || typeof name !== 'string') {
+      res.status(400).json({ error: 'name is required and must be a string' });
       return;
     }
 
     if (name.length === 0) {
-      res.status(400).json({ error: "name cannot be empty" });
+      res.status(400).json({ error: 'name cannot be empty' });
       return;
     }
 
     if (name.length > 256) {
-      res.status(400).json({ error: "name must be 256 characters or less" });
+      res.status(400).json({ error: 'name must be 256 characters or less' });
       return;
     }
 
@@ -154,7 +158,7 @@ export async function serve(options: ServeOptions = {}): Promise<DevBrowserServe
     let entry = registry.get(name);
     if (!entry) {
       // Create new page in the persistent context (with timeout to prevent hangs)
-      const page = await withTimeout(context.newPage(), 30000, "Page creation timed out after 30s");
+      const page = await withTimeout(context.newPage(), 30000, 'Page creation timed out after 30s');
 
       // Apply viewport if provided
       if (viewport) {
@@ -166,7 +170,7 @@ export async function serve(options: ServeOptions = {}): Promise<DevBrowserServe
       registry.set(name, entry);
 
       // Clean up registry when page is closed (e.g., user clicks X)
-      page.on("close", () => {
+      page.on('close', () => {
         registry.delete(name);
       });
     }
@@ -176,7 +180,7 @@ export async function serve(options: ServeOptions = {}): Promise<DevBrowserServe
   });
 
   // DELETE /pages/:name - close a page
-  app.delete("/pages/:name", async (req: Request<{ name: string }>, res: Response) => {
+  app.delete('/pages/:name', async (req: Request<{ name: string }>, res: Response) => {
     const name = decodeURIComponent(req.params.name);
     const entry = registry.get(name);
 
@@ -187,7 +191,7 @@ export async function serve(options: ServeOptions = {}): Promise<DevBrowserServe
       return;
     }
 
-    res.status(404).json({ error: "page not found" });
+    res.status(404).json({ error: 'page not found' });
   });
 
   // Start the server
@@ -197,9 +201,9 @@ export async function serve(options: ServeOptions = {}): Promise<DevBrowserServe
 
   // Track active connections for clean shutdown
   const connections = new Set<Socket>();
-  server.on("connection", (socket: Socket) => {
+  server.on('connection', (socket: Socket) => {
     connections.add(socket);
-    socket.on("close", () => connections.delete(socket));
+    socket.on('close', () => connections.delete(socket));
   });
 
   // Track if cleanup has been called to avoid double cleanup
@@ -207,10 +211,12 @@ export async function serve(options: ServeOptions = {}): Promise<DevBrowserServe
 
   // Cleanup function
   const cleanup = async () => {
-    if (cleaningUp) return;
+    if (cleaningUp) {
+      return;
+    }
     cleaningUp = true;
 
-    console.log("\nShutting down...");
+    console.log('\nShutting down...');
 
     // Close all active HTTP connections
     for (const socket of connections) {
@@ -236,7 +242,7 @@ export async function serve(options: ServeOptions = {}): Promise<DevBrowserServe
     }
 
     server.close();
-    console.log("Server stopped.");
+    console.log('Server stopped.');
   };
 
   // Synchronous cleanup for forced exits
@@ -249,7 +255,7 @@ export async function serve(options: ServeOptions = {}): Promise<DevBrowserServe
   };
 
   // Signal handlers (consolidated to reduce duplication)
-  const signals = ["SIGINT", "SIGTERM", "SIGHUP"] as const;
+  const signals = ['SIGINT', 'SIGTERM', 'SIGHUP'] as const;
 
   const signalHandler = async () => {
     await cleanup();
@@ -257,23 +263,27 @@ export async function serve(options: ServeOptions = {}): Promise<DevBrowserServe
   };
 
   const errorHandler = async (err: unknown) => {
-    console.error("Unhandled error:", err);
+    console.error('Unhandled error:', err);
     await cleanup();
     process.exit(1);
   };
 
   // Register handlers
-  signals.forEach((sig) => process.on(sig, signalHandler));
-  process.on("uncaughtException", errorHandler);
-  process.on("unhandledRejection", errorHandler);
-  process.on("exit", syncCleanup);
+  signals.forEach((sig) => {
+    process.on(sig, signalHandler);
+  });
+  process.on('uncaughtException', errorHandler);
+  process.on('unhandledRejection', errorHandler);
+  process.on('exit', syncCleanup);
 
   // Helper to remove all handlers
   const removeHandlers = () => {
-    signals.forEach((sig) => process.off(sig, signalHandler));
-    process.off("uncaughtException", errorHandler);
-    process.off("unhandledRejection", errorHandler);
-    process.off("exit", syncCleanup);
+    signals.forEach((sig) => {
+      process.off(sig, signalHandler);
+    });
+    process.off('uncaughtException', errorHandler);
+    process.off('unhandledRejection', errorHandler);
+    process.off('exit', syncCleanup);
   };
 
   return {
