@@ -144,9 +144,9 @@ Output a JSON file with this shape (include detailed top-level fields so the PRD
 - **Acceptance Criteria**: Verifiable, specific, testable
 - **Every story must include**: at least 1 example + 1 negative case
 - **UI stories**: include explicit routes, components, and UI states
-- **New projects**: include initial setup stories (scaffold, env/config, local dev, deploy basics, **package installs**)
+- **New projects**: include initial set up stories (scaffold, env/config, local dev, deploy basics, **package installs**)
 - **Dependencies**: any new package/library introduced must be called out with install commands in acceptance criteria (e.g., `npm install <pkg>`), plus any required config or scripts.
-- **Ordering**: if this is a new project, the **first story must be setup** (scaffold + installs + scripts + env/config). Migrations or data model work come after setup.
+- **Ordering**: if this is a new project, the **first story must be set up** (scaffold + installs + scripts + env/config). Migrations or data model work come after setup.
 
 ---
 
