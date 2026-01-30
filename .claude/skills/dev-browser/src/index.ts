@@ -43,18 +43,6 @@ async function fetchWithRetry(
   throw new Error(`Failed after ${maxRetries} retries: ${lastError?.message}`);
 }
 
-// Helper to add timeout to promises
-function withTimeout<T>(promise: Promise<T>, ms: number, message: string): Promise<T> {
-  return Promise.race([
-    promise,
-    new Promise<never>((_, reject) =>
-      setTimeout(() => {
-        reject(new Error(`Timeout: ${message}`));
-      }, ms)
-    ),
-  ]);
-}
-
 export async function serve(options: ServeOptions = {}): Promise<DevBrowserServer> {
   const port = options.port ?? 9222;
   const headless = options.headless ?? false;
@@ -157,22 +145,52 @@ export async function serve(options: ServeOptions = {}): Promise<DevBrowserServe
     // Check if page already exists
     let entry = registry.get(name);
     if (!entry) {
-      // Create new page in the persistent context (with timeout to prevent hangs)
-      const page = await withTimeout(context.newPage(), 30000, 'Page creation timed out after 30s');
+      // Create new page with timeout and orphan cleanup
+      const pagePromise = context.newPage();
+      let orphanedPage: Page | undefined;
 
-      // Apply viewport if provided
-      if (viewport) {
-        await page.setViewportSize(viewport);
+      pagePromise
+        .then((p) => {
+          orphanedPage = p;
+        })
+        .catch(() => {
+          orphanedPage = undefined;
+        });
+
+      try {
+        const page = await Promise.race([
+          pagePromise,
+          new Promise<Page>((_, reject) =>
+            setTimeout(() => {
+              reject(new Error('Page creation timed out after 30s'));
+            }, 30000)
+          ),
+        ]);
+
+        // Apply viewport if provided
+        if (viewport) {
+          await page.setViewportSize(viewport);
+        }
+
+        const targetId = await getTargetId(page);
+        entry = { page, targetId };
+        registry.set(name, entry);
+
+        // Clean up registry when page is closed (e.g., user clicks X)
+        page.on('close', () => {
+          registry.delete(name);
+        });
+      } catch {
+        // If timeout occurred, close any orphaned page
+        if (orphanedPage) {
+          try {
+            await orphanedPage.close();
+          } catch {
+            // Ignore close errors
+          }
+        }
+        throw new Error('Page creation timed out after 30s');
       }
-
-      const targetId = await getTargetId(page);
-      entry = { page, targetId };
-      registry.set(name, entry);
-
-      // Clean up registry when page is closed (e.g., user clicks X)
-      page.on('close', () => {
-        registry.delete(name);
-      });
     }
 
     const response: GetPageResponse = { wsEndpoint, name, targetId: entry.targetId };
