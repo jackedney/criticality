@@ -97,10 +97,24 @@ try {
 // Clean up stale CDP port if HTTP server isn't running (crash recovery)
 // This handles the case where Node crashed but Chrome is still running on 9223
 try {
-  const pid = execSync('lsof -ti:9223', { encoding: 'utf-8' }).trim();
-  if (pid) {
+  let pid: string | undefined;
+  if (process.platform === 'win32') {
+    const output = execSync('netstat -ano | findstr :9223', { encoding: 'utf-8' }).trim();
+    const match = /LISTENING\s+(\d+)/.exec(output);
+    if (match) {
+      pid = match[1];
+    }
+  } else {
+    pid = execSync('lsof -ti:9223', { encoding: 'utf-8' }).trim();
+  }
+
+  if (pid !== undefined && pid !== '') {
     console.log(`Cleaning up stale Chrome process on CDP port 9223 (PID: ${pid})`);
-    execSync(`kill -9 ${pid}`);
+    if (process.platform === 'win32') {
+      execSync(`taskkill /F /PID ${pid}`);
+    } else {
+      execSync(`kill -9 ${pid}`);
+    }
   }
 } catch {
   // No process on CDP port, which is expected
