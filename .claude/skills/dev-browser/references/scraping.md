@@ -131,13 +131,23 @@ try {
     const url = `${baseUrl}?params=${encodeURIComponent(JSON.stringify(params))}`;
 
     // Execute fetch in browser context (has auth cookies/headers)
-    // ⚠️ TODO: Add AbortController with setTimeout to handle fetch timeouts
     const response = await page.evaluate(
-      async ({ url, headers }) => {
-        const res = await fetch(url, { headers });
-        return res.json();
+      async ({ url, headers, timeout }) => {
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), timeout);
+        try {
+          const res = await fetch(url, { headers, signal: controller.signal });
+          clearTimeout(timeoutId);
+          return res.json();
+        } catch (error) {
+          clearTimeout(timeoutId);
+          if (error.name === 'AbortError') {
+            throw new Error(`Fetch timed out after ${timeout}ms`);
+          }
+          throw error;
+        }
       },
-      { url, headers }
+      { url, headers, timeout: 10000 }
     );
 
     // Extract data and cursor (adjust paths for your API)
