@@ -1005,6 +1005,8 @@ export class InterviewCli {
     const question = phaseQuestions[phase];
     const isDelegable = (DELEGABLE_PHASES as readonly string[]).includes(phase);
 
+    let actualAnswer: string | undefined;
+
     // For delegable phases, show options
     if (isDelegable) {
       this.writeLine(formatDelegationOptions());
@@ -1074,6 +1076,22 @@ export class InterviewCli {
         );
         return true;
       }
+
+      // If user chose 'Continue', re-prompt for actual answer
+      if (delegation?.decision === 'Continue') {
+        const actualAnswerResult = await this.prompt({
+          message: question,
+          hint: "Type 'quit' or 'q' to save and exit",
+          allowEmpty: false,
+        });
+
+        if (actualAnswerResult.quit) {
+          this.writeLine(formatInfo('Progress saved. Run again to resume.'));
+          return false;
+        }
+
+        actualAnswer = actualAnswerResult.input;
+      }
     }
 
     // Handle Approval phase specially
@@ -1081,8 +1099,8 @@ export class InterviewCli {
       return this.handleApproval();
     }
 
-    // Record the response
-    const userEntry = createTranscriptEntry(phase, 'user', result.input);
+    // Record the response (use actualAnswer if provided from Continue re-prompt)
+    const userEntry = createTranscriptEntry(phase, 'user', actualAnswer ?? result.input);
     await appendTranscriptEntry(this.projectId, userEntry);
 
     // For now, extract a simple requirement
@@ -1092,7 +1110,7 @@ export class InterviewCli {
         id: `req_${String(Date.now())}_${Math.random().toString(36).substring(2, 9)}`,
         sourcePhase: phase,
         category: this.getCategoryForPhase(phase),
-        text: result.input,
+        text: actualAnswer ?? result.input,
         confidence: 'medium' as const,
         extractedAt: new Date().toISOString(),
       };
