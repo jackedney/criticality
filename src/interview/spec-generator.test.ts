@@ -624,6 +624,33 @@ describe('Spec Generator', () => {
 
         await expect(saveProposal(invalidSpec, testProjectId)).rejects.toThrow(SpecGeneratorError);
       });
+
+      it('should handle concurrent saveProposal calls with different version numbers', async () => {
+        const spec: Spec = {
+          meta: {
+            version: '1.0.0',
+            created: new Date().toISOString(),
+          },
+          system: {
+            name: 'test-system',
+          },
+        };
+
+        // Launch two parallel save calls
+        const [result1, result2] = await Promise.all([
+          saveProposal(spec, testProjectId),
+          saveProposal(spec, testProjectId),
+        ]);
+
+        // Both should succeed with different version numbers
+        expect(result1.version).toBeDefined();
+        expect(result2.version).toBeDefined();
+        expect(result1.version).not.toBe(result2.version);
+        expect([result1.version, result2.version].sort()).toEqual([1, 2]);
+
+        // Verify files exist and are different
+        expect(result1.path).not.toBe(result2.path);
+      });
     });
 
     describe('loadProposal', () => {
