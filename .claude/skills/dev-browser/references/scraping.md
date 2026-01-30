@@ -203,3 +203,4 @@ try {
 - **Rate limiting**: Add 500ms+ delays between requests to avoid blocks
 - **Stop conditions**: Check for empty results, missing cursor, or reaching a date/ID threshold
 - **GraphQL APIs**: URL params often include `variables` and `features` JSON objects - capture and reuse them
+- **Legal & ethical compliance**: Review Terms of Service, check robots.txt, honor rate limits, and comply with data usage/privacy regulations
