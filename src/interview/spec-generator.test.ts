@@ -25,6 +25,7 @@ import {
   SpecGeneratorError,
 } from './spec-generator.js';
 import { getInterviewDir } from './persistence.js';
+import { createInitialInterviewState } from './types.js';
 
 /**
  * Creates a mock requirement for testing.
@@ -437,6 +438,108 @@ describe('Spec Generator', () => {
 
       expect(result.valid).toBe(false);
       expect(result.errors.some((e) => e.includes('text'))).toBe(true);
+    });
+  });
+
+  describe('normalizeSystemName', () => {
+    it('should normalize alphanumeric project ID', () => {
+      const state: InterviewState = createInitialInterviewState('my-project');
+      const spec = generateSpec(state);
+
+      expect(spec.system.name).toBe('my-project');
+    });
+
+    it('should convert to lowercase', () => {
+      const state: InterviewState = createInitialInterviewState('MyProject');
+      const spec = generateSpec(state);
+
+      expect(spec.system.name).toBe('myproject');
+    });
+
+    it('should replace spaces with hyphens', () => {
+      const state: InterviewState = createInitialInterviewState('My App');
+      const spec = generateSpec(state);
+
+      expect(spec.system.name).toBe('my-app');
+    });
+
+    it('should replace non-alphanumeric characters with hyphens', () => {
+      const state: InterviewState = createInitialInterviewState('my@cool$app');
+      const spec = generateSpec(state);
+
+      expect(spec.system.name).toBe('my-cool-app');
+    });
+
+    it('should trim leading hyphens', () => {
+      const state: InterviewState = createInitialInterviewState('-my-project');
+      const spec = generateSpec(state);
+
+      expect(spec.system.name).toBe('my-project');
+    });
+
+    it('should trim trailing hyphens', () => {
+      const state: InterviewState = createInitialInterviewState('my-project-');
+      const spec = generateSpec(state);
+
+      expect(spec.system.name).toBe('my-project');
+    });
+
+    it('should trim both leading and trailing hyphens', () => {
+      const state: InterviewState = createInitialInterviewState('--my-project--');
+      const spec = generateSpec(state);
+
+      expect(spec.system.name).toBe('my-project');
+    });
+
+    it('should prefix with "project-" when starting with number', () => {
+      const state: InterviewState = createInitialInterviewState('123-test');
+      const spec = generateSpec(state);
+
+      expect(spec.system.name).toBe('project-123-test');
+    });
+
+    it('should prefix with "project-" when starting with hyphen after trim', () => {
+      const state: InterviewState = createInitialInterviewState('-123');
+      const spec = generateSpec(state);
+
+      expect(spec.system.name).toBe('project-123');
+    });
+
+    it('should return "project-spec" for only hyphens', () => {
+      const state: InterviewState = createInitialInterviewState('---');
+      const spec = generateSpec(state);
+
+      expect(spec.system.name).toBe('project-spec');
+    });
+
+    it('should return "project-spec" for empty result after normalization', () => {
+      const state: InterviewState = createInitialInterviewState('@@@');
+      const spec = generateSpec(state);
+
+      expect(spec.system.name).toBe('project-spec');
+    });
+
+    it('should validate normalized system name', () => {
+      const state: InterviewState = createInitialInterviewState('My App!');
+      const spec = generateSpec(state);
+      const validation = validateSpec(spec);
+
+      expect(validation.valid).toBe(true);
+      expect(spec.system.name).toBe('my-app');
+    });
+
+    it('should respect systemName override option', () => {
+      const state: InterviewState = createInitialInterviewState('weird-name');
+      const spec = generateSpec(state, { systemName: 'custom-system' });
+
+      expect(spec.system.name).toBe('custom-system');
+    });
+
+    it('should handle multiple consecutive non-alphanumeric characters', () => {
+      const state: InterviewState = createInitialInterviewState('My   !!!   App');
+      const spec = generateSpec(state);
+
+      expect(spec.system.name).toBe('my-app');
     });
   });
 

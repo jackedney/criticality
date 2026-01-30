@@ -377,6 +377,43 @@ function extractTrustBoundaries(requirements: readonly ExtractedRequirement[]): 
 }
 
 /**
+ * Normalizes a project ID to a valid system name.
+ *
+ * The normalized name will:
+ * - Be lowercase
+ * - Use hyphens instead of non-alphanumeric characters
+ * - Not have leading or trailing hyphens
+ * - Start with a letter (prefixed with 'project-' if needed)
+ * - Fall back to 'project-spec' if normalization results in empty string
+ *
+ * @param projectId - The project ID to normalize.
+ * @returns A normalized system name that passes validation.
+ *
+ * @example
+ * ```typescript
+ * normalizeSystemName('123-test') // returns 'project-123-test'
+ * normalizeSystemName('My App') // returns 'my-app'
+ * normalizeSystemName('---') // returns 'project-spec'
+ * ```
+ */
+function normalizeSystemName(projectId: string): string {
+  let normalized = projectId
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '');
+
+  if (normalized.length === 0) {
+    return 'project-spec';
+  }
+
+  if (!/^[a-z]/.test(normalized)) {
+    normalized = `project-${normalized}`;
+  }
+
+  return normalized;
+}
+
+/**
  * Converts interview features to spec features.
  *
  * @param features - Features from the interview state.
@@ -435,8 +472,7 @@ export function generateSpec(state: InterviewState, options?: SpecGeneratorOptio
   }
 
   // Build system section - derive name from projectId if not provided
-  const systemName =
-    options?.systemName ?? state.projectId.toLowerCase().replace(/[^a-z0-9]+/g, '-');
+  const systemName = options?.systemName ?? normalizeSystemName(state.projectId);
   const system: Spec['system'] = {
     name: systemName,
   };
