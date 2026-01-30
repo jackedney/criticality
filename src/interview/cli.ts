@@ -1282,12 +1282,11 @@ export class InterviewCli {
 /**
  * Creates a readline-based input reader.
  *
- * @returns An InputReader using Node's readline.
+ * @returns A Promise resolving to an InputReader using Node's readline.
  */
-export function createReadlineReader(): InputReader {
+export async function createReadlineReader(): Promise<InputReader> {
   // Use dynamic import to avoid issues in test environments
-  // eslint-disable-next-line @typescript-eslint/no-require-imports
-  const readline = require('node:readline') as typeof import('node:readline');
+  const readline = await import('node:readline');
 
   const rl = readline.createInterface({
     input: process.stdin,
