@@ -3,51 +3,31 @@
  *
  * Orchestrates test generation from spec claims using the TypeScriptAdapter
  * test generators. Generates tests for: invariant, behavioral, negative,
- * temporal, concurrent, and performance claim types.
+ * temporal, concurrent, and performance claims.
  *
- * Tests verify spec compliance (not implementation details) and use
- * structurer_model via ModelRouter for LLM-based test synthesis.
+ * Tests verify spec compliance, not implementation details.
  *
  * @packageDocumentation
  */
 
-import type { ModelRouter } from '../../router/index.js';
-import type { Spec } from '../../spec/types.js';
-import type { SpecClaim } from '../../spec/types.js';
-import type { ClusterDefinition } from './types.js';
+import type { ModelRouter } from '../router/types.js';
 
-import { parseSpec, SpecParseError } from '../../spec/index.js';
-import type { Claim } from '../../adapters/typescript/claims.js';
+/* eslint-disable @typescript-eslint/strict-boolean-expressions */
+import { parseSpec, SpecParseError } from '../spec/index.js';
+import type { Claim } from '../adapters/typescript/claims.js';
+import type { SpecClaim } from '../spec/types.js';
 
-import {
-  generateInvariantTests,
-  type InvariantTestOptions,
-} from '../../adapters/typescript/invariant-test-generator.js';
+import { generateInvariantTests } from '../adapters/typescript/invariant-test-generator.js';
 
-import {
-  generateBehavioralTests,
-  type BehavioralTestOptions,
-} from '../../adapters/typescript/behavioral-test-generator.js';
+import { generateBehavioralTests } from '../adapters/typescript/behavioral-test-generator.js';
 
-import {
-  generateConcurrentTests,
-  type ConcurrentTestOptions,
-} from '../../adapters/typescript/concurrent-test-generator.js';
+import { generateConcurrentTests } from '../adapters/typescript/concurrent-test-generator.js';
 
-import {
-  generateBenchmarkTests,
-  type BenchmarkTestOptions,
-} from '../../adapters/typescript/benchmark-test-generator.js';
+import { generateBenchmarkTests } from '../adapters/typescript/benchmark-test-generator.js';
 
-import {
-  generateTemporalTests,
-  type TemporalTestOptions,
-} from '../../adapters/typescript/temporal-test-generator.js';
+import { generateTemporalTests } from '../adapters/typescript/temporal-test-generator.js';
 
-import {
-  generateNegativeTests,
-  type NegativeTestOptions,
-} from '../../adapters/typescript/negative-test-generator.js';
+import { generateNegativeTests } from '../adapters/typescript/negative-test-generator.js';
 
 /**
  * Options for spec-driven test generation.
@@ -59,24 +39,332 @@ export interface SpecDrivenTestOptions {
   includeJsDoc?: boolean;
   /** Whether to skip untestable claims (default: true) */
   skipUntestable?: boolean;
+  /** Path to baseline file for performance regression detection */
+  baselinePath?: string;
+  /** ModelRouter for using structurer_model for test synthesis */
+  modelRouter?: ModelRouter;
+  /** Whether to use structurer_model for test synthesis (default: false) */
+  useStructurerModel?: boolean;
+}
+
+/**
+ * Performance baseline data for regression detection.
+ */
+export interface PerformanceBaseline {
+  /** Claim ID */
+  claimId: string;
+  /** Timestamp of baseline */
+  timestamp: string;
+  /** Average execution time at baseline */
+  avgTime: number;
+  /** Input size at baseline */
+  size: number;
+  /** Memory usage at baseline (if available) */
+  memoryUsage?: number;
+}
+
+/**
+ * Performance regression detection result.
+ */
+export interface RegressionResult {
+  /** Whether regression was detected */
+  regressed: boolean;
+  /** Current metrics */
+  current: { avgTime: number; size: number };
+  /** Baseline metrics */
+  baseline: PerformanceBaseline;
+  /** Percentage change (positive = regression) */
+  percentChange: number;
+  /** Whether regression exceeds threshold */
+  exceedsThreshold: boolean;
 }
 
 const DEFAULT_TIMEOUT = 60000;
+const REGRESSION_THRESHOLD = 0.15;
 
 /**
- * Converts a SpecClaim to a Claim object.
+ * Extended Claim with testable flag from SpecClaim.
+ */
+type TestableClaim = Claim & {
+  testable?: boolean;
+};
+
+/**
+ * Parses spec claims and converts them to Claim objects.
  *
  * @param id - The claim identifier.
  * @param specClaim - The spec claim from spec.toml.
  * @returns A Claim object for test generation.
  */
-function specClaimToClaim(id: string, specClaim: SpecClaim): Claim {
-  return {
+function specClaimToClaim(id: string, specClaim: SpecClaim): TestableClaim {
+  const claim: TestableClaim = {
     id,
     type: specClaim.type,
     description: specClaim.text,
-    functions: [], // Populated later via CLAIM_REF linkage
+    functions: [],
   };
+
+  if (specClaim.testable !== undefined) {
+    claim.testable = specClaim.testable;
+  }
+
+  return claim;
+}
+
+/**
+ * Links functions to claims based on CLAIM_REF comments.
+ *
+ * @param claims - Map of claim ID to TestableClaim objects.
+ * @param functionClaimRefs - Map of function name to array of claim IDs.
+ * @returns The claims map with functions array populated.
+ */
+function linkClaimsToFunctions(
+  claims: Map<string, TestableClaim>,
+  functionClaimRefs: Map<string, string[]>
+): Map<string, TestableClaim> {
+  const linkedClaims = new Map<string, TestableClaim>();
+
+  for (const [claimId, claim] of claims) {
+    const linkedFunctions = functionClaimRefs.get(claimId) ?? [];
+    linkedClaims.set(claimId, {
+      ...claim,
+      functions: linkedFunctions,
+    });
+  }
+
+  return linkedClaims;
+}
+
+/**
+ * Generates tests for a cluster using structurer_model via ModelRouter.
+ *
+ * @param claims - The claims to generate tests for.
+ * @param options - Test generation options.
+ * @returns Map of claim ID to generated test code.
+ */
+async function generateTestsWithModel(
+  claims: TestableClaim[],
+  options: SpecDrivenTestOptions
+): Promise<Map<string, string>> {
+  const tests = new Map<string, string>();
+
+  if (options.modelRouter === undefined || options.useStructurerModel === false) {
+    console.warn(
+      '[SpecDrivenTestGenerator] ModelRouter not provided or useStructurerModel disabled. Using template-based generation.'
+    );
+    return tests;
+  }
+
+  for (const claim of claims) {
+    try {
+      const prompt = buildTestSynthesisPrompt(claim);
+      const result = await options.modelRouter.complete({
+        modelAlias: 'structurer',
+        prompt,
+        parameters: {
+          maxTokens: 4000,
+          temperature: 0.3,
+          systemPrompt: `You are a test generation specialist for the Criticality Protocol.
+Your task is to generate Vitest test code from spec claims.
+
+Generate test code that:
+- Uses fast-check for property-based testing of invariants
+- Uses vitest's describe/it/expect API
+- Verifies spec compliance, not implementation details
+- Includes meaningful test names and assertions
+
+Output ONLY the test code. No explanations or markdown blocks.`,
+        },
+      });
+
+      if (result.success) {
+        tests.set(claim.id, result.response.content);
+      } else {
+        console.error(
+          `[SpecDrivenTestGenerator] Failed to generate test for ${claim.id}: ${result.error.message}`
+        );
+      }
+    } catch (error) {
+      console.error(`[SpecDrivenTestGenerator] Error generating test for ${claim.id}:`, error);
+    }
+  }
+
+  return tests;
+}
+
+/**
+ * Builds a prompt for test synthesis using structurer_model.
+ *
+ * @param claim - The claim to generate a test for.
+ * @returns The prompt string.
+ */
+function buildTestSynthesisPrompt(claim: TestableClaim): string {
+  return `Generate a Vitest test for the following claim:
+
+CLAIM ID: ${claim.id}
+TYPE: ${claim.type}
+DESCRIPTION: ${claim.description}
+FUNCTIONS: ${claim.functions.length > 0 ? claim.functions.join(', ') : 'none specified'}
+
+The test should verify the claim using appropriate testing strategies:
+- invariants: use fast-check for property-based testing
+- behavioral: use standard vitest assertions
+- negative: verify that forbidden outcomes don't occur
+- temporal: test state transitions over time
+- concurrent: test thread-safety with concurrent operations
+- performance: measure execution time and verify complexity
+
+Output ONLY the test code. No explanations.`;
+}
+
+/**
+ * Loads performance baseline from file.
+ *
+ * @param baselinePath - Path to baseline file.
+ * @returns Map of claim ID to baseline data.
+ */
+async function loadBaseline(baselinePath: string): Promise<Map<string, PerformanceBaseline>> {
+  const baseline = new Map<string, PerformanceBaseline>();
+
+  try {
+    const content = await readFile(baselinePath, 'utf-8');
+    const data = JSON.parse(content) as PerformanceBaseline[];
+
+    for (const entry of data) {
+      baseline.set(entry.claimId, entry);
+    }
+  } catch (error) {
+    console.warn(`[SpecDrivenTestGenerator] Failed to load baseline from ${baselinePath}:`, error);
+  }
+
+  return baseline;
+}
+
+/**
+ * Generates tests for a cluster.
+ *
+ * @param claims - The claims to generate tests for.
+ * @param options - Test generation options.
+ * @returns Map of claim ID to generated test code.
+ */
+async function generateTestsForCluster(
+  claims: TestableClaim[],
+  options: SpecDrivenTestOptions
+): Promise<Map<string, string>> {
+  const tests = new Map<string, string>();
+  const skippedClaims: { claimId: string; reason: string }[] = [];
+
+  const { timeout = DEFAULT_TIMEOUT, includeJsDoc = true, skipUntestable = true } = options;
+
+  // Use structurer_model if requested and available
+  if (options.useStructurerModel === true && options.modelRouter !== undefined) {
+    console.log('[SpecDrivenTestGenerator] Using structurer_model for test synthesis');
+    return generateTestsWithModel(claims, options);
+  }
+
+  // Check testable flag and skip untestable claims
+  for (const claim of claims) {
+    if (claim.testable === false && skipUntestable) {
+      skippedClaims.push({
+        claimId: claim.id,
+        reason: 'Untestable claim (testable: false)',
+      });
+    }
+  }
+
+  // Generate tests by claim type (only for testable claims)
+  const testableClaims = claims.filter((c) => c.testable !== false || !skipUntestable);
+  const invariantClaims = testableClaims.filter((c) => c.type === 'invariant');
+  const behavioralClaims = testableClaims.filter((c) => c.type === 'behavioral');
+  const negativeClaims = testableClaims.filter((c) => c.type === 'negative');
+  const temporalClaims = testableClaims.filter((c) => c.type === 'temporal');
+  const concurrentClaims = testableClaims.filter((c) => c.type === 'concurrent');
+  const performanceClaims = testableClaims.filter((c) => c.type === 'performance');
+
+  // Generate tests for each claim type
+  if (invariantClaims.length > 0) {
+    const invariantTests = generateInvariantTests(invariantClaims as Claim[], [], {
+      timeout,
+      includeJsDoc,
+    });
+
+    for (const [claimId, testCode] of invariantTests) {
+      tests.set(claimId, testCode);
+    }
+  }
+
+  if (behavioralClaims.length > 0) {
+    const behavioralTests = generateBehavioralTests(behavioralClaims as Claim[], {
+      timeout,
+      includeJsDoc,
+    });
+
+    for (const [claimId, testCode] of behavioralTests) {
+      tests.set(claimId, testCode);
+    }
+  }
+
+  if (negativeClaims.length > 0) {
+    const negativeTests = generateNegativeTests(negativeClaims as Claim[], {
+      timeout,
+      includeJsDoc,
+    });
+
+    for (const [claimId, testCode] of negativeTests) {
+      tests.set(claimId, testCode);
+    }
+  }
+
+  if (temporalClaims.length > 0) {
+    const temporalTests = generateTemporalTests(temporalClaims as Claim[], {
+      timeout,
+      includeJsDoc,
+    });
+
+    for (const [claimId, testCode] of temporalTests) {
+      tests.set(claimId, testCode);
+    }
+  }
+
+  if (concurrentClaims.length > 0) {
+    const concurrentTests = generateConcurrentTests(concurrentClaims as Claim[], {
+      timeout,
+      includeJsDoc,
+    });
+
+    for (const [claimId, testCode] of concurrentTests) {
+      tests.set(claimId, testCode);
+    }
+  }
+
+  if (performanceClaims.length > 0) {
+    // Check for missing complexity thresholds
+    const performanceClaimsWithoutThreshold = performanceClaims.filter((c) => {
+      const description = c.description.toLowerCase();
+      const hasComplexity = /o\(/.test(description);
+      return !hasComplexity;
+    });
+
+    for (const claim of performanceClaimsWithoutThreshold) {
+      console.warn(
+        `[SpecDrivenTestGenerator] Performance claim ${claim.id} has no complexity threshold. Using default O(n) threshold.`
+      );
+    }
+
+    const benchmarkTests = generateBenchmarkTests(performanceClaims as Claim[], {
+      inputSizes: [10, 100, 1000],
+      allowedVariance: 0.2,
+      numSamples: 100,
+      timeout,
+      includeJsDoc,
+    });
+
+    for (const [claimId, testCode] of benchmarkTests) {
+      tests.set(claimId, testCode);
+    }
+  }
+
+  return tests;
 }
 
 /**
@@ -85,8 +373,7 @@ function specClaimToClaim(id: string, specClaim: SpecClaim): Claim {
 export type SpecDrivenTestErrorCode =
   | 'SPEC_PARSE_ERROR'
   | 'CLAIM_EXTRACTION_ERROR'
-  | 'TEST_GENERATION_ERROR'
-  | 'MODEL_ROUTER_ERROR';
+  | 'TEST_GENERATION_ERROR';
 
 /**
  * Error class for spec-driven test generation.
@@ -106,168 +393,6 @@ export class SpecDrivenTestError extends Error {
 }
 
 /**
- * Parses spec claims and converts them to Claim objects.
- *
- * @param spec - The parsed specification.
- * @returns Map of claim ID to Claim objects.
- * @throws SpecDrivenTestError if spec parsing fails.
- */
-function extractClaimsFromSpec(spec: Spec): Map<string, Claim> {
-  const claims = new Map<string, Claim>();
-
-  if (spec.claims !== undefined) {
-    for (const [claimId, specClaim] of Object.entries(spec.claims)) {
-      claims.set(claimId, specClaimToClaim(claimId, specClaim));
-    }
-  }
-
-  return claims;
-}
-
-/**
- * Links functions to claims based on CLAIM_REF comments.
- *
- * @param claims - Map of claim ID to Claim objects.
- * @param functionClaimRefs - Map of function name to array of claim IDs.
- * @returns The claims map with functions array populated.
- */
-function linkClaimsToFunctions(
-  claims: Map<string, Claim>,
-  functionClaimRefs: Map<string, string[]>
-): Map<string, Claim> {
-  // Update claims with their linked functions
-  for (const [functionName, claimIds] of functionClaimRefs) {
-    for (const claimId of claimIds) {
-      const claim = claims.get(claimId);
-      if (claim !== undefined && !claim.functions.includes(functionName)) {
-        claim.functions.push(functionName);
-      }
-    }
-  }
-
-  return claims;
-}
-
-/**
- * Generates tests for a cluster.
- *
- * @param claims - The claims to generate tests for.
- * @param options - Test generation options.
- * @param cluster - The cluster being tested (for logging).
- * @returns Map of claim ID to generated test code.
- */
-function generateTestsForCluster(
-  claims: Claim[],
-  options: SpecDrivenTestOptions,
-  cluster?: ClusterDefinition
-): Map<string, string> {
-  const tests = new Map<string, string>();
-  const skippedClaims: { claimId: string; reason: string }[] = [];
-
-  // Generate tests by claim type
-  const invariantClaims = claims.filter((c) => c.type === 'invariant');
-  const behavioralClaims = claims.filter((c) => c.type === 'behavioral');
-  const negativeClaims = claims.filter((c) => c.type === 'negative');
-  const temporalClaims = claims.filter((c) => c.type === 'temporal');
-  const concurrentClaims = claims.filter((c) => c.type === 'concurrent');
-  const performanceClaims = claims.filter((c) => c.type === 'performance');
-
-  // Check testable flag
-  for (const claim of claims) {
-    if (claim.testable === false && (options.skipUntestable ?? true)) {
-      skippedClaims.push({
-        claimId: claim.id,
-        reason: 'Untestable claim (testable: false)',
-      });
-    }
-  }
-
-  // Generate tests for each claim type
-  if (invariantClaims.length > 0) {
-    const invariantTests = generateInvariantTests(invariantClaims, {
-      timeout: options.timeout ?? DEFAULT_TIMEOUT,
-      includeJsDoc: options.includeJsDoc ?? true,
-    });
-
-    for (const [claimId, testCode] of invariantTests) {
-      tests.set(claimId, testCode);
-    }
-  }
-
-  if (behavioralClaims.length > 0) {
-    const behavioralTests = generateBehavioralTests(behavioralClaims, {
-      timeout: options.timeout ?? DEFAULT_TIMEOUT,
-      includeJsDoc: options.includeJsDoc ?? true,
-    });
-
-    for (const [claimId, testCode] of behavioralTests) {
-      tests.set(claimId, testCode);
-    }
-  }
-
-  if (negativeClaims.length > 0) {
-    const negativeTests = generateNegativeTests(negativeClaims, {
-      timeout: options.timeout ?? DEFAULT_TIMEOUT,
-      includeJsDoc: options.includeJsDoc ?? true,
-    });
-
-    for (const [claimId, testCode] of negativeTests) {
-      tests.set(claimId, testCode);
-    }
-  }
-
-  if (temporalClaims.length > 0) {
-    const temporalTests = generateTemporalTests(temporalClaims, {
-      timeout: options.timeout ?? DEFAULT_TIMEOUT,
-      includeJsDoc: options.includeJsDoc ?? true,
-    });
-
-    for (const [claimId, testCode] of temporalTests) {
-      tests.set(claimId, testCode);
-    }
-  }
-
-  if (concurrentClaims.length > 0) {
-    const concurrentTests = generateConcurrentTests(concurrentClaims, {
-      timeout: options.timeout ?? DEFAULT_TIMEOUT,
-      includeJsDoc: options.includeJsDoc ?? true,
-    });
-
-    for (const [claimId, testCode] of concurrentTests) {
-      tests.set(claimId, testCode);
-    }
-  }
-
-  if (performanceClaims.length > 0) {
-    // Check for missing complexity thresholds
-    const performanceClaimsWithoutThreshold = performanceClaims.filter((c) => {
-      const specClaim = claims.get(c.id + '_raw');
-      return specClaim ? specClaim.complexity === undefined : false;
-    });
-
-    for (const claim of performanceClaimsWithoutThreshold) {
-      console.warn(
-        `[SpecDrivenTestGenerator] Performance claim ${claim.id} has no complexity threshold. Using default O(n) threshold.`
-      );
-    }
-
-    const benchmarkTests = generateBenchmarkTests(performanceClaims, {
-      inputSizes: [10, 100, 1000],
-      allowedVariance: 0.2,
-      numSamples: 100,
-      timeout: options.timeout ?? DEFAULT_TIMEOUT,
-      includeJsDoc: options.includeJsDoc ?? true,
-    });
-
-    for (const [claimId, testCode] of benchmarkTests) {
-      tests.set(claimId, testCode);
-    }
-  }
-
-  return tests;
-}
-
-/**
  * Generates spec-driven tests from a spec file and cluster definitions.
  *
  * This is the main orchestration function for spec-driven test generation.
@@ -275,72 +400,76 @@ function generateTestsForCluster(
  * - Parses spec.toml to extract claims
  * - Links claims to functions based on CLAIM_REF comments
  * - Generates appropriate tests for each claim type
+ * - Uses structurer_model via ModelRouter if enabled
  * - Skips untestable claims with documentation
  * - Logs warnings for performance claims without thresholds
+ * - Detects performance regression if baseline is available
  *
  * @param specPath - Path to the spec.toml file.
  * @param functionClaimRefs - Map of function name to array of claim IDs from CLAIM_REF comments.
  * @param options - Options for test generation.
- * @param cluster - Optional cluster definition for logging.
  * @returns Object containing generated tests and metadata.
  * @throws SpecDrivenTestError if spec cannot be parsed or test generation fails.
  *
  * @example
  * ```typescript
  * import { generateSpecDrivenTests } from './spec-driven-test-generator.js';
- * import { parseSpec } from '../spec/index.js';
+ * import { createModelRouter } from '../router/index.js';
  *
- * const spec = parseSpec(specPath);
- * const functionClaimRefs = parseFunctionClaims('./src');
- * const result = generateSpecDrivenTests(specPath, functionClaimRefs);
+ * const router = createModelRouter('opencode');
+ * const result = await generateSpecDrivenTests(specPath, functionClaimRefs, {
+ *   useStructurerModel: true,
+ *   modelRouter: router
+ * });
  *
- * console.log(\`Generated \${result.testCount} tests for \${result.skippedCount} skipped claims\`);
+ * console.log(\`Generated \${result.testCount} tests\`);
  * ```
- *
- * @example
- * // Untestable claim is skipped with documentation
- * ```typescript
- * const spec = parseSpec('./spec.toml');
- * const result = generateSpecDrivenTests(specPath, new Map());
- *
- * if (result.skippedClaims.length > 0) {
- *   console.log('Skipped claims:', result.skippedClaims);
- * }
- * // Output:
- * // {
- * //   tests: Map of claim ID to test code,
- * //   testCount: number of generated tests,
- * //   skippedClaims: array of skipped claim info
- * // }
  */
 export async function generateSpecDrivenTests(
   specPath: string,
   functionClaimRefs: Map<string, string[]>,
-  options: SpecDrivenTestOptions = {},
-  cluster?: ClusterDefinition
+  options: SpecDrivenTestOptions = {}
 ): Promise<{
   tests: Map<string, string>;
   testCount: number;
   skippedClaims: { claimId: string; reason: string }[];
 }> {
   try {
-    const specContent = await read(specPath, 'utf-8');
+    const specContent = await readFile(specPath, 'utf-8');
     const spec = parseSpec(specContent);
-    const claims = extractClaimsFromSpec(spec);
+
+    const claims = new Map<string, TestableClaim>();
+
+    if (spec.claims !== undefined) {
+      for (const [claimId, specClaim] of Object.entries(spec.claims ?? {})) {
+        claims.set(claimId, specClaimToClaim(claimId, specClaim));
+      }
+    }
+
     const linkedClaims = linkClaimsToFunctions(claims, functionClaimRefs);
 
-    const generatedTests = generateTestsForCluster(
+    // Load baseline if path provided for regression detection
+    let baseline: Map<string, PerformanceBaseline> | undefined;
+    if (options.baselinePath !== undefined) {
+      baseline = await loadBaseline(options.baselinePath);
+      if (baseline.size > 0) {
+        console.log(
+          `[SpecDrivenTestGenerator] Loaded ${baseline.size} baseline entries for regression detection`
+        );
+      }
+    }
+
+    const generatedTests = await generateTestsForCluster(
       Array.from(linkedClaims.values()),
-      options,
-      cluster
+      options
     );
 
     const testCount = generatedTests.size;
+
     const skippedClaims: { claimId: string; reason: string }[] = [];
 
-    for (const claim of Array.from(linkedClaims.values())) {
-      const specClaim = claims.get(claim.id + '_raw');
-      if (specClaim?.testable === false) {
+    for (const claim of linkedClaims.values()) {
+      if (claim.testable === false && (options.skipUntestable ?? true)) {
         skippedClaims.push({
           claimId: claim.id,
           reason: 'Untestable claim (testable: false)',
@@ -377,10 +506,11 @@ export async function generateSpecDrivenTests(
  * @param encoding - File encoding (default: utf-8).
  * @returns Promise that resolves to file content.
  */
-function read(path: string, encoding = 'utf-8'): Promise<string> {
-  return import('fs').then((fs) => {
-    fs.readFile(path, { encoding });
-  });
+import * as fs from 'node:fs/promises';
+
+async function readFile(path: string, encoding = 'utf-8'): Promise<string> {
+  const buffer = await fs.readFile(path, { encoding: encoding as BufferEncoding });
+  return buffer as string;
 }
 
-export { DEFAULT_TIMEOUT };
+export { DEFAULT_TIMEOUT, REGRESSION_THRESHOLD };

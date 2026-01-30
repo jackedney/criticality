@@ -5,11 +5,7 @@
  */
 
 import { describe, expect, it } from 'vitest';
-import {
-  generateNegativeTest,
-  generateNegativeTests,
-  type NegativeTestOptions,
-} from './negative-test-generator.js';
+import { generateNegativeTest, generateNegativeTests } from './negative-test-generator.js';
 
 describe('negative-test-generator', () => {
   describe('generateNegativeTest', () => {
