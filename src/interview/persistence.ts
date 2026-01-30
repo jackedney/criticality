@@ -17,8 +17,9 @@ import type {
   ExtractedRequirement,
   DelegationPoint,
   TranscriptEntry,
+  Feature,
 } from './types.js';
-import { INTERVIEW_PHASES, isValidInterviewPhase } from './types.js';
+import { INTERVIEW_PHASES, isValidInterviewPhase, isValidFeatureClassification } from './types.js';
 
 /**
  * Error type for interview state persistence operations.
@@ -212,6 +213,68 @@ function validateExtractedRequirement(
  * @param index - The index in the array for error messages.
  * @throws InterviewPersistenceError if invalid.
  */
+function validateFeature(value: unknown, index: number): asserts value is Feature {
+  const indexStr = String(index);
+  if (value === null || typeof value !== 'object') {
+    throw new InterviewPersistenceError(
+      `Invalid interview state: features[${indexStr}] must be an object`,
+      'schema_error'
+    );
+  }
+
+  const feature = value as Record<string, unknown>;
+
+  if (typeof feature.id !== 'string') {
+    throw new InterviewPersistenceError(
+      `Invalid interview state: features[${indexStr}].id must be a string`,
+      'schema_error'
+    );
+  }
+
+  validatePhase(feature.sourcePhase, `features[${indexStr}].sourcePhase`);
+
+  if (
+    typeof feature.classification !== 'string' ||
+    !isValidFeatureClassification(feature.classification)
+  ) {
+    throw new InterviewPersistenceError(
+      `Invalid interview state: features[${indexStr}].classification must be one of: core, foundational, bolt-on`,
+      'validation_error'
+    );
+  }
+
+  if (typeof feature.name !== 'string') {
+    throw new InterviewPersistenceError(
+      `Invalid interview state: features[${indexStr}].name must be a string`,
+      'schema_error'
+    );
+  }
+
+  if (typeof feature.description !== 'string') {
+    throw new InterviewPersistenceError(
+      `Invalid interview state: features[${indexStr}].description must be a string`,
+      'schema_error'
+    );
+  }
+
+  if (typeof feature.identifiedAt !== 'string') {
+    throw new InterviewPersistenceError(
+      `Invalid interview state: features[${indexStr}].identifiedAt must be a string`,
+      'schema_error'
+    );
+  }
+
+  if (
+    feature.classificationRationale !== undefined &&
+    typeof feature.classificationRationale !== 'string'
+  ) {
+    throw new InterviewPersistenceError(
+      `Invalid interview state: features[${indexStr}].classificationRationale must be a string if provided`,
+      'schema_error'
+    );
+  }
+}
+
 function validateDelegationPoint(value: unknown, index: number): asserts value is DelegationPoint {
   const indexStr = String(index);
   if (value === null || typeof value !== 'object') {
@@ -307,6 +370,7 @@ export function deserializeInterviewState(json: string): InterviewState {
     'currentPhase',
     'completedPhases',
     'extractedRequirements',
+    'features',
     'delegationPoints',
     'transcriptEntryCount',
     'createdAt',
@@ -370,6 +434,17 @@ export function deserializeInterviewState(json: string): InterviewState {
   }
   for (let i = 0; i < obj.extractedRequirements.length; i++) {
     validateExtractedRequirement(obj.extractedRequirements[i], i);
+  }
+
+  // Validate features
+  if (!Array.isArray(obj.features)) {
+    throw new InterviewPersistenceError(
+      'Invalid interview state format: features must be an array',
+      'schema_error'
+    );
+  }
+  for (let i = 0; i < obj.features.length; i++) {
+    validateFeature(obj.features[i], i);
   }
 
   // Validate delegationPoints
