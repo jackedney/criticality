@@ -10,7 +10,7 @@ import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { randomUUID } from 'node:crypto';
 import * as TOML from '@iarna/toml';
-import type { InterviewState, ExtractedRequirement } from './types.js';
+import type { InterviewState, ExtractedRequirement, Feature } from './types.js';
 import type { Spec, ClaimType } from '../spec/types.js';
 import {
   generateSpec,
@@ -310,6 +310,110 @@ describe('Spec Generator', () => {
       expect(spec.constraints?.security).toBeDefined();
       const security = spec.constraints?.security ?? [];
       expect(security.length).toBe(2);
+    });
+
+    it('should map features from interview state to spec', () => {
+      const features: Feature[] = [
+        {
+          id: 'feature_123',
+          name: 'User Authentication',
+          description: 'Allows users to log in with email and password',
+          classification: 'core',
+          sourcePhase: 'Discovery',
+          identifiedAt: new Date().toISOString(),
+          classificationRationale: 'Core feature required for any user-facing application',
+        },
+      ];
+
+      const state = createMockInterviewState('test-project', []);
+      const stateWithFeatures: InterviewState = { ...state, features };
+
+      const spec = generateSpec(stateWithFeatures);
+
+      expect(spec.features).toBeDefined();
+      const featureKeys = Object.keys(spec.features ?? {});
+      expect(featureKeys.length).toBe(1);
+
+      const featureKey = featureKeys[0];
+      if (featureKey !== undefined) {
+        const specFeature = spec.features?.[featureKey];
+        expect(specFeature?.name).toBe('User Authentication');
+        expect(specFeature?.description).toBe('Allows users to log in with email and password');
+        expect(specFeature?.classification).toBe('core');
+        expect(specFeature?.rationale).toBe(
+          'Core feature required for any user-facing application'
+        );
+      }
+    });
+
+    it('should handle feature without classification rationale', () => {
+      const features: Feature[] = [
+        {
+          id: 'feature_456',
+          name: 'User Profile',
+          description: 'Users can manage their profile information',
+          classification: 'foundational',
+          sourcePhase: 'Architecture',
+          identifiedAt: new Date().toISOString(),
+        },
+      ];
+
+      const state = createMockInterviewState('test-project', []);
+      const stateWithFeatures: InterviewState = { ...state, features };
+
+      const spec = generateSpec(stateWithFeatures);
+
+      expect(spec.features).toBeDefined();
+      const featureKeys = Object.keys(spec.features ?? {});
+      const featureKey = featureKeys[0];
+      if (featureKey !== undefined) {
+        const specFeature = spec.features?.[featureKey];
+        expect(specFeature?.classification).toBe('foundational');
+        expect(specFeature?.rationale).toBeUndefined();
+      }
+    });
+
+    it('should preserve classification values for all feature types', () => {
+      const features: Feature[] = [
+        {
+          id: 'feature_001',
+          name: 'Payment Processing',
+          description: 'Process payments via Stripe',
+          classification: 'core',
+          sourcePhase: 'Discovery',
+          identifiedAt: new Date().toISOString(),
+          classificationRationale: 'Essential for revenue',
+        },
+        {
+          id: 'feature_002',
+          name: 'Multi-tenancy',
+          description: 'Support multiple organizations',
+          classification: 'foundational',
+          sourcePhase: 'Architecture',
+          identifiedAt: new Date().toISOString(),
+        },
+        {
+          id: 'feature_003',
+          name: 'Dark Mode',
+          description: 'Toggle between light and dark themes',
+          classification: 'bolt-on',
+          sourcePhase: 'DesignPreferences',
+          identifiedAt: new Date().toISOString(),
+        },
+      ];
+
+      const state = createMockInterviewState('test-project', []);
+      const stateWithFeatures: InterviewState = { ...state, features };
+
+      const spec = generateSpec(stateWithFeatures);
+
+      expect(spec.features).toBeDefined();
+      expect(Object.keys(spec.features ?? {}).length).toBe(3);
+
+      const specFeatures = Object.values(spec.features ?? {});
+      expect(specFeatures.some((f) => f.classification === 'core')).toBe(true);
+      expect(specFeatures.some((f) => f.classification === 'foundational')).toBe(true);
+      expect(specFeatures.some((f) => f.classification === 'bolt-on')).toBe(true);
     });
   });
 
