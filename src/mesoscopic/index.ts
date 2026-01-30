@@ -22,3 +22,17 @@ export {
   SpecDrivenTestOptions,
   SpecDrivenTestError,
 } from './spec-driven-test-generator.js';
+
+export {
+  executeClusters,
+  ClusterExecutionOptions,
+  ClusterExecutionResult,
+  ClusterExecutionSummary,
+  ClaimResult,
+  ClaimStatus,
+  InfrastructureFailure,
+  InfrastructureFailureType,
+  ClusterExecutionError,
+  DEFAULT_TIMEOUT,
+  DEFAULT_MAX_RETRIES,
+} from './cluster-executor.js';
