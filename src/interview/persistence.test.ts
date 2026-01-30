@@ -21,6 +21,7 @@ import {
   getInterviewStatePath,
   getTranscriptPath,
   getCriticalityBaseDir,
+  validateProjectId,
   InterviewPersistenceError,
 } from './persistence.js';
 import {
@@ -74,6 +75,181 @@ describe('Interview Persistence', () => {
       expect(getTranscriptPath('my-project')).toBe(
         join(testBaseDir, '.criticality', 'projects', 'my-project', 'interview', 'transcript.jsonl')
       );
+    });
+
+    it('should throw validation_error for empty projectId', () => {
+      expect(() => getInterviewDir('')).toThrow(InterviewPersistenceError);
+
+      try {
+        getInterviewDir('');
+      } catch (error) {
+        expect(error).toBeInstanceOf(InterviewPersistenceError);
+        expect((error as InterviewPersistenceError).errorType).toBe('validation_error');
+        expect((error as InterviewPersistenceError).message).toContain('non-empty string');
+      }
+    });
+
+    it('should throw validation_error for absolute path projectId', () => {
+      expect(() => getInterviewDir('/etc/passwd')).toThrow(InterviewPersistenceError);
+
+      try {
+        getInterviewDir('/etc/passwd');
+      } catch (error) {
+        expect(error).toBeInstanceOf(InterviewPersistenceError);
+        expect((error as InterviewPersistenceError).errorType).toBe('validation_error');
+        expect((error as InterviewPersistenceError).message).toContain('absolute path');
+      }
+    });
+
+    it('should throw validation_error for Windows absolute path projectId', () => {
+      expect(() => getInterviewDir('C:\\Windows\\System32')).toThrow(InterviewPersistenceError);
+
+      try {
+        getInterviewDir('C:\\Windows\\System32');
+      } catch (error) {
+        expect(error).toBeInstanceOf(InterviewPersistenceError);
+        expect((error as InterviewPersistenceError).errorType).toBe('validation_error');
+      }
+    });
+
+    it('should throw validation_error for directory traversal with ../', () => {
+      expect(() => getInterviewDir('../etc/passwd')).toThrow(InterviewPersistenceError);
+
+      try {
+        getInterviewDir('../etc/passwd');
+      } catch (error) {
+        expect(error).toBeInstanceOf(InterviewPersistenceError);
+        expect((error as InterviewPersistenceError).errorType).toBe('validation_error');
+        expect((error as InterviewPersistenceError).message).toContain('directory traversal');
+      }
+    });
+
+    it('should throw validation_error for standalone .. projectId', () => {
+      expect(() => getInterviewDir('..')).toThrow(InterviewPersistenceError);
+
+      try {
+        getInterviewDir('..');
+      } catch (error) {
+        expect(error).toBeInstanceOf(InterviewPersistenceError);
+        expect((error as InterviewPersistenceError).errorType).toBe('validation_error');
+        expect((error as InterviewPersistenceError).message).toContain('directory traversal');
+      }
+    });
+
+    it('should throw validation_error for projectId containing forward slash', () => {
+      expect(() => getInterviewDir('foo/bar')).toThrow(InterviewPersistenceError);
+
+      try {
+        getInterviewDir('foo/bar');
+      } catch (error) {
+        expect(error).toBeInstanceOf(InterviewPersistenceError);
+        expect((error as InterviewPersistenceError).errorType).toBe('validation_error');
+        expect((error as InterviewPersistenceError).message).toContain('path separators');
+      }
+    });
+
+    it('should throw validation_error for projectId containing backslash', () => {
+      expect(() => getInterviewDir('foo\\bar')).toThrow(InterviewPersistenceError);
+
+      try {
+        getInterviewDir('foo\\bar');
+      } catch (error) {
+        expect(error).toBeInstanceOf(InterviewPersistenceError);
+        expect((error as InterviewPersistenceError).errorType).toBe('validation_error');
+        expect((error as InterviewPersistenceError).message).toContain('path separators');
+      }
+    });
+  });
+
+  describe('validateProjectId', () => {
+    it('should accept valid project IDs', () => {
+      expect(() => {
+        validateProjectId('my-project');
+      }).not.toThrow();
+      expect(() => {
+        validateProjectId('project_123');
+      }).not.toThrow();
+      expect(() => {
+        validateProjectId('Project.Name');
+      }).not.toThrow();
+      expect(() => {
+        validateProjectId('a');
+      }).not.toThrow();
+    });
+
+    it('should reject empty string', () => {
+      expect(() => {
+        validateProjectId('');
+      }).toThrow(InterviewPersistenceError);
+      expect(() => {
+        validateProjectId('');
+      }).toThrow(/non-empty string/);
+    });
+
+    it('should reject absolute Unix paths', () => {
+      expect(() => {
+        validateProjectId('/etc/passwd');
+      }).toThrow(InterviewPersistenceError);
+      expect(() => {
+        validateProjectId('/root');
+      }).toThrow(InterviewPersistenceError);
+    });
+
+    it('should reject absolute Windows paths', () => {
+      expect(() => {
+        validateProjectId('C:\\Windows');
+      }).toThrow(InterviewPersistenceError);
+      expect(() => {
+        validateProjectId('D:\\Users');
+      }).toThrow(InterviewPersistenceError);
+    });
+
+    it('should reject directory traversal with ../', () => {
+      expect(() => {
+        validateProjectId('../etc');
+      }).toThrow(InterviewPersistenceError);
+      expect(() => {
+        validateProjectId('foo/../bar');
+      }).toThrow(InterviewPersistenceError);
+    });
+
+    it('should reject directory traversal with ..\\', () => {
+      expect(() => {
+        validateProjectId('..\\Windows');
+      }).toThrow(InterviewPersistenceError);
+      expect(() => {
+        validateProjectId('foo\\..\\bar');
+      }).toThrow(InterviewPersistenceError);
+    });
+
+    it('should reject standalone ..', () => {
+      expect(() => {
+        validateProjectId('..');
+      }).toThrow(InterviewPersistenceError);
+    });
+
+    it('should reject path separators in middle', () => {
+      expect(() => {
+        validateProjectId('foo/bar');
+      }).toThrow(InterviewPersistenceError);
+      expect(() => {
+        validateProjectId('foo\\bar');
+      }).toThrow(InterviewPersistenceError);
+    });
+
+    it('should allow dots that are not traversal', () => {
+      expect(() => {
+        validateProjectId('my.project');
+      }).not.toThrow();
+      expect(() => {
+        validateProjectId('v1.2.3');
+      }).not.toThrow();
+      expect(() => {
+        validateProjectId('.');
+      }).not.toThrow();
+      expect(() => {
+        validateProjectId('...');
+      }).not.toThrow();
     });
   });
 

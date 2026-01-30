@@ -83,12 +83,59 @@ export function getCriticalityBaseDir(): string {
 }
 
 /**
+ * Validates a project ID to prevent directory traversal attacks.
+ *
+ * A valid project ID must:
+ * - Be a non-empty string
+ * - Not be an absolute path (no leading /)
+ * - Not contain directory traversal segments (..)
+ * - Not contain path separators (/ or \)
+ *
+ * @param projectId - The project identifier to validate.
+ * @throws InterviewPersistenceError if the project ID is invalid.
+ */
+export function validateProjectId(projectId: string): void {
+  if (typeof projectId !== 'string' || projectId.length === 0) {
+    throw new InterviewPersistenceError(
+      'Invalid project ID: must be a non-empty string',
+      'validation_error'
+    );
+  }
+
+  // Check for absolute paths (Unix or Windows style)
+  if (projectId.startsWith('/') || /^[a-zA-Z]:/.test(projectId)) {
+    throw new InterviewPersistenceError(
+      `Invalid project ID "${projectId}": must not be an absolute path`,
+      'validation_error'
+    );
+  }
+
+  // Check for directory traversal segments
+  if (projectId === '..' || projectId.includes('../') || projectId.includes('..\\')) {
+    throw new InterviewPersistenceError(
+      `Invalid project ID "${projectId}": must not contain directory traversal segments`,
+      'validation_error'
+    );
+  }
+
+  // Check for path separators
+  if (projectId.includes('/') || projectId.includes('\\')) {
+    throw new InterviewPersistenceError(
+      `Invalid project ID "${projectId}": must not contain path separators`,
+      'validation_error'
+    );
+  }
+}
+
+/**
  * Gets the directory path for a specific project's interview data.
  *
  * @param projectId - The project identifier.
  * @returns The path to ~/.criticality/projects/<project>/interview
+ * @throws InterviewPersistenceError if the project ID is invalid.
  */
 export function getInterviewDir(projectId: string): string {
+  validateProjectId(projectId);
   return join(getCriticalityBaseDir(), 'projects', projectId, 'interview');
 }
 
