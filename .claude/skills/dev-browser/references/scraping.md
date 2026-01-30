@@ -40,16 +40,24 @@ page.on("request", (request) => {
       headers: request.headers(),
       method: request.method(),
     };
-    fs.writeFileSync("tmp/request-details.json", JSON.stringify(capturedRequest, null, 2));
-    console.log("Captured request:", url.substring(0, 80) + "...");
+    try {
+      fs.writeFileSync("tmp/request-details.json", JSON.stringify(capturedRequest, null, 2));
+      console.log("Captured request:", url.substring(0, 80) + "...");
+    } catch (error) {
+      console.error("Failed to write request details:", error);
+    }
   }
 });
 
-await page.goto("https://example.com/profile");
-await waitForPageLoad(page);
-await page.waitForTimeout(3000);
-
-await client.disconnect();
+try {
+  await page.goto("https://example.com/profile");
+  await waitForPageLoad(page);
+  await page.waitForTimeout(3000);
+} catch (error) {
+  console.error("Navigation failed:", error);
+} finally {
+  await client.disconnect();
+}
 ```
 
 ### 2. Capture Response to Understand Schema
@@ -60,9 +68,13 @@ Save a raw response to inspect the data structure:
 page.on("response", async (response) => {
   const url = response.url();
   if (url.includes("UserTweets") || url.includes("/api/data")) {
-    const json = await response.json();
-    fs.writeFileSync("tmp/api-response.json", JSON.stringify(json, null, 2));
-    console.log("Captured response");
+    try {
+      const json = await response.json();
+      fs.writeFileSync("tmp/api-response.json", JSON.stringify(json, null, 2));
+      console.log("Captured response");
+    } catch (error) {
+      console.error("Failed to capture response:", error);
+    }
   }
 });
 ```
@@ -98,58 +110,82 @@ import * as fs from "node:fs";
 const client = await connect();
 const page = await client.page("site");
 
-const results = new Map(); // Use Map for deduplication
-const headers = JSON.parse(fs.readFileSync("tmp/request-details.json", "utf8")).headers;
-const baseUrl = "https://example.com/api/data";
+try {
+  const results = new Map(); // Use Map for deduplication
+  let headers;
+  try {
+    headers = JSON.parse(fs.readFileSync("tmp/request-details.json", "utf8")).headers;
+  } catch (error) {
+    console.error("Failed to read request details:", error);
+    throw new Error("Cannot proceed without request details");
+  }
+  const baseUrl = "https://example.com/api/data";
 
-let cursor = null;
-let hasMore = true;
+  let cursor = null;
+  let hasMore = true;
 
-while (hasMore) {
-  // Build URL with pagination cursor
-  const params = { count: 20 };
-  if (cursor) params.cursor = cursor;
-  const url = `${baseUrl}?params=${encodeURIComponent(JSON.stringify(params))}`;
+  while (hasMore) {
+    // Build URL with pagination cursor
+    const params = { count: 20 };
+    if (cursor) params.cursor = cursor;
+    const url = `${baseUrl}?params=${encodeURIComponent(JSON.stringify(params))}`;
 
-  // Execute fetch in browser context (has auth cookies/headers)
-  const response = await page.evaluate(
-    async ({ url, headers }) => {
-      const res = await fetch(url, { headers });
-      return res.json();
-    },
-    { url, headers }
-  );
+    // Execute fetch in browser context (has auth cookies/headers)
+    // ⚠️ TODO: Add AbortController with setTimeout to handle fetch timeouts
+    const response = await page.evaluate(
+      async ({ url, headers }) => {
+        const res = await fetch(url, { headers });
+        return res.json();
+      },
+      { url, headers }
+    );
 
-  // Extract data and cursor (adjust paths for your API)
-  const entries = response?.data?.entries || [];
-  for (const entry of entries) {
-    if (entry.type === "cursor-bottom") {
-      cursor = entry.value;
-    } else if (entry.id && !results.has(entry.id)) {
-      results.set(entry.id, {
-        id: entry.id,
-        text: entry.content,
-        timestamp: entry.created_at,
-      });
+    // Extract data and cursor (adjust paths for your API)
+    const entries = response?.data?.entries || [];
+    for (const entry of entries) {
+      if (entry.type === "cursor-bottom") {
+        cursor = entry.value;
+      } else if (entry.id && !results.has(entry.id)) {
+        results.set(entry.id, {
+          id: entry.id,
+          text: entry.content,
+          timestamp: entry.created_at,
+        });
+      }
     }
+
+    console.log(`Fetched page, total: ${results.size}`);
+
+    // Check stop conditions
+    if (!cursor || entries.length === 0) hasMore = false;
+
+    // Rate limiting - be respectful
+    await new Promise((r) => setTimeout(r, 500));
   }
 
-  console.log(`Fetched page, total: ${results.size}`);
-
-  // Check stop conditions
-  if (!cursor || entries.length === 0) hasMore = false;
-
-  // Rate limiting - be respectful
-  await new Promise((r) => setTimeout(r, 500));
+  // Export results
+  const data = Array.from(results.values());
+  try {
+    fs.writeFileSync("tmp/results.json", JSON.stringify(data, null, 2));
+    console.log(`Saved ${data.length} items`);
+  } catch (error) {
+    console.error("Failed to write results:", error);
+    throw error;
+  }
+} catch (error) {
+  console.error("Scraping failed:", error);
+  throw error; // Re-throw to let caller handle or exit
+} finally {
+  await client.disconnect(); // Always disconnect, even on error
 }
-
-// Export results
-const data = Array.from(results.values());
-fs.writeFileSync("tmp/results.json", JSON.stringify(data, null, 2));
-console.log(`Saved ${data.length} items`);
-
-await client.disconnect();
 ```
+
+> **Error Handling Notes:**
+> - **Network timeouts**: Use AbortController with setTimeout to abort hung fetches
+> - **Malformed JSON**: JSON.parse() and response.json() will throw on invalid JSON
+> - **I/O errors**: fs.readFileSync/writeFileSync throw for missing files or permissions
+> - **Closed pages**: page.evaluate() will fail if page was closed/disconnected
+> - **Always disconnect**: Use finally blocks to ensure client.disconnect() runs
 
 ## Key Patterns
 
