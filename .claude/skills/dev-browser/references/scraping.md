@@ -67,6 +67,20 @@ page.on("response", async (response) => {
 });
 ```
 
+> ⚠️ **Privacy Warning: Sensitive Data**
+> 
+> The `tmp/api-response.json` file may contain sensitive information including:
+> - Personally identifiable information (PII) like names, emails, phone numbers
+> - Authentication tokens, session cookies, or API keys
+> - Private user data, messages, or content
+> 
+> **Before committing:**
+> - Remove or redact all sensitive fields from the captured response
+> - Consider using masking (e.g., `"email": "***@***.***"`) or encryption for sensitive fields
+> - Store captured data in `tmp/` only (should be in `.gitignore`)
+> - Delete the file immediately after you've analyzed the schema
+> - Never commit `tmp/api-response.json` to version control
+
 Then analyze the structure to find:
 
 - Where the data array lives (e.g., `data.user.result.timeline.instructions[].entries`)
