@@ -60,6 +60,20 @@ try {
 }
 ```
 
+> ⚠️ **Security Warning: Sensitive Headers**
+> 
+> The `tmp/request-details.json` file contains HTTP headers that may include:
+> - `Authorization` headers with bearer tokens or API keys
+> - `Cookie` headers with session IDs or authentication tokens
+> - Other sensitive authentication data
+> 
+> **Before committing:**
+> - Never commit `tmp/` directory (should be in `.gitignore`)
+> - Delete the file immediately after you've extracted the headers you need
+> - Review and redact sensitive headers before using them in your code
+> - Consider building headers programmatically instead of hardcoding captured values
+> - Log only non-sensitive headers (e.g., content-type, accept) if needed for debugging
+
 ### 2. Capture Response to Understand Schema
 
 Save a raw response to inspect the data structure:
