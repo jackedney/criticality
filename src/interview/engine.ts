@@ -918,18 +918,33 @@ export class InterviewEngine {
       );
     }
 
-    // Handle 'Continue' - just proceed with the text response
+    // Handle 'Continue' - return open-text question for the same phase
     if (response.decision === 'Continue') {
       // Create a transcript entry for the decision
       const entry = createTranscriptEntry(phase, 'user', '[Decision] Continue providing input');
       this.state = await appendTranscriptEntryAndUpdateState(this.projectId, entry, this.state);
 
-      // Don't advance, return same question - use conditional to handle exactOptionalPropertyTypes
+      // Convert delegation question to open-text variant (no delegation options)
       if (this.currentQuestion !== undefined) {
+        // Build open-text question from current question, omitting delegation-specific fields
+        const openTextQuestion: CurrentQuestion = {
+          id: this.currentQuestion.id,
+          phase: this.currentQuestion.phase,
+          type: 'open',
+          text: this.currentQuestion.text,
+          allowsDelegation: false,
+          category: this.currentQuestion.category,
+          // Only include hint if present
+          ...(this.currentQuestion.hint !== undefined ? { hint: this.currentQuestion.hint } : {}),
+        };
+
+        // Update current question to open-text variant
+        this.currentQuestion = openTextQuestion;
+
         return {
           accepted: true,
           state: this.state,
-          nextQuestion: this.currentQuestion,
+          nextQuestion: openTextQuestion,
           complete: false,
         };
       }
