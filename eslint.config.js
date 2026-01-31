@@ -43,6 +43,7 @@ export default tseslint.config(
       '*.js',
       'vitest.config.ts',
       '.claude/**',
+      '.opencode/**',
     ],
   }
 );
