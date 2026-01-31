@@ -8,7 +8,7 @@
  */
 
 import { writeFile, readFile, mkdir, readdir, stat, rename, unlink } from 'node:fs/promises';
-import { join, dirname } from 'node:path';
+import { join, dirname, resolve } from 'node:path';
 import { homedir } from 'node:os';
 import { randomUUID } from 'node:crypto';
 import * as yaml from 'js-yaml';
@@ -77,9 +77,25 @@ export function getCriticalityBaseDir(): string {
  *
  * @param projectId - The project identifier.
  * @returns The path to ~/.criticality/projects/<project>/audit
+ * @throws {Error} If projectId contains invalid characters or attempts path traversal
  */
 export function getAuditDir(projectId: string): string {
-  return join(getCriticalityBaseDir(), 'projects', projectId, 'audit');
+  const safeProjectIdRegex = /^[A-Za-z0-9._-]+$/;
+  if (!safeProjectIdRegex.test(projectId)) {
+    throw new Error(
+      `Invalid projectId: contains invalid characters. Only alphanumeric, '.', '_', and '-' are allowed.`
+    );
+  }
+
+  const auditDir = join(getCriticalityBaseDir(), 'projects', projectId, 'audit');
+  const resolvedPath = resolve(auditDir);
+  const basePath = getCriticalityBaseDir();
+
+  if (!resolvedPath.startsWith(basePath)) {
+    throw new Error(`Invalid projectId: path traversal detected.`);
+  }
+
+  return resolvedPath;
 }
 
 /**

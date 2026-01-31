@@ -5,7 +5,7 @@
  */
 
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import { mkdir, rm, readFile, writeFile } from 'node:fs/promises';
+import { mkdir, rm, readFile, writeFile, utimes } from 'node:fs/promises';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import * as yamlModule from 'js-yaml';
@@ -271,11 +271,13 @@ describe('Report Storage', () => {
       const report1 = createTestReport();
       await saveContradictionReport(report1);
 
-      // Wait a tiny bit to ensure different timestamps
-      await new Promise((resolve) => setTimeout(resolve, 10));
-
       const report2 = createTestReport();
       await saveContradictionReport(report2);
+
+      // Set report1's mtime to be older than report2
+      const report1Path = getReportPath(testProjectId, report1.id, 'json');
+      const now = new Date();
+      await utimes(report1Path, now, new Date(now.getTime() - 10000));
 
       const latest = await loadLatestContradictionReport(testProjectId);
 
@@ -315,10 +317,13 @@ describe('Report Storage', () => {
       const report1 = createTestReport();
       await saveContradictionReport(report1);
 
-      await new Promise((resolve) => setTimeout(resolve, 10));
-
       const report2 = createTestReport();
       await saveContradictionReport(report2);
+
+      // Set report1's mtime to be older than report2
+      const report1Path = getReportPath(testProjectId, report1.id, 'json');
+      const now = new Date();
+      await utimes(report1Path, now, new Date(now.getTime() - 10000));
 
       const reports = await listContradictionReports(testProjectId);
 
