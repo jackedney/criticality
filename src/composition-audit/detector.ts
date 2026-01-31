@@ -57,8 +57,15 @@ function parseAuditorResponse(content: string): {
       const nonGreedyMatch = /\{[^{}]*(?:\{[^{}]*\}[^{}]*)*\}/.exec(content);
       if (nonGreedyMatch !== null) {
         try {
-          JSON.parse(nonGreedyMatch[0]);
-          return nonGreedyMatch[0];
+          const parsed = JSON.parse(nonGreedyMatch[0]) as {
+            hasContradictions?: unknown;
+            contradictions?: unknown;
+            summary?: unknown;
+          };
+          // Validate that the parsed object has the expected structure
+          if ('hasContradictions' in parsed && 'contradictions' in parsed && 'summary' in parsed) {
+            return nonGreedyMatch[0];
+          }
         } catch {
           // Continue to next strategy
         }
