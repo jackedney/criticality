@@ -216,13 +216,13 @@ export function inferComplexity(method: SpecMethod): string | undefined {
     return 'O(log n)';
   }
   // Use pattern matching to detect find/filter/map method variants
-  if (methodName.startsWith('find') || methodName.includes('find')) {
+  if (methodName.includes('find')) {
     return 'O(n)';
   }
-  if (methodName.startsWith('filter') || methodName.includes('filter')) {
+  if (methodName.includes('filter')) {
     return 'O(n)';
   }
-  if (methodName.startsWith('map') || methodName.includes('map')) {
+  if (methodName.includes('map')) {
     return 'O(n)';
   }
 
@@ -826,8 +826,9 @@ export function formatContractReport(result: ContractAttachmentResult): string {
 
     for (const warning of result.unmatchedClaimWarnings.slice(0, 5)) {
       const msg = `${warning.claimId} (${warning.claimType}): ${warning.claimText.substring(0, 40)}`;
-      const padding = ' '.repeat(BOX_WIDTH - 4 - 2 - Math.min(msg.length, 72));
-      lines.push(`║ • ${msg.substring(0, 72)}${padding}║`);
+      const contentWidth = BOX_WIDTH - 5;
+      const padding = ' '.repeat(contentWidth - Math.min(msg.length, contentWidth));
+      lines.push(`║ • ${msg.substring(0, contentWidth)}${padding}║`);
     }
 
     if (result.unmatchedClaimWarnings.length > 5) {

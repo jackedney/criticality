@@ -560,6 +560,12 @@ created = "2024-01-24T12:00:00Z"
 
 [system]
 name = "test-system"
+
+[interfaces.SomeInterface]
+description = "An existing interface"
+methods = [
+  { name = "someMethod", returns = "void" }
+]
     `);
 
     expect(() => generateFunctionsForInterface(spec, 'NonExistent')).toThrow(
