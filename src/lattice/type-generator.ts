@@ -88,6 +88,55 @@ export interface TypeGeneratorOptions {
 }
 
 /**
+ * Sanitizes a number value for use in a TypeScript identifier.
+ *
+ * Converts invalid characters like '-' and '.' to identifier-safe tokens.
+ * Examples:
+ *   -5 -> Neg5
+ *   -10.5 -> Neg10P5
+ *   3.14 -> 3P14
+ *
+ * @param num - The number value as a string.
+ * @returns The sanitized identifier-safe string.
+ */
+function sanitizeNumberForIdentifier(num: string): string {
+  return num.replace(/-/g, 'Neg').replace(/\./g, 'P');
+}
+
+/**
+ * Splits generic type arguments, handling nested generics.
+ *
+ * @param args - The comma-separated type arguments.
+ * @returns Array of type argument strings.
+ */
+function splitGenericArgs(args: string): string[] {
+  const result: string[] = [];
+  let depth = 0;
+  let current = '';
+
+  for (const char of args) {
+    if (char === '<' || char === '(' || char === '{' || char === '[') {
+      depth++;
+      current += char;
+    } else if (char === '>' || char === ')' || char === '}' || char === ']') {
+      depth--;
+      current += char;
+    } else if (char === ',' && depth === 0) {
+      result.push(current.trim());
+      current = '';
+    } else {
+      current += char;
+    }
+  }
+
+  if (current.trim() !== '') {
+    result.push(current.trim());
+  }
+
+  return result;
+}
+
+/**
  * Maps a spec field type to a TypeScript type.
  *
  * @param specType - The type from the spec.
@@ -141,16 +190,35 @@ function mapSpecTypeToTypeScript(specType: string): string {
 
   // Handle Map types: Map<K, V>
   if (specType.startsWith('Map<') && specType.endsWith('>')) {
-    return specType; // Keep as-is for TypeScript
+    const inner = specType.slice(4, -1);
+    const [keyType, valueType] = splitGenericArgs(inner);
+    if (keyType !== undefined && valueType !== undefined) {
+      const mappedKey = mapSpecTypeToTypeScript(keyType);
+      const mappedValue = mapSpecTypeToTypeScript(valueType);
+      return `Map<${mappedKey}, ${mappedValue}>`;
+    }
+    return specType;
   }
 
   // Handle Set types: Set<T>
   if (specType.startsWith('Set<') && specType.endsWith('>')) {
-    return specType; // Keep as-is for TypeScript
+    const inner = specType.slice(4, -1);
+    return `Set<${mapSpecTypeToTypeScript(inner)}>`;
   }
 
   // Otherwise, assume it's a custom type (e.g., reference to another data model)
   return specType;
+}
+
+/**
+ * Parsed constraint info with additional string representation for range values.
+ */
+interface ParsedConstraint {
+  type: SupportedConstraintType | 'unsupported';
+  params: Record<string, string | number>;
+  original: string;
+  _minStr?: string;
+  _maxStr?: string;
 }
 
 /**
@@ -159,11 +227,7 @@ function mapSpecTypeToTypeScript(specType: string): string {
  * @param constraint - The constraint string from the spec.
  * @returns The parsed constraint info or null if unrecognized.
  */
-function parseConstraint(constraint: string): {
-  type: SupportedConstraintType | 'unsupported';
-  params: Record<string, string | number>;
-  original: string;
-} {
+function parseConstraint(constraint: string): ParsedConstraint {
   const trimmed = constraint.trim().toLowerCase();
   const original = constraint.trim();
 
@@ -218,6 +282,8 @@ function parseConstraint(constraint: string): {
         max: parseFloat(rangeMatch[2]),
       },
       original,
+      _minStr: rangeMatch[1],
+      _maxStr: rangeMatch[2],
     };
   }
 
@@ -247,12 +313,16 @@ function parseConstraint(constraint: string): {
  * @param baseType - The base TypeScript type.
  * @param constraintType - The constraint type.
  * @param params - Constraint parameters.
+ * @param minStr - Original string representation of min value (for Range).
+ * @param maxStr - Original string representation of max value (for Range).
  * @returns The branded type name.
  */
 function constraintToBrandedTypeName(
   baseType: string,
   constraintType: SupportedConstraintType,
-  params: Record<string, string | number>
+  params: Record<string, string | number>,
+  minStr?: string,
+  maxStr?: string
 ): string {
   // Map base type to a clean suffix
   const baseTypeSuffix =
@@ -275,8 +345,11 @@ function constraintToBrandedTypeName(
       return `MaxLength${String(params.max)}${baseTypeSuffix}`;
     case 'min_length':
       return `MinLength${String(params.min)}${baseTypeSuffix}`;
-    case 'range':
-      return `Range${String(params.min)}To${String(params.max)}${baseTypeSuffix}`;
+    case 'range': {
+      const rangeMin = minStr ?? String(params.min);
+      const rangeMax = maxStr ?? String(params.max);
+      return `Range${sanitizeNumberForIdentifier(rangeMin)}To${sanitizeNumberForIdentifier(rangeMax)}${baseTypeSuffix}`;
+    }
     case 'pattern':
       return `Patterned${baseTypeSuffix}`;
     case 'unique':
@@ -331,6 +404,8 @@ function constraintToInvariant(
  * @param params - Constraint parameters.
  * @param description - Description for JSDoc.
  * @param options - Generation options.
+ * @param minStr - Original string representation of min value (for Range).
+ * @param maxStr - Original string representation of max value (for Range).
  * @returns The branded type result or null if not applicable.
  */
 function generateBrandedTypeForConstraint(
@@ -338,14 +413,16 @@ function generateBrandedTypeForConstraint(
   constraintType: SupportedConstraintType,
   params: Record<string, string | number>,
   description: string,
-  options: TypeGeneratorOptions
+  options: TypeGeneratorOptions,
+  minStr?: string,
+  maxStr?: string
 ): BrandedTypeResult | null {
   // Skip constraints that don't generate branded types
   if (constraintType === 'unique' || constraintType === 'required') {
     return null;
   }
 
-  const typeName = constraintToBrandedTypeName(baseType, constraintType, params);
+  const typeName = constraintToBrandedTypeName(baseType, constraintType, params, minStr, maxStr);
   const invariant = constraintToInvariant(constraintType, params);
 
   // Create witness definition
@@ -554,7 +631,9 @@ function processFieldConstraints(
       parsed.type,
       parsed.params,
       description,
-      options
+      options,
+      parsed._minStr,
+      parsed._maxStr
     );
 
     if (brandedResult !== null) {
@@ -876,12 +955,55 @@ export function generateDomainTypeDefinitions(
     }
   }
 
-  // Create filtered spec - only include data_models if we have any
+  // Collect all type references from domain models to determine which enums and witnesses to include
+  const referencedTypes = new Set<string>();
+  for (const modelName of Object.keys(filteredDataModels)) {
+    const model = filteredDataModels[modelName];
+    if (model === undefined) {
+      continue;
+    }
+    for (const field of model.fields) {
+      // Add field type as a reference
+      referencedTypes.add(field.type);
+    }
+  }
+
+  // Filter enums - only include those referenced by domain models
+  const filteredEnums: Record<string, SpecEnum> = {};
+  if (spec.enums !== undefined) {
+    for (const [enumName, enumDef] of Object.entries(spec.enums)) {
+      if (referencedTypes.has(enumName)) {
+        filteredEnums[enumName] = enumDef;
+      }
+    }
+  }
+
+  // Filter witnesses - only include those referenced by domain models
+  const filteredWitnesses: Record<string, SpecWitness> = {};
+  if (spec.witnesses !== undefined) {
+    for (const [witnessKey, witnessDef] of Object.entries(spec.witnesses)) {
+      if (referencedTypes.has(witnessDef.name)) {
+        filteredWitnesses[witnessKey] = witnessDef;
+      }
+    }
+  }
+
+  // Create filtered spec
   const filteredSpec: Spec = { ...spec };
   if (Object.keys(filteredDataModels).length > 0) {
     filteredSpec.data_models = filteredDataModels;
   } else {
     delete filteredSpec.data_models;
+  }
+  if (Object.keys(filteredEnums).length > 0) {
+    filteredSpec.enums = filteredEnums;
+  } else {
+    delete filteredSpec.enums;
+  }
+  if (Object.keys(filteredWitnesses).length > 0) {
+    filteredSpec.witnesses = filteredWitnesses;
+  } else {
+    delete filteredSpec.witnesses;
   }
 
   return generateTypeDefinitions(filteredSpec, options);
