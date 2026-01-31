@@ -595,24 +595,38 @@ function collectTypeReferences(iface: SpecInterface): Set<string> {
   const refs = new Set<string>();
 
   const extractTypeRefs = (typeStr: string): void => {
-    // Remove generics for base type extraction
-    const baseMatch = /^([A-Z][a-zA-Z0-9]*)/.exec(typeStr);
-    if (baseMatch?.[1] !== undefined && !STANDARD_TS_TYPES.has(baseMatch[1])) {
-      refs.add(baseMatch[1]);
-    }
+    const processSegment = (segment: string): void => {
+      const trimmed = segment.trim();
 
-    // Extract types from generics
-    const genericMatch = /<(.+)>/.exec(typeStr);
-    if (genericMatch?.[1] !== undefined) {
-      const args = splitGenericArgs(genericMatch[1]);
-      for (const arg of args) {
-        extractTypeRefs(arg.trim());
+      // Handle array types - check before any cleanup
+      if (trimmed.endsWith('[]')) {
+        const elementType = trimmed.slice(0, -2).trim();
+        processSegment(elementType);
+        return;
       }
-    }
 
-    // Handle array types
-    if (typeStr.endsWith('[]')) {
-      extractTypeRefs(typeStr.slice(0, -2));
+      // Remove generics for base type extraction
+      const baseMatch = /^([A-Z][a-zA-Z0-9]*)/.exec(trimmed);
+      if (baseMatch?.[1] !== undefined && !STANDARD_TS_TYPES.has(baseMatch[1])) {
+        refs.add(baseMatch[1]);
+      }
+
+      // Extract types from generics
+      const genericMatch = /<(.+)>/.exec(trimmed);
+      if (genericMatch?.[1] !== undefined) {
+        const args = splitGenericArgs(genericMatch[1]);
+        for (const arg of args) {
+          extractTypeRefs(arg.trim());
+        }
+      }
+    };
+
+    // Split on union (|) and intersection (&) operators
+    const segments = typeStr.split(/\||&/).map((s) => s.trim());
+    for (const segment of segments) {
+      if (segment.length > 0) {
+        processSegment(segment);
+      }
     }
   };
 

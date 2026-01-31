@@ -524,9 +524,21 @@ function generateInterfacesFile(
       if (method.contracts !== undefined && method.contracts.length > 0) {
         lines.push(`   *`);
         for (const contract of method.contracts) {
-          lines.push(
-            `   * @${contract.toLowerCase().startsWith('requires') ? 'requires' : contract.toLowerCase().startsWith('ensures') ? 'ensures' : 'contract'} ${contract}`
-          );
+          // Determine contract type from content
+          const lowerContract = contract.toLowerCase();
+          if (lowerContract.startsWith('requires')) {
+            lines.push(`   * @requires ${contract}`);
+          } else if (lowerContract.startsWith('ensures')) {
+            lines.push(`   * @ensures ${contract}`);
+          } else if (lowerContract.startsWith('invariant')) {
+            lines.push(`   * @invariant ${contract}`);
+          } else if (lowerContract.startsWith('complexity')) {
+            lines.push(`   * @complexity ${contract}`);
+          } else if (lowerContract.startsWith('purity')) {
+            lines.push(`   * @purity ${contract}`);
+          } else {
+            lines.push(`   * @contract ${contract}`);
+          }
         }
       }
       lines.push(`   */`);

@@ -124,23 +124,27 @@ export function inferPurity(method: SpecMethod): PurityLevel {
   const contracts = method.contracts ?? [];
   const returns = method.returns.toLowerCase();
 
-  // Check contracts for explicit purity hints
+  // Check contracts for explicit purity hints using word-boundary matching
   for (const contract of contracts) {
     const lowerContract = contract.toLowerCase();
-    if (lowerContract.includes('pure') || lowerContract.includes('no side effects')) {
+    if (/\bpure\b/.test(lowerContract) || /no side effects\b/.test(lowerContract)) {
       return 'pure';
     }
-    if (lowerContract.includes('reads') || lowerContract.includes('read-only')) {
+    if (/\breads?\b/.test(lowerContract) || /\bread-?only\b/.test(lowerContract)) {
       return 'reads';
     }
     if (
-      lowerContract.includes('writes') ||
-      lowerContract.includes('modifies') ||
-      lowerContract.includes('mutates')
+      /\bwrites?\b/.test(lowerContract) ||
+      /\bmodif(y|ies)\b/.test(lowerContract) ||
+      /\bmutate(s)?\b/.test(lowerContract)
     ) {
       return 'writes';
     }
-    if (lowerContract.includes('io') || lowerContract.includes('network')) {
+    if (
+      /\bio\b/.test(lowerContract) ||
+      /\bi\/o\b/.test(lowerContract) ||
+      /\bnetwork\b/.test(lowerContract)
+    ) {
       return 'io';
     }
   }
@@ -768,11 +772,13 @@ export function attachContractsForInterface(
     throw new Error(`Interface '${interfaceName}' not found in spec`);
   }
 
+  const iface = spec.interfaces[interfaceName];
+
   // Create a filtered spec with only the requested interface
   const filteredSpec: Spec = {
     ...spec,
     interfaces: {
-      [interfaceName]: spec.interfaces[interfaceName],
+      [interfaceName]: iface,
     },
   };
 
