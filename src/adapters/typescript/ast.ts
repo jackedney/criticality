@@ -13,7 +13,6 @@ import {
   type FunctionExpression,
   SyntaxKind,
   type SourceFile,
-  type Node,
 } from 'ts-morph';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
@@ -102,6 +101,19 @@ type FunctionLike = FunctionDeclaration | MethodDeclaration | ArrowFunction | Fu
  * - todo!() macro-style comment pattern
  */
 const TODO_PATTERNS = [/throw\s+new\s+Error\s*\(\s*['"]TODO['"]\s*\)/, /\/\/\s*todo!\s*\(\s*\)/i];
+
+/**
+ * Singleton project for validation to avoid repeated initialization overhead.
+ * Using in-memory file system for speed.
+ */
+const VALIDATION_PROJECT = new Project({
+  useInMemoryFileSystem: true,
+  compilerOptions: {
+    strict: true,
+    target: 99, // ScriptTarget.ESNext
+    module: 199, // ModuleKind.NodeNext
+  },
+});
 
 /**
  * Checks if a function body contains a TODO marker.
@@ -195,25 +207,12 @@ function collectFunctions(sourceFile: SourceFile): FunctionLike[] {
     functions.push(...classDecl.getMethods());
   }
 
-  // Recursively collect arrow functions and function expressions
-  function visitNode(node: Node): void {
-    if (
-      node.getKind() === SyntaxKind.ArrowFunction ||
-      node.getKind() === SyntaxKind.FunctionExpression
-    ) {
-      const funcNode = node as ArrowFunction | FunctionExpression;
-      functions.push(funcNode);
-    }
+  // Recursively collect arrow functions and function expressions using optimized traversal
+  const arrows = sourceFile.getDescendantsOfKind(SyntaxKind.ArrowFunction);
+  const expressions = sourceFile.getDescendantsOfKind(SyntaxKind.FunctionExpression);
 
-    for (const child of node.getChildren()) {
-      visitNode(child);
-    }
-  }
-
-  // Visit all statements to find arrow functions and function expressions
-  for (const statement of sourceFile.getStatements()) {
-    visitNode(statement);
-  }
+  functions.push(...arrows);
+  functions.push(...expressions);
 
   return functions;
 }
@@ -236,22 +235,19 @@ function buildCallGraph(functions: FunctionLike[]): Map<string, Set<string>> {
     // Find all call expressions in the function body
     const body = func.getBody();
     if (body) {
-      body.forEachDescendant((node) => {
-        if (node.getKind() === SyntaxKind.CallExpression) {
-          const callExpr = node.asKind(SyntaxKind.CallExpression);
-          if (callExpr) {
-            const expr = callExpr.getExpression();
-            // Get the identifier being called
-            if (expr.getKind() === SyntaxKind.Identifier) {
-              const calledName = expr.getText();
-              // Only track calls to functions in our set
-              if (functionNames.has(calledName) && calledName !== name) {
-                calls.add(calledName);
-              }
-            }
+      // Use getDescendantsOfKind for optimized traversal
+      const callExpressions = body.getDescendantsOfKind(SyntaxKind.CallExpression);
+      for (const callExpr of callExpressions) {
+        const expr = callExpr.getExpression();
+        // Get the identifier being called
+        if (expr.getKind() === SyntaxKind.Identifier) {
+          const calledName = expr.getText();
+          // Only track calls to functions in our set
+          if (functionNames.has(calledName) && calledName !== name) {
+            calls.add(calledName);
           }
         }
-      });
+      }
     }
 
     callGraph.set(name, calls);
@@ -583,15 +579,8 @@ function validateBodySyntax(
   isAsync: boolean,
   isGenerator: boolean
 ): string | undefined {
-  // Create a temporary project to parse the body
-  const tempProject = new Project({
-    useInMemoryFileSystem: true,
-    compilerOptions: {
-      strict: true,
-      target: 99, // ScriptTarget.ESNext
-      module: 199, // ModuleKind.NodeNext
-    },
-  });
+  // Use the singleton project to parse the body
+  const tempProject = VALIDATION_PROJECT;
 
   // Wrap body in a function to validate it as a function body
   let functionPrefix = 'function __validate__() ';
@@ -606,7 +595,10 @@ function validateBodySyntax(
   const wrappedBody = `${functionPrefix}{ ${body} }`;
 
   try {
-    const tempFile = tempProject.createSourceFile('__validate__.ts', wrappedBody);
+    // Use overwrite: true to handle repeated calls
+    const tempFile = tempProject.createSourceFile('__validate__.ts', wrappedBody, {
+      overwrite: true,
+    });
     const diagnostics = tempFile.getPreEmitDiagnostics();
 
     // Filter for syntax errors (not type errors)
@@ -633,6 +625,12 @@ function validateBodySyntax(
     return undefined;
   } catch (error) {
     return error instanceof Error ? error.message : 'Unknown parse error';
+  } finally {
+    // Clean up the source file to keep the project clean
+    const sourceFile = tempProject.getSourceFile('__validate__.ts');
+    if (sourceFile) {
+      tempProject.removeSourceFile(sourceFile);
+    }
   }
 }
 
