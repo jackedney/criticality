@@ -105,12 +105,24 @@ export function getAuditDir(projectId: string): string {
  * @param reportId - The report identifier.
  * @param format - The file format ('json' or 'yaml').
  * @returns The full path to the report file.
+ * @throws {Error} If reportId contains invalid characters or attempts path traversal
  */
 export function getReportPath(
   projectId: string,
   reportId: string,
   format: 'json' | 'yaml' = 'json'
 ): string {
+  const safeReportIdRegex = /^[A-Za-z0-9._-]+$/;
+  if (!safeReportIdRegex.test(reportId)) {
+    throw new Error(
+      `Invalid reportId: contains invalid characters. Only alphanumeric, '.', '_', and '-' are allowed.`
+    );
+  }
+
+  if (reportId === '.' || reportId === '..') {
+    throw new Error(`Invalid reportId: cannot be "." or "..".`);
+  }
+
   const extension = format === 'yaml' ? 'yaml' : 'json';
   return join(getAuditDir(projectId), `${reportId}.${extension}`);
 }
@@ -200,6 +212,7 @@ export async function saveContradictionReport(
       : serializeReportToJson(report, opts.pretty);
 
   const tempPath = join(dirname(filePath), `.report-${randomUUID()}.tmp`);
+  const latestTempPath = join(dirname(latestPath), `.latest-${randomUUID()}.tmp`);
 
   try {
     // Write to temporary file first
@@ -209,15 +222,19 @@ export async function saveContradictionReport(
     await rename(tempPath, filePath);
 
     // Also save as latest (copy the content)
-    const latestTempPath = join(dirname(latestPath), `.latest-${randomUUID()}.tmp`);
     await writeFile(latestTempPath, content, 'utf-8');
     await rename(latestTempPath, latestPath);
 
     return filePath;
   } catch (error) {
-    // Clean up temp file if it exists
+    // Clean up temp files if they exist
     try {
       await unlink(tempPath);
+    } catch {
+      // Ignore cleanup errors
+    }
+    try {
+      await unlink(latestTempPath);
     } catch {
       // Ignore cleanup errors
     }
