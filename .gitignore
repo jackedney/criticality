@@ -49,6 +49,7 @@ logs/
 .ralph/
 .serena/
 .claude/
+.jules/
 
 # Archive
 archive/
