@@ -366,6 +366,150 @@ describe('generateWitnessIntegration', () => {
     });
   });
 
+  describe('warnings output', () => {
+    it('includes warnings in final result', () => {
+      const spec = createMinimalSpec({
+        Invalid: {
+          name: 'Invalid',
+          base_type: '', // Invalid base type - will generate warnings
+          invariants: [{ id: 'test', formal: 'value >= 0' }],
+        },
+      });
+
+      const result = generateWitnessIntegration(spec);
+
+      expect(result.warnings.length).toBeGreaterThan(0);
+      expect(result.warnings[0]?.witnessName).toBe('Invalid');
+      expect(result.warnings[0]?.message).toContain('Invalid base type');
+    });
+
+    it('includes warnings in report', () => {
+      const spec = createMinimalSpec({
+        Invalid: {
+          name: 'Invalid',
+          base_type: '', // Invalid base type - will generate warnings
+          invariants: [{ id: 'test', formal: 'value >= 0' }],
+        },
+      });
+
+      const result = generateWitnessIntegration(spec);
+
+      expect(result.report.warnings.length).toBeGreaterThan(0);
+      expect(result.report.warnings[0]?.witnessName).toBe('Invalid');
+      expect(result.report.warnings[0]?.message).toContain('Invalid base type');
+    });
+
+    it('includes fallback count in report before warnings', () => {
+      const spec = createMinimalSpec({
+        Invalid1: {
+          name: 'Invalid1',
+          base_type: '',
+          invariants: [],
+        },
+        Invalid2: {
+          name: 'Invalid2',
+          base_type: '',
+          invariants: [],
+        },
+        Valid: {
+          name: 'Valid',
+          base_type: 'number',
+          invariants: [],
+        },
+      });
+
+      const result = generateWitnessIntegration(spec);
+
+      // Warnings should be collected
+      expect(result.warnings.length).toBeGreaterThan(0);
+
+      // Report should include aggregated counts calculated from results
+      expect(result.report.summary.fallbackCount).toBe(2);
+      expect(result.report.tierBreakdown).toBeDefined();
+
+      // Warnings should be set in report
+      expect(result.report.warnings.length).toBeGreaterThan(0);
+    });
+  });
+
+  describe('fast-check import conditional behavior', () => {
+    it('emits fast-check import when generating arbitraries', () => {
+      const spec = createMinimalSpec({
+        Test: {
+          name: 'Test',
+          base_type: 'number',
+          invariants: [{ id: 'test', formal: 'value >= 0' }],
+        },
+      });
+
+      const result = generateWitnessIntegration(spec);
+
+      expect(result.code).toContain("import * as fc from 'fast-check'");
+      expect(result.code).toContain('arbitraryTest');
+    });
+
+    it('does not emit fast-check import when arbitraries disabled', () => {
+      const spec = createMinimalSpec({
+        Test: {
+          name: 'Test',
+          base_type: 'number',
+          invariants: [{ id: 'test', formal: 'value >= 0' }],
+        },
+      });
+
+      const result = generateWitnessIntegration(spec, {
+        generateArbitraries: false,
+      });
+
+      expect(result.code).not.toContain("import * as fc from 'fast-check'");
+      expect(result.code).not.toContain('arbitraryTest');
+    });
+
+    it('does not emit fast-check import when no results', () => {
+      const spec = createMinimalSpec(undefined);
+
+      const result = generateWitnessIntegration(spec);
+
+      expect(result.code).not.toContain("import * as fc from 'fast-check'");
+    });
+
+    it('does not emit fast-check import when generateArbitraries is false even with results', () => {
+      const spec = createMinimalSpec({
+        Test: {
+          name: 'Test',
+          base_type: 'number',
+          invariants: [{ id: 'test', formal: 'value >= 0' }],
+        },
+      });
+
+      const result = generateWitnessIntegration(spec, {
+        generateArbitraries: false,
+      });
+
+      expect(result.code).not.toContain("import * as fc from 'fast-check'");
+      expect(result.code).not.toContain('// Fast-Check Arbitraries');
+    });
+
+    it('places fast-check import before Fast-Check Arbitraries header', () => {
+      const spec = createMinimalSpec({
+        Test: {
+          name: 'Test',
+          base_type: 'number',
+          invariants: [{ id: 'test', formal: 'value >= 0' }],
+        },
+      });
+
+      const result = generateWitnessIntegration(spec);
+
+      const importIndex = result.code.indexOf("import * as fc from 'fast-check'");
+      const headerIndex = result.code.indexOf('// Fast-Check Arbitraries');
+
+      expect(importIndex).toBeGreaterThanOrEqual(0);
+      expect(headerIndex).toBeGreaterThanOrEqual(0);
+      expect(importIndex).toBeLessThan(headerIndex);
+    });
+  });
+
   describe('error handling and fallback', () => {
     it('falls back to runtime validation on invalid base type', () => {
       const spec = createMinimalSpec({
