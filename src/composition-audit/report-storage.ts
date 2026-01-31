@@ -11,6 +11,7 @@ import { writeFile, readFile, mkdir, readdir, stat, rename, unlink } from 'node:
 import { join, dirname } from 'node:path';
 import { homedir } from 'node:os';
 import { randomUUID } from 'node:crypto';
+import * as yaml from 'js-yaml';
 import type { ContradictionReport, ContradictionReportStorageOptions } from './types.js';
 import { isValidContradictionReport } from './report-parser.js';
 
@@ -137,72 +138,19 @@ export function serializeReportToJson(report: ContradictionReport, pretty: boole
 /**
  * Serializes a ContradictionReport to YAML string.
  *
- * Simple YAML serialization for human-readable output.
+ * Uses js-yaml library for robust YAML serialization that properly handles
+ * edge cases including colons, leading special characters, and multi-line content.
  *
  * @param report - The report to serialize.
  * @returns YAML string.
  */
 export function serializeReportToYaml(report: ContradictionReport): string {
-  const lines: string[] = [];
-
-  lines.push(`# Contradiction Report`);
-  lines.push(`# Generated: ${report.generatedAt}`);
-  lines.push('');
-  lines.push(`id: ${report.id}`);
-  lines.push(`projectId: ${report.projectId}`);
-  lines.push(`version: ${report.version}`);
-  lines.push(`generatedAt: ${report.generatedAt}`);
-  lines.push(`summary: "${escapeYamlString(report.summary)}"`);
-  lines.push(`crossVerified: ${String(report.crossVerified)}`);
-  lines.push('');
-  lines.push('stats:');
-  lines.push(`  total: ${String(report.stats.total)}`);
-  lines.push(`  critical: ${String(report.stats.critical)}`);
-  lines.push(`  warning: ${String(report.stats.warning)}`);
-  lines.push('  byType:');
-  for (const [type, count] of Object.entries(report.stats.byType)) {
-    lines.push(`    ${type}: ${String(count)}`);
-  }
-  lines.push('');
-  lines.push('contradictions:');
-
-  for (const c of report.contradictions) {
-    lines.push(`  - id: ${c.id}`);
-    lines.push(`    type: ${c.type}`);
-    lines.push(`    severity: ${c.severity}`);
-    lines.push(`    description: "${escapeYamlString(c.description)}"`);
-    lines.push('    involved:');
-    for (const inv of c.involved) {
-      lines.push(`      - elementType: ${inv.elementType}`);
-      lines.push(`        id: ${inv.id}`);
-      lines.push(`        name: "${escapeYamlString(inv.name)}"`);
-      lines.push(`        text: "${escapeYamlString(inv.text)}"`);
-      if (inv.location !== undefined) {
-        lines.push(`        location: ${inv.location}`);
-      }
-    }
-    lines.push(`    analysis: "${escapeYamlString(c.analysis)}"`);
-    lines.push(`    minimalScenario: "${escapeYamlString(c.minimalScenario)}"`);
-    lines.push('    suggestedResolutions:');
-    for (const res of c.suggestedResolutions) {
-      lines.push(`      - "${escapeYamlString(res)}"`);
-    }
-    lines.push('');
-  }
-
-  return lines.join('\n');
-}
-
-/**
- * Escapes a string for YAML output.
- */
-function escapeYamlString(str: string): string {
-  return str
-    .replace(/\\/g, '\\\\')
-    .replace(/"/g, '\\"')
-    .replace(/\n/g, '\\n')
-    .replace(/\r/g, '\\r')
-    .replace(/\t/g, '\\t');
+  return yaml.dump(report, {
+    indent: 2,
+    lineWidth: -1,
+    noRefs: true,
+    sortKeys: false,
+  });
 }
 
 /**
@@ -337,7 +285,9 @@ export async function loadLatestContradictionReport(
 }
 
 /**
- * Parses report content from JSON.
+ * Parses report content from JSON or YAML.
+ *
+ * Attempts JSON parsing first, then falls back to YAML parsing on failure.
  *
  * @param content - The file content.
  * @param filePath - The file path for error messages.
@@ -345,16 +295,22 @@ export async function loadLatestContradictionReport(
  */
 function parseReportContent(content: string, filePath: string): ContradictionReport {
   let data: unknown;
+  let parseError: Error;
 
   try {
     data = JSON.parse(content);
   } catch (error) {
-    const parseError = error instanceof Error ? error : new Error(String(error));
-    throw new ReportStorageError(
-      `Failed to parse contradiction report at "${filePath}": ${parseError.message}`,
-      'parse_error',
-      { cause: parseError }
-    );
+    parseError = error instanceof Error ? error : new Error(String(error));
+    try {
+      data = yaml.load(content);
+    } catch (yamlError) {
+      const yamlParseError = yamlError instanceof Error ? yamlError : new Error(String(yamlError));
+      throw new ReportStorageError(
+        `Failed to parse contradiction report at "${filePath}": Neither JSON nor YAML format valid`,
+        'parse_error',
+        { cause: new Error(`JSON: ${parseError.message}; YAML: ${yamlParseError.message}`) }
+      );
+    }
   }
 
   if (!isValidContradictionReport(data)) {

@@ -51,9 +51,61 @@ function parseAuditorResponse(content: string): {
   hasContradictions: boolean;
 } {
   try {
-    // Extract JSON from the response (may be wrapped in markdown code blocks)
-    const jsonMatch = /\{[\s\S]*\}/.exec(content);
-    if (jsonMatch === null) {
+    // Helper function to extract JSON using various strategies
+    function extractJSON(content: string): string | null {
+      // Strategy 1: Try non-greedy JSON block extraction
+      const nonGreedyMatch = /\{[^{}]*(?:\{[^{}]*\}[^{}]*)*\}/.exec(content);
+      if (nonGreedyMatch !== null) {
+        try {
+          JSON.parse(nonGreedyMatch[0]);
+          return nonGreedyMatch[0];
+        } catch {
+          // Continue to next strategy
+        }
+      }
+
+      // Strategy 2: Find the last closing brace and work backwards to matching opening brace
+      const lastBraceIndex = content.lastIndexOf('}');
+      if (lastBraceIndex !== -1) {
+        let braceCount = 0;
+        for (let i = lastBraceIndex; i >= 0; i--) {
+          if (content[i] === '}') {
+            braceCount++;
+          } else if (content[i] === '{') {
+            braceCount--;
+            if (braceCount === 0) {
+              const jsonCandidate = content.slice(i, lastBraceIndex + 1);
+              try {
+                JSON.parse(jsonCandidate);
+                return jsonCandidate;
+              } catch {
+                break;
+              }
+            }
+          }
+        }
+      }
+
+      // Strategy 3: Iteratively try substrings until JSON.parse succeeds
+      const firstBraceIndex = content.indexOf('{');
+      if (firstBraceIndex !== -1 && lastBraceIndex !== -1) {
+        let length = lastBraceIndex - firstBraceIndex + 1;
+        while (length > 0) {
+          const substring = content.slice(firstBraceIndex, firstBraceIndex + length);
+          try {
+            JSON.parse(substring);
+            return substring;
+          } catch {
+            length--;
+          }
+        }
+      }
+
+      return null;
+    }
+
+    const jsonStr = extractJSON(content);
+    if (jsonStr === null) {
       return {
         contradictions: [],
         summary: 'Failed to parse auditor response - no JSON found',
@@ -61,7 +113,7 @@ function parseAuditorResponse(content: string): {
       };
     }
 
-    const parsed = JSON.parse(jsonMatch[0]) as {
+    const parsed = JSON.parse(jsonStr) as {
       hasContradictions?: boolean;
       contradictions?: {
         type?: string;

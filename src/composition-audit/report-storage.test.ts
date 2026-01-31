@@ -8,6 +8,7 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { mkdir, rm, readFile, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
+import * as yamlModule from 'js-yaml';
 import type { ContradictionReport } from './types.js';
 import {
   saveContradictionReport,
@@ -131,7 +132,8 @@ describe('Report Storage', () => {
       expect(yaml).toContain('id:');
       expect(yaml).toContain('projectId:');
       expect(yaml).toContain('stats:');
-      expect(yaml).toContain('# Contradiction Report');
+      expect(yaml).toContain('version:');
+      expect(yaml).toContain('generatedAt:');
     });
 
     it('serializes contradictions correctly', () => {
@@ -165,9 +167,9 @@ describe('Report Storage', () => {
 
       const yaml = serializeReportToYaml(report);
 
-      expect(yaml).toContain('\\"quotes\\"');
-      expect(yaml).toContain('\\n');
-      expect(yaml).toContain('\\t');
+      const parsed = yamlModule.load(yaml) as ContradictionReport;
+      expect(parsed.contradictions[0]?.description).toBe('Test with "quotes" and\nnewlines');
+      expect(parsed.contradictions[0]?.involved[0]?.name).toBe('Test\ttab');
     });
   });
 

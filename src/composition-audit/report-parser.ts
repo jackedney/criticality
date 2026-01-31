@@ -21,19 +21,67 @@ import type {
 import { isValidContradictionType, ContradictionReportParseError } from './types.js';
 import { generateContradictionId } from './prompts.js';
 
+let yaml: typeof import('js-yaml') | null = null;
+
+const USE_JS_YAML = process.env.PARSE_WITH_JSYAML === 'true';
+
+if (USE_JS_YAML) {
+  void (async (): Promise<void> => {
+    yaml ??= await import('js-yaml');
+  })();
+}
+
 /**
  * Current version of the contradiction report format.
  */
 export const REPORT_VERSION = '1.0.0';
 
 /**
+ * Module-level default logger for parse operations.
+ * Initially a no-op, can be configured via setDefaultParserLogger.
+ */
+let defaultParserLogger: (message: string) => void = (): void => {}; // eslint-disable-line @typescript-eslint/no-empty-function
+
+/**
  * Default parse options.
  */
-const DEFAULT_PARSE_OPTIONS: Required<ContradictionParseOptions> = {
+const BASE_PARSE_OPTIONS = {
   maxRetries: 2,
   tryYaml: true,
-  logger: console.warn,
-};
+  timeoutMs: 120_000,
+} as const;
+
+/**
+ * Gets the default parse options with current logger.
+ *
+ * @returns The default parse options.
+ */
+function getParseOptions(): Required<ContradictionParseOptions> {
+  return {
+    ...BASE_PARSE_OPTIONS,
+    logger: defaultParserLogger,
+  };
+}
+
+/**
+ * Sets the default logger for parse operations.
+ *
+ * Allows consumers to opt into logging for parse operations.
+ *
+ * @param logger - The logger function to use for warnings.
+ */
+export function setDefaultParserLogger(logger: ContradictionParseOptions['logger']): void {
+  defaultParserLogger = logger ?? ((): void => {}); // eslint-disable-line @typescript-eslint/no-empty-function
+}
+
+/**
+ * Gets the current default logger for parse operations.
+ *
+ * @returns The current logger function.
+ */
+export function getDefaultParserLogger(): (message: string) => void {
+  return defaultParserLogger;
+}
 
 /**
  * Attempts to parse a string as JSON, extracting JSON from markdown code blocks if needed.
@@ -73,16 +121,48 @@ function tryParseJson(content: string): unknown {
 }
 
 /**
+ * Parses a string as YAML using js-yaml library.
+ *
+ * This function is only used when the PARSE_WITH_JSYAML environment variable is set.
+ * It provides full YAML parsing support for complex YAML structures.
+ *
+ * @param content - The raw content string.
+ * @returns The parsed object or null if parsing fails.
+ */
+function parseWithJsYaml(content: string): unknown {
+  if (yaml === null) {
+    return null;
+  }
+
+  try {
+    const yamlBlockMatch = /```(?:yaml|yml)?\s*([\s\S]*?)```/.exec(content);
+    const yamlContent = yamlBlockMatch?.[1]?.trim() ?? content.trim();
+    return yaml.load(yamlContent);
+  } catch {
+    return null;
+  }
+}
+
+/**
  * Attempts to parse a string as YAML.
  *
  * Uses a simple YAML-like parsing for common LLM output patterns.
  * This is not a full YAML parser but handles the structured output
  * that LLMs typically produce.
  *
+ * TODO: Migrate to js-yaml v4.1.1 for full YAML parsing support.
+ * Current implementation handles common LLM output patterns with high test coverage.
+ * See src/composition-audit/report-parser.test.ts for existing test coverage.
+ * To enable js-yaml fallback, set PARSE_WITH_JSYAML environment variable to 'true'.
+ *
  * @param content - The raw content string.
  * @returns The parsed object or null if parsing fails.
  */
 function tryParseYaml(content: string): unknown {
+  if (USE_JS_YAML) {
+    return parseWithJsYaml(content);
+  }
+
   // Try to extract YAML from markdown code block
   const yamlBlockMatch = /```(?:yaml|yml)?\s*([\s\S]*?)```/.exec(content);
   const yamlContent = yamlBlockMatch?.[1]?.trim() ?? content.trim();
@@ -622,7 +702,7 @@ export function parseContradictionOutput(
   options?: ContradictionParseOptions
 ): ContradictionParseResult {
   const opts: Required<ContradictionParseOptions> = {
-    ...DEFAULT_PARSE_OPTIONS,
+    ...getParseOptions(),
     ...options,
   };
 
@@ -682,7 +762,7 @@ export async function parseContradictionOutputWithRetry(
   options?: ContradictionParseOptions
 ): Promise<ContradictionParseResult> {
   const opts: Required<ContradictionParseOptions> = {
-    ...DEFAULT_PARSE_OPTIONS,
+    ...getParseOptions(),
     ...options,
   };
 
@@ -701,7 +781,7 @@ export async function parseContradictionOutputWithRetry(
     opts.logger(`Parse attempt ${String(attempt)} failed, retrying with clarification prompt...`);
 
     const clarificationPrompt = createClarificationPrompt(currentContent, attempt);
-    const retryResult = await modelRouter.prompt(modelAlias, clarificationPrompt);
+    const retryResult = await modelRouter.prompt(modelAlias, clarificationPrompt, opts.timeoutMs);
 
     if (!retryResult.success) {
       opts.logger(`Retry ${String(attempt)} failed: model error - ${retryResult.error.message}`);
@@ -864,6 +944,13 @@ export function isValidContradictionReport(data: unknown): data is Contradiction
   // Check contradictions array
   if (!Array.isArray(obj.contradictions)) {
     return false;
+  }
+
+  // Validate each contradiction item using validateAndExtractContradiction
+  for (const item of obj.contradictions) {
+    if (validateAndExtractContradiction(item) === null) {
+      return false;
+    }
   }
 
   return true;
