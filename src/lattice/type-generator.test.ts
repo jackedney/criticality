@@ -702,6 +702,41 @@ fields = [{ name = "status", type = "UserStatus" }]
     expect(result.code).not.toContain('export enum UserStatus');
   });
 
+  it('should detect enums referenced inside composite types (arrays and maps)', () => {
+    const spec = parseSpec(`
+[meta]
+version = "1.0.0"
+created = "2024-01-24T12:00:00Z"
+
+[system]
+name = "test-system"
+
+[enums.AccountStatus]
+variants = ["Active", "Closed"]
+
+[enums.UserStatus]
+variants = ["Pending", "Active"]
+
+[enums.UnrelatedEnum]
+variants = ["Foo", "Bar"]
+
+[data_models.Account]
+fields = [
+  { name = "statuses", type = "AccountStatus[]" },
+  { name = "userStatusMap", type = "Map<string, UserStatus>" }
+]
+    `);
+
+    const result = generateDomainTypeDefinitions(spec, ['Account']);
+
+    // Should include enums referenced inside array and Map types
+    expect(result.enums).toHaveLength(2);
+    expect(result.code).toContain('export enum AccountStatus');
+    expect(result.code).toContain('export enum UserStatus');
+    // Should exclude unrelated enums not referenced by the domain
+    expect(result.code).not.toContain('export enum UnrelatedEnum');
+  });
+
   it('should filter witnesses to only those referenced by domain models', () => {
     const spec: Spec = {
       meta: { version: '1.0.0', created: '2024-01-24T12:00:00Z' },
