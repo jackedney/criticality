@@ -53,3 +53,6 @@ logs/
 
 # Archive
 archive/
+
+# Temporary files (may contain sensitive data)
+tmp/

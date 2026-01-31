@@ -1,5 +1,7 @@
 # Data Scraping Guide
 
+> **SECURITY WARNING**: This guide involves capturing network requests that may contain sensitive authentication tokens, cookies, or PII. Always redact sensitive headers before writing to disk, exclude captured files from version control, and securely delete them after use.
+
 For large datasets (followers, posts, search results), **intercept and replay network requests** rather than scrolling and parsing the DOM. This is faster, more reliable, and handles pagination automatically.
 
 ## Why Not Scroll?
@@ -40,6 +42,7 @@ page.on("request", (request) => {
       headers: request.headers(),
       method: request.method(),
     };
+    // WARNING: This writes full headers to disk - see Security Considerations section for redaction
     fs.writeFileSync("tmp/request-details.json", JSON.stringify(capturedRequest, null, 2));
     console.log("Captured request:", url.substring(0, 80) + "...");
   }
@@ -136,6 +139,84 @@ console.log(`Saved ${data.length} items`);
 
 await client.disconnect();
 ```
+
+## Security Considerations
+
+### Redact Sensitive Headers
+
+Never write full request headers to disk without redacting sensitive fields. The code above captures headers which may include:
+
+- `Authorization` - Bearer tokens, API keys
+- `Cookie` - Session identifiers, authentication tokens
+- `set-cookie` - Response cookies
+- `x-api-key`, `x-auth-token` - Custom authentication headers
+- Other PII or sensitive data
+
+**Always redact these fields before writing to disk:**
+
+```typescript
+function redactHeaders(headers: Record<string, string>): Record<string, string> {
+  const sensitive = [
+    "authorization",
+    "cookie",
+    "set-cookie",
+    "x-api-key",
+    "x-auth-token",
+    "x-csrf-token",
+    "x-session-id",
+  ];
+
+  const redacted: Record<string, string> = {};
+  for (const [key, value] of Object.entries(headers)) {
+    const keyLower = key.toLowerCase();
+    if (sensitive.some((s) => keyLower.includes(s))) {
+      redacted[key] = "[REDACTED]";
+    } else {
+      redacted[key] = value;
+    }
+  }
+  return redacted;
+}
+
+// In your request handler:
+page.on("request", (request) => {
+  const url = request.url();
+  if (url.includes("/api/") || url.includes("/graphql/")) {
+    const rawHeaders = request.headers();
+    const safeHeaders = redactHeaders(rawHeaders);
+    fs.writeFileSync("tmp/request-details.json", JSON.stringify({
+      url: url,
+      headers: safeHeaders,
+      method: request.method(),
+    }, null, 2));
+    console.log("Captured request:", url.substring(0, 80) + "...");
+  }
+});
+```
+
+### Protect Captured Data
+
+1. **Add to .gitignore**: Add `tmp/` or `tmp/*.json` to your project's `.gitignore` file to prevent committing sensitive files.
+
+   ```
+   # Add to .gitignore
+   tmp/
+   ```
+
+2. **Securely delete after use**: After extracting what you need, delete the captured files:
+
+   ```bash
+   # On macOS/Linux: securely delete
+   rm -P tmp/request-details.json tmp/api-response.json
+   rm -P tmp/results.json
+
+   # Or use shred (Linux)
+   shred -u tmp/request-details.json
+   ```
+
+3. **Rotate credentials**: If you accidentally committed auth tokens, revoke them immediately and generate new ones through your service provider.
+
+4. **Use environment variables**: For production scripts, store sensitive headers as environment variables rather than in files.
 
 ## Key Patterns
 
