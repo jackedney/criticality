@@ -26,12 +26,14 @@ import {
 } from './report-storage.js';
 import { createContradictionReport } from './report-parser.js';
 
+import { realpathSync } from 'node:fs';
+
 // Mock homedir to use temp directory
 vi.mock('node:os', async (): Promise<typeof import('node:os')> => {
   const actual = await vi.importActual<typeof import('node:os')>('node:os');
   return {
     ...actual,
-    homedir: () => join(tmpdir(), 'criticality-test-storage'),
+    homedir: () => realpathSync(join(tmpdir(), 'criticality-test-storage')),
   };
 });
 
@@ -42,6 +44,8 @@ describe('Report Storage', () => {
   beforeEach(async () => {
     testDir = join(tmpdir(), 'criticality-test-storage');
     await mkdir(testDir, { recursive: true });
+    await mkdir(join(testDir, '.criticality'), { recursive: true });
+    await mkdir(join(testDir, '.criticality', 'projects'), { recursive: true });
   });
 
   afterEach(async () => {
