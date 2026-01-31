@@ -6,6 +6,19 @@
  * @packageDocumentation
  */
 
+import type { FeatureClassification } from '../interview/types.js';
+
+/**
+ * Feature classification determines how a feature is handled in Lattice.
+ *
+ * @remarks
+ * Re-exported from interview types for use in spec and lattice modules.
+ * - Core: Full implementation in Lattice phase
+ * - Foundational: Skeleton/extension points in Lattice (e.g., tenant_id in schema even if not used in MVP)
+ * - Bolt-on: Not in Lattice, documented for future implementation
+ */
+export type SpecFeatureClassification = FeatureClassification;
+
 /**
  * Supported implementation languages.
  */
@@ -28,16 +41,6 @@ export type ClaimType =
 export type TrustLevel = 'safe' | 'unsafe';
 
 /**
- * Feature classification determines how a feature is handled in Lattice.
- *
- * @remarks
- * - Core: Full implementation in Lattice phase
- * - Foundational: Skeleton/extension points in Lattice (e.g., tenant_id in schema even if not used in MVP)
- * - Bolt-on: Not in Lattice, documented for future implementation
- */
-export type SpecFeatureClassification = 'core' | 'foundational' | 'bolt-on';
-
-/**
  * A feature in the specification with its classification.
  */
 export interface SpecFeature {
@@ -46,7 +49,7 @@ export interface SpecFeature {
   /** Description of the feature. */
   description: string;
   /** Classification determining how the feature is handled in Lattice. */
-  classification: SpecFeatureClassification;
+  classification: FeatureClassification;
   /** Optional rationale for the classification. */
   rationale?: string;
 }

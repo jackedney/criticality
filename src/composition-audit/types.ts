@@ -271,6 +271,8 @@ export interface ContradictionParseOptions {
   readonly tryYaml?: boolean;
   /** Custom logger for warnings. */
   readonly logger?: (message: string) => void;
+  /** Timeout for model prompts in milliseconds. Default: 120000 (2 minutes). */
+  readonly timeoutMs?: number;
 }
 
 /**

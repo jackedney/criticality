@@ -24,6 +24,7 @@ import {
   parseRepairResponse,
   verifyNoLogicLeakage,
   formatVerificationReport,
+  FilesNotResolvedError,
   type CategorizedError,
 } from './compilation-verifier.js';
 import type { CompilerError, TypeCheckResult } from '../adapters/typescript/typecheck.js';
@@ -747,6 +748,127 @@ export interface MissingType {
 
       expect(report).toContain('AST INSPECTION');
       expect(report).toContain('VIOLATIONS FOUND');
+    });
+  });
+
+  describe('path normalization', () => {
+    it('should derive file list when files is undefined', async () => {
+      const testFile = path.join(tempDir, 'derived.ts');
+      await fs.writeFile(
+        testFile,
+        `
+export function add(a: number, b: number): number {
+  throw new Error('TODO');
+}
+`
+      );
+
+      mockRunTypeCheck.mockResolvedValue(createTypeCheckResult());
+
+      const verifier = createCompilationVerifier({
+        projectPath: tempDir,
+        runAstInspection: true,
+        logger: vi.fn(),
+      });
+
+      const result = await verifier.verify();
+
+      expect(result.success).toBe(true);
+      expect(result.astInspection).toBeDefined();
+    });
+
+    it('should throw FilesNotResolvedError when no files found', async () => {
+      // Create empty directory
+      const emptyDir = path.join(tempDir, 'empty');
+      await fs.mkdir(emptyDir, { recursive: true });
+
+      const verifier = createCompilationVerifier({
+        projectPath: emptyDir,
+        logger: vi.fn(),
+      });
+
+      await expect(verifier.verify()).rejects.toThrow(FilesNotResolvedError);
+    });
+
+    it('should apply repairs with relative paths correctly', async () => {
+      const testFile = path.join(tempDir, 'fix.ts');
+      await fs.writeFile(
+        testFile,
+        `
+export function broken(): void {
+  throw new Error('TODO');
+}
+`
+      );
+
+      const testConfigPath = path.join(tempDir, 'tsconfig.json');
+      await fs.writeFile(
+        testConfigPath,
+        JSON.stringify({
+          compilerOptions: {
+            strict: true,
+            target: 'ES2020',
+            module: 'ES2020',
+            moduleResolution: 'node',
+            noEmit: true,
+            skipLibCheck: true,
+          },
+          include: ['*.ts'],
+        })
+      );
+
+      // Mock type check that fails initially, then succeeds
+      const error: CompilerError = {
+        file: 'fix.ts',
+        line: 1,
+        column: 1,
+        code: 'TS2304',
+        message: "Cannot find name 'Test'",
+        typeDetails: null,
+      };
+      mockRunTypeCheck
+        .mockResolvedValueOnce(
+          createTypeCheckResult({
+            success: false,
+            errors: [error],
+            errorCount: 1,
+          })
+        )
+        .mockResolvedValueOnce(createTypeCheckResult());
+
+      const mockComplete = vi.fn().mockResolvedValue({
+        success: true,
+        response: {
+          content: `
+--- FILE: ./fix.ts ---
+export function fixed(): void {
+  throw new Error('TODO');
+}
+--- END FILE ---
+`,
+          usage: { promptTokens: 10, completionTokens: 50, totalTokens: 60 },
+          metadata: { modelId: 'test-model', provider: 'test', latencyMs: 100 },
+        },
+      } as ModelRouterResult);
+
+      const mockRouter: ModelRouter = {
+        prompt: vi.fn(),
+        complete: mockComplete,
+        stream: vi.fn() as unknown as ModelRouter['stream'],
+      };
+
+      const verifier = createCompilationVerifier({
+        projectPath: tempDir,
+        files: ['fix.ts'],
+        maxRepairAttempts: 2,
+        modelRouter: mockRouter,
+        logger: vi.fn(),
+      });
+
+      const result = await verifier.verify();
+
+      expect(mockComplete).toHaveBeenCalled();
+      expect(result.attempts.length).toBeGreaterThan(0);
     });
   });
 });

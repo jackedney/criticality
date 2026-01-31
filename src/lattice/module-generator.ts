@@ -20,6 +20,11 @@ import type {
   ProjectConventions,
 } from './types.js';
 import { ModuleGeneratorError } from './types.js';
+import {
+  mapSpecTypeToTypeScript,
+  parseSpecParameter,
+  parseSpecReturnType,
+} from './function-generator.js';
 
 /**
  * Default options for module generation.
@@ -450,7 +455,7 @@ function generateTypesFile(
         }
         lines.push(`   */`);
       }
-      lines.push(`  readonly ${field.name}: ${field.type};`);
+      lines.push(`  readonly ${field.name}: ${mapSpecTypeToTypeScript(field.type)};`);
     }
 
     lines.push(`}`);
@@ -494,6 +499,12 @@ function generateInterfacesFile(
     lines.push(`export interface ${interfaceName} {`);
 
     for (const method of iface.methods) {
+      // Parse parameters
+      const parsedParams = method.params?.map((p) => parseSpecParameter(p)) ?? [];
+
+      // Parse return type
+      const parsedReturnType = parseSpecReturnType(method.returns);
+
       // Generate method signature with JSDoc
       lines.push(`  /**`);
       if (method.description !== undefined) {
@@ -502,13 +513,8 @@ function generateInterfacesFile(
       }
 
       // Document parameters
-      if (method.params !== undefined && method.params.length > 0) {
-        for (const param of method.params) {
-          const [paramName] = param.split(':').map((s) => s.trim());
-          if (paramName !== undefined) {
-            lines.push(`   * @param ${paramName} - TODO: Add description`);
-          }
-        }
+      for (const param of parsedParams) {
+        lines.push(`   * @param ${param.name} - TODO: Add description`);
       }
 
       // Document return type
@@ -518,16 +524,30 @@ function generateInterfacesFile(
       if (method.contracts !== undefined && method.contracts.length > 0) {
         lines.push(`   *`);
         for (const contract of method.contracts) {
-          lines.push(
-            `   * @${contract.toLowerCase().startsWith('requires') ? 'requires' : contract.toLowerCase().startsWith('ensures') ? 'ensures' : 'contract'} ${contract}`
-          );
+          // Determine contract type from content
+          const lowerContract = contract.toLowerCase();
+          if (lowerContract.startsWith('requires')) {
+            lines.push(`   * @requires ${contract}`);
+          } else if (lowerContract.startsWith('ensures')) {
+            lines.push(`   * @ensures ${contract}`);
+          } else if (lowerContract.startsWith('invariant')) {
+            lines.push(`   * @invariant ${contract}`);
+          } else if (lowerContract.startsWith('complexity')) {
+            lines.push(`   * @complexity ${contract}`);
+          } else if (lowerContract.startsWith('purity')) {
+            lines.push(`   * @purity ${contract}`);
+          } else {
+            lines.push(`   * @contract ${contract}`);
+          }
         }
       }
       lines.push(`   */`);
 
       // Generate method signature
-      const params = method.params?.join(', ') ?? '';
-      lines.push(`  ${method.name}(${params}): ${method.returns};`);
+      const params = parsedParams
+        .map((p) => `${p.name}${p.isOptional ? '?' : ''}: ${p.type}`)
+        .join(', ');
+      lines.push(`  ${method.name}(${params}): ${parsedReturnType.type};`);
       lines.push(``);
     }
 
@@ -696,8 +716,10 @@ export async function generateModuleStructure(
   options?: ModuleGeneratorOptions,
   projectRoot?: string
 ): Promise<ModuleStructureResult> {
-  // Merge options with defaults
-  const opts: Required<ModuleGeneratorOptions> = {
+  // Merge options with defaults (use mutable copy for convention detection)
+  const opts: {
+    -readonly [K in keyof Required<ModuleGeneratorOptions>]: Required<ModuleGeneratorOptions>[K];
+  } = {
     ...DEFAULT_OPTIONS,
     ...options,
   };
@@ -725,6 +747,13 @@ export async function generateModuleStructure(
   if (opts.detectConventions && projectRoot !== undefined) {
     try {
       conventions = await detectProjectConventions(projectRoot);
+      // Update opts with detected conventions only if caller didn't provide them
+      if (options?.baseDir === undefined) {
+        opts.baseDir = conventions.sourceDir;
+      }
+      if (options?.domainDir === undefined && conventions.domainDir !== undefined) {
+        opts.domainDir = conventions.domainDir;
+      }
     } catch {
       // Use defaults if detection fails
     }

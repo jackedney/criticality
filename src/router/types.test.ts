@@ -375,7 +375,11 @@ describe('ModelRouter interface', () => {
   it('implementation with correct types compiles', async () => {
     // Create a class implementation to verify interface compatibility
     class TestRouter implements ModelRouter {
-      prompt(modelAlias: ModelAlias, prompt: string): Promise<ModelRouterResult> {
+      prompt(
+        modelAlias: ModelAlias,
+        prompt: string,
+        _timeoutMs?: number
+      ): Promise<ModelRouterResult> {
         return Promise.resolve(
           createSuccessResult({
             content: `Response to ${prompt} from ${modelAlias}`,

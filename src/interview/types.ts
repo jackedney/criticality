@@ -7,6 +7,8 @@
  * @packageDocumentation
  */
 
+import { randomUUID } from 'node:crypto';
+
 /**
  * Feature classification determines how a feature is handled in Lattice.
  *
@@ -179,7 +181,7 @@ export interface TranscriptEntry {
  *   ],
  *   features: [],
  *   delegationPoints: [],
- *   transcript: [],
+ *   transcriptEntryCount: 0,
  *   createdAt: '2024-01-15T10:00:00Z',
  *   updatedAt: '2024-01-15T10:30:00Z'
  * };
@@ -295,7 +297,7 @@ export function createFeature(
   rationale?: string
 ): Feature {
   const base: Feature = {
-    id: `feature_${String(Date.now())}_${Math.random().toString(36).substring(2, 9)}`,
+    id: `feature_${randomUUID()}`,
     name,
     description,
     classification,
@@ -352,7 +354,7 @@ export function createTranscriptEntry(
   metadata?: Record<string, unknown>
 ): TranscriptEntry {
   const base = {
-    id: `transcript_${String(Date.now())}_${Math.random().toString(36).substring(2, 9)}`,
+    id: `transcript_${randomUUID()}`,
     phase,
     role,
     content,

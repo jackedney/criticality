@@ -21,6 +21,7 @@ import {
   getInterviewStatePath,
   getTranscriptPath,
   getCriticalityBaseDir,
+  validateProjectId,
   InterviewPersistenceError,
 } from './persistence.js';
 import {
@@ -74,6 +75,181 @@ describe('Interview Persistence', () => {
       expect(getTranscriptPath('my-project')).toBe(
         join(testBaseDir, '.criticality', 'projects', 'my-project', 'interview', 'transcript.jsonl')
       );
+    });
+
+    it('should throw validation_error for empty projectId', () => {
+      expect(() => getInterviewDir('')).toThrow(InterviewPersistenceError);
+
+      try {
+        getInterviewDir('');
+      } catch (error) {
+        expect(error).toBeInstanceOf(InterviewPersistenceError);
+        expect((error as InterviewPersistenceError).errorType).toBe('validation_error');
+        expect((error as InterviewPersistenceError).message).toContain('non-empty string');
+      }
+    });
+
+    it('should throw validation_error for absolute path projectId', () => {
+      expect(() => getInterviewDir('/etc/passwd')).toThrow(InterviewPersistenceError);
+
+      try {
+        getInterviewDir('/etc/passwd');
+      } catch (error) {
+        expect(error).toBeInstanceOf(InterviewPersistenceError);
+        expect((error as InterviewPersistenceError).errorType).toBe('validation_error');
+        expect((error as InterviewPersistenceError).message).toContain('absolute path');
+      }
+    });
+
+    it('should throw validation_error for Windows absolute path projectId', () => {
+      expect(() => getInterviewDir('C:\\Windows\\System32')).toThrow(InterviewPersistenceError);
+
+      try {
+        getInterviewDir('C:\\Windows\\System32');
+      } catch (error) {
+        expect(error).toBeInstanceOf(InterviewPersistenceError);
+        expect((error as InterviewPersistenceError).errorType).toBe('validation_error');
+      }
+    });
+
+    it('should throw validation_error for directory traversal with ../', () => {
+      expect(() => getInterviewDir('../etc/passwd')).toThrow(InterviewPersistenceError);
+
+      try {
+        getInterviewDir('../etc/passwd');
+      } catch (error) {
+        expect(error).toBeInstanceOf(InterviewPersistenceError);
+        expect((error as InterviewPersistenceError).errorType).toBe('validation_error');
+        expect((error as InterviewPersistenceError).message).toContain('directory traversal');
+      }
+    });
+
+    it('should throw validation_error for standalone .. projectId', () => {
+      expect(() => getInterviewDir('..')).toThrow(InterviewPersistenceError);
+
+      try {
+        getInterviewDir('..');
+      } catch (error) {
+        expect(error).toBeInstanceOf(InterviewPersistenceError);
+        expect((error as InterviewPersistenceError).errorType).toBe('validation_error');
+        expect((error as InterviewPersistenceError).message).toContain('directory traversal');
+      }
+    });
+
+    it('should throw validation_error for projectId containing forward slash', () => {
+      expect(() => getInterviewDir('foo/bar')).toThrow(InterviewPersistenceError);
+
+      try {
+        getInterviewDir('foo/bar');
+      } catch (error) {
+        expect(error).toBeInstanceOf(InterviewPersistenceError);
+        expect((error as InterviewPersistenceError).errorType).toBe('validation_error');
+        expect((error as InterviewPersistenceError).message).toContain('path separators');
+      }
+    });
+
+    it('should throw validation_error for projectId containing backslash', () => {
+      expect(() => getInterviewDir('foo\\bar')).toThrow(InterviewPersistenceError);
+
+      try {
+        getInterviewDir('foo\\bar');
+      } catch (error) {
+        expect(error).toBeInstanceOf(InterviewPersistenceError);
+        expect((error as InterviewPersistenceError).errorType).toBe('validation_error');
+        expect((error as InterviewPersistenceError).message).toContain('path separators');
+      }
+    });
+  });
+
+  describe('validateProjectId', () => {
+    it('should accept valid project IDs', () => {
+      expect(() => {
+        validateProjectId('my-project');
+      }).not.toThrow();
+      expect(() => {
+        validateProjectId('project_123');
+      }).not.toThrow();
+      expect(() => {
+        validateProjectId('Project.Name');
+      }).not.toThrow();
+      expect(() => {
+        validateProjectId('a');
+      }).not.toThrow();
+    });
+
+    it('should reject empty string', () => {
+      expect(() => {
+        validateProjectId('');
+      }).toThrow(InterviewPersistenceError);
+      expect(() => {
+        validateProjectId('');
+      }).toThrow(/non-empty string/);
+    });
+
+    it('should reject absolute Unix paths', () => {
+      expect(() => {
+        validateProjectId('/etc/passwd');
+      }).toThrow(InterviewPersistenceError);
+      expect(() => {
+        validateProjectId('/root');
+      }).toThrow(InterviewPersistenceError);
+    });
+
+    it('should reject absolute Windows paths', () => {
+      expect(() => {
+        validateProjectId('C:\\Windows');
+      }).toThrow(InterviewPersistenceError);
+      expect(() => {
+        validateProjectId('D:\\Users');
+      }).toThrow(InterviewPersistenceError);
+    });
+
+    it('should reject directory traversal with ../', () => {
+      expect(() => {
+        validateProjectId('../etc');
+      }).toThrow(InterviewPersistenceError);
+      expect(() => {
+        validateProjectId('foo/../bar');
+      }).toThrow(InterviewPersistenceError);
+    });
+
+    it('should reject directory traversal with ..\\', () => {
+      expect(() => {
+        validateProjectId('..\\Windows');
+      }).toThrow(InterviewPersistenceError);
+      expect(() => {
+        validateProjectId('foo\\..\\bar');
+      }).toThrow(InterviewPersistenceError);
+    });
+
+    it('should reject standalone ..', () => {
+      expect(() => {
+        validateProjectId('..');
+      }).toThrow(InterviewPersistenceError);
+    });
+
+    it('should reject path separators in middle', () => {
+      expect(() => {
+        validateProjectId('foo/bar');
+      }).toThrow(InterviewPersistenceError);
+      expect(() => {
+        validateProjectId('foo\\bar');
+      }).toThrow(InterviewPersistenceError);
+    });
+
+    it('should allow dots that are not traversal', () => {
+      expect(() => {
+        validateProjectId('my.project');
+      }).not.toThrow();
+      expect(() => {
+        validateProjectId('v1.2.3');
+      }).not.toThrow();
+      expect(() => {
+        validateProjectId('.');
+      }).not.toThrow();
+      expect(() => {
+        validateProjectId('...');
+      }).not.toThrow();
     });
   });
 
@@ -182,6 +358,146 @@ describe('Interview Persistence', () => {
       expect(() => deserializeInterviewState(JSON.stringify(state))).toThrow(
         InterviewPersistenceError
       );
+    });
+
+    it('should throw schema_error for missing features field', () => {
+      const state = { ...createInitialInterviewState('test') };
+      const stateWithoutFeatures = {
+        version: state.version,
+        projectId: state.projectId,
+        currentPhase: state.currentPhase,
+        completedPhases: state.completedPhases,
+        extractedRequirements: state.extractedRequirements,
+        // features field intentionally omitted
+        delegationPoints: state.delegationPoints,
+        transcriptEntryCount: state.transcriptEntryCount,
+        createdAt: state.createdAt,
+        updatedAt: state.updatedAt,
+      };
+      expect(() => deserializeInterviewState(JSON.stringify(stateWithoutFeatures))).toThrow(
+        /missing required field "features"/
+      );
+
+      try {
+        deserializeInterviewState(JSON.stringify(stateWithoutFeatures));
+      } catch (error) {
+        expect(error).toBeInstanceOf(InterviewPersistenceError);
+        expect((error as InterviewPersistenceError).errorType).toBe('schema_error');
+      }
+    });
+
+    it('should throw schema_error for features not being an array', () => {
+      const state = {
+        ...createInitialInterviewState('test'),
+        features: 'not-an-array',
+      };
+      expect(() => deserializeInterviewState(JSON.stringify(state))).toThrow(
+        /features must be an array/
+      );
+
+      try {
+        deserializeInterviewState(JSON.stringify(state));
+      } catch (error) {
+        expect(error).toBeInstanceOf(InterviewPersistenceError);
+        expect((error as InterviewPersistenceError).errorType).toBe('schema_error');
+      }
+    });
+
+    it('should accept features with empty array', () => {
+      const state = {
+        ...createInitialInterviewState('test'),
+        features: [],
+      };
+      expect(() => deserializeInterviewState(JSON.stringify(state))).not.toThrow();
+    });
+
+    it('should validate features array elements', () => {
+      const state = {
+        ...createInitialInterviewState('test'),
+        features: [{ id: 'feature_001' }], // Missing required fields
+      };
+      expect(() => deserializeInterviewState(JSON.stringify(state))).toThrow(
+        InterviewPersistenceError
+      );
+
+      try {
+        deserializeInterviewState(JSON.stringify(state));
+      } catch (error) {
+        expect(error).toBeInstanceOf(InterviewPersistenceError);
+        expect((error as InterviewPersistenceError).errorType).toBe('schema_error');
+      }
+    });
+
+    it('should throw validation_error for invalid feature classification', () => {
+      const state = {
+        ...createInitialInterviewState('test'),
+        features: [
+          {
+            id: 'feature_001',
+            name: 'Test Feature',
+            description: 'A test feature',
+            classification: 'invalid-classification',
+            sourcePhase: 'Discovery',
+            identifiedAt: new Date().toISOString(),
+          },
+        ],
+      };
+      expect(() => deserializeInterviewState(JSON.stringify(state))).toThrow(
+        /classification must be one of: core, foundational, bolt-on/
+      );
+
+      try {
+        deserializeInterviewState(JSON.stringify(state));
+      } catch (error) {
+        expect(error).toBeInstanceOf(InterviewPersistenceError);
+        expect((error as InterviewPersistenceError).errorType).toBe('validation_error');
+      }
+    });
+
+    it('should deserialize state with valid features', () => {
+      const state: InterviewState = {
+        version: '1.0.0',
+        projectId: 'features-test',
+        currentPhase: 'Architecture',
+        completedPhases: ['Discovery'],
+        extractedRequirements: [],
+        features: [
+          {
+            id: 'feature_001',
+            name: 'User Authentication',
+            description: 'Secure user login and registration',
+            classification: 'core',
+            sourcePhase: 'Discovery',
+            identifiedAt: '2024-01-15T10:00:00Z',
+          },
+          {
+            id: 'feature_002',
+            name: 'Multi-tenant Support',
+            description: 'Multiple tenants with isolated data',
+            classification: 'foundational',
+            sourcePhase: 'Architecture',
+            identifiedAt: '2024-01-15T11:00:00Z',
+            classificationRationale: 'Required for future SaaS scaling',
+          },
+          {
+            id: 'feature_003',
+            name: 'Dark Mode',
+            description: 'Optional dark theme for UI',
+            classification: 'bolt-on',
+            sourcePhase: 'DesignPreferences',
+            identifiedAt: '2024-01-15T12:00:00Z',
+          },
+        ],
+        delegationPoints: [],
+        transcriptEntryCount: 5,
+        createdAt: '2024-01-15T09:00:00Z',
+        updatedAt: '2024-01-15T12:00:00Z',
+      };
+
+      const json = JSON.stringify(state);
+      const restored = deserializeInterviewState(json);
+
+      expect(restored).toEqual(state);
     });
 
     it('should deserialize state with all fields populated', () => {

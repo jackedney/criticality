@@ -36,8 +36,78 @@ const DEFAULT_OPTIONS: Required<CompositionAuditOptions> = {
   enableCrossVerification: true,
   complexityThreshold: 3,
   timeoutMs: 120000,
-  logger: console.warn,
+  // eslint-disable-next-line @typescript-eslint/no-empty-function
+  logger: (_message: string) => {},
 };
+
+/**
+ * Extracts JSON from a response using various strategies.
+ *
+ * @param content - The raw response content.
+ * @returns Extracted JSON string or null if not found.
+ */
+function extractJSON(content: string): string | null {
+  // Strategy 1: Try to extract JSON by matching braces from first opening brace
+  const firstBraceIndex = content.indexOf('{');
+  if (firstBraceIndex !== -1) {
+    let braceCount = 0;
+    for (let i = firstBraceIndex; i < content.length; i++) {
+      if (content.charAt(i) === '{') {
+        braceCount++;
+      } else if (content.charAt(i) === '}') {
+        braceCount--;
+        if (braceCount === 0) {
+          const jsonCandidate = content.slice(firstBraceIndex, i + 1);
+          try {
+            JSON.parse(jsonCandidate);
+            return jsonCandidate;
+          } catch {
+            // Continue to next strategy
+            break;
+          }
+        }
+      }
+    }
+  }
+
+  // Strategy 2: Find the last closing brace and work backwards to matching opening brace
+  const lastBraceIndex = content.lastIndexOf('}');
+  if (lastBraceIndex !== -1) {
+    let braceCount = 0;
+    for (let i = lastBraceIndex; i >= 0; i--) {
+      if (content.charAt(i) === '}') {
+        braceCount++;
+      } else if (content.charAt(i) === '{') {
+        braceCount--;
+        if (braceCount === 0) {
+          const jsonCandidate = content.slice(i, lastBraceIndex + 1);
+          try {
+            JSON.parse(jsonCandidate);
+            return jsonCandidate;
+          } catch {
+            break;
+          }
+        }
+      }
+    }
+  }
+
+  // Strategy 3: Iteratively try substrings until JSON.parse succeeds
+  if (firstBraceIndex !== -1 && lastBraceIndex !== -1) {
+    let length = lastBraceIndex - firstBraceIndex + 1;
+    while (length > 0) {
+      const substring = content.slice(firstBraceIndex, firstBraceIndex + length);
+      try {
+        JSON.parse(substring);
+        return substring;
+      } catch {
+        length--;
+      }
+    }
+  }
+
+  return null;
+}
 
 /**
  * Parses the auditor's JSON response into contradictions.
@@ -51,9 +121,8 @@ function parseAuditorResponse(content: string): {
   hasContradictions: boolean;
 } {
   try {
-    // Extract JSON from the response (may be wrapped in markdown code blocks)
-    const jsonMatch = /\{[\s\S]*\}/.exec(content);
-    if (jsonMatch === null) {
+    const jsonStr = extractJSON(content);
+    if (jsonStr === null) {
       return {
         contradictions: [],
         summary: 'Failed to parse auditor response - no JSON found',
@@ -61,7 +130,7 @@ function parseAuditorResponse(content: string): {
       };
     }
 
-    const parsed = JSON.parse(jsonMatch[0]) as {
+    const parsed = JSON.parse(jsonStr) as {
       hasContradictions?: boolean;
       contradictions?: {
         type?: string;
@@ -208,12 +277,12 @@ function parseAuditorResponse(content: string): {
  */
 function parseCrossVerificationResponse(content: string): CrossVerificationResult[] {
   try {
-    const jsonMatch = /\{[\s\S]*\}/.exec(content);
-    if (jsonMatch === null) {
+    const jsonStr = extractJSON(content);
+    if (jsonStr === null) {
       return [];
     }
 
-    const parsed = JSON.parse(jsonMatch[0]) as {
+    const parsed = JSON.parse(jsonStr) as {
       verifications?: {
         contradictionId?: string;
         confirmed?: boolean;
@@ -237,7 +306,10 @@ function parseCrossVerificationResponse(content: string): CrossVerificationResul
           continue;
         }
 
-        const confirmed = item.confirmed === true;
+        const confirmed = item.confirmed;
+        if (typeof confirmed !== 'boolean') {
+          continue;
+        }
 
         const baseResult: CrossVerificationResult = {
           contradictionId,
@@ -458,7 +530,7 @@ export async function detectContradictions(
   // Call auditor_model to detect contradictions
   const auditorPrompt = `${createContradictionAuditorSystemPrompt()}\n\n${createContradictionAuditorUserPrompt(input)}`;
 
-  const auditorResult = await modelRouter.prompt('auditor', auditorPrompt);
+  const auditorResult = await modelRouter.prompt('auditor', auditorPrompt, opts.timeoutMs);
 
   if (!auditorResult.success) {
     opts.logger(
@@ -499,7 +571,11 @@ export async function detectContradictions(
   ) {
     const crossVerifyPrompt = `${createCrossVerificationSystemPrompt()}\n\n${createCrossVerificationUserPrompt(parsed.contradictions, input)}`;
 
-    const architectResult = await modelRouter.prompt('architect', crossVerifyPrompt);
+    const architectResult = await modelRouter.prompt(
+      'architect',
+      crossVerifyPrompt,
+      opts.timeoutMs
+    );
 
     if (architectResult.success) {
       const verifications = parseCrossVerificationResponse(architectResult.response.content);
@@ -519,7 +595,7 @@ export async function detectContradictions(
     hasContradictions: finalContradictions.length > 0,
     contradictions: finalContradictions,
     hasCriticalContradictions,
-    summary: crossVerified ? `${parsed.summary} (cross-verified by architect)` : parsed.summary,
+    summary: parsed.summary,
     auditedAt: new Date().toISOString(),
     crossVerified,
   };

@@ -377,6 +377,43 @@ function extractTrustBoundaries(requirements: readonly ExtractedRequirement[]): 
 }
 
 /**
+ * Normalizes a project ID to a valid system name.
+ *
+ * The normalized name will:
+ * - Be lowercase
+ * - Use hyphens instead of non-alphanumeric characters
+ * - Not have leading or trailing hyphens
+ * - Start with a letter (prefixed with 'project-' if needed)
+ * - Fall back to 'project-spec' if normalization results in empty string
+ *
+ * @param projectId - The project ID to normalize.
+ * @returns A normalized system name that passes validation.
+ *
+ * @example
+ * ```typescript
+ * normalizeSystemName('123-test') // returns 'project-123-test'
+ * normalizeSystemName('My App') // returns 'my-app'
+ * normalizeSystemName('---') // returns 'project-spec'
+ * ```
+ */
+function normalizeSystemName(projectId: string): string {
+  let normalized = projectId
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '');
+
+  if (normalized.length === 0) {
+    return 'project-spec';
+  }
+
+  if (!/^[a-z]/.test(normalized)) {
+    normalized = `project-${normalized}`;
+  }
+
+  return normalized;
+}
+
+/**
  * Converts interview features to spec features.
  *
  * @param features - Features from the interview state.
@@ -435,8 +472,7 @@ export function generateSpec(state: InterviewState, options?: SpecGeneratorOptio
   }
 
   // Build system section - derive name from projectId if not provided
-  const systemName =
-    options?.systemName ?? state.projectId.toLowerCase().replace(/[^a-z0-9]+/g, '-');
+  const systemName = options?.systemName ?? normalizeSystemName(state.projectId);
   const system: Spec['system'] = {
     name: systemName,
   };
@@ -672,10 +708,13 @@ export async function getNextProposalVersion(projectId: string): Promise<number>
  *
  * Proposals are saved as interview/proposals/v1.toml, v2.toml, etc.
  *
+ * Uses exclusive file creation (flag 'wx') to prevent race conditions.
+ * On EEXIST error, retries with a new version number (max 5 attempts).
+ *
  * @param spec - The spec to save.
  * @param projectId - The project identifier.
  * @returns Result with version number and path.
- * @throws SpecGeneratorError if validation fails or file cannot be written.
+ * @throws SpecGeneratorError if validation fails, max retries exhausted, or file cannot be written.
  */
 export async function saveProposal(spec: Spec, projectId: string): Promise<SaveProposalResult> {
   // Validate before saving
@@ -688,32 +727,64 @@ export async function saveProposal(spec: Spec, projectId: string): Promise<SaveP
     );
   }
 
-  // Get next version number
-  const version = await getNextProposalVersion(projectId);
   const proposalsDir = getProposalsDir(projectId);
-  const proposalPath = join(proposalsDir, `v${String(version)}.toml`);
 
   // Ensure directory exists
   await mkdir(proposalsDir, { recursive: true });
 
-  // Serialize and write
-  try {
-    const tomlContent = serializeSpec(spec);
-    await writeFile(proposalPath, tomlContent, 'utf-8');
-  } catch (error) {
-    const err = error instanceof Error ? error : new Error(String(error));
-    throw new SpecGeneratorError(
-      `Failed to write proposal: ${err.message}`,
-      'FILE_ERROR',
-      proposalPath
-    );
+  // Serialize the spec once (content is the same across retries)
+  const tomlContent = serializeSpec(spec);
+
+  // Retry loop for race condition handling
+  const maxAttempts = 5;
+  for (let attempt = 0; attempt < maxAttempts; attempt++) {
+    // Get next version number (re-computed each attempt to account for concurrent writes)
+    const version = await getNextProposalVersion(projectId);
+    const proposalPath = join(proposalsDir, `v${String(version)}.toml`);
+
+    try {
+      // Use exclusive creation flag 'wx' to prevent race conditions
+      await writeFile(proposalPath, tomlContent, { encoding: 'utf-8', flag: 'wx' });
+
+      // Success - return the result
+      return {
+        version,
+        path: proposalPath,
+        spec,
+      };
+    } catch (error) {
+      const err = error instanceof Error ? error : new Error(String(error));
+
+      // Check if error is EEXIST (file already exists due to race)
+      if (
+        (err as NodeJS.ErrnoException).code === 'EEXIST' ||
+        err.message.includes('EEXIST') ||
+        err.message.includes('already exists')
+      ) {
+        // Race condition detected - retry with new version
+        if (attempt === maxAttempts - 1) {
+          // Last attempt failed - give up
+          throw new SpecGeneratorError(
+            `Failed to save proposal after ${String(maxAttempts)} attempts: could not allocate version`,
+            'FILE_ERROR',
+            `${String(maxAttempts)} attempts exhausted, last attempted path: ${proposalPath}`
+          );
+        }
+        // Continue to next attempt to retry with new version
+        continue;
+      }
+
+      // Non-EEXIST errors throw immediately (e.g., permission denied)
+      throw new SpecGeneratorError(
+        `Failed to write proposal: ${err.message}`,
+        'FILE_ERROR',
+        proposalPath
+      );
+    }
   }
 
-  return {
-    version,
-    path: proposalPath,
-    spec,
-  };
+  // This should never be reached, but TypeScript requires a return
+  throw new SpecGeneratorError(`Failed to save proposal: unexpected control flow`, 'FILE_ERROR');
 }
 
 /**

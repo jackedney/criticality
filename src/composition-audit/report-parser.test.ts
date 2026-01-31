@@ -4,7 +4,7 @@
  * @packageDocumentation
  */
 
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, vi, afterEach } from 'vitest';
 import type { ModelRouter, ModelRouterResult, ModelRouterResponse } from '../router/types.js';
 import {
   parseContradictionOutput,
@@ -749,6 +749,90 @@ summary: Found 1 critical temporal contradiction`;
         // Error should contain useful information
         expect(result.error.rawContent).toBeDefined();
       }
+    });
+  });
+
+  describe('js-yaml fallback', () => {
+    const originalParseWithJsYaml = process.env.PARSE_WITH_JSYAML;
+
+    afterEach(() => {
+      process.env.PARSE_WITH_JSYAML = originalParseWithJsYaml;
+    });
+
+    it('uses default YAML parser when PARSE_WITH_JSYAML is not set', async () => {
+      delete process.env.PARSE_WITH_JSYAML;
+      vi.resetModules();
+      const freshParser = await import('./report-parser.js');
+      const yamlContent = `hasContradictions: true
+contradictions:
+  - type: temporal
+    severity: critical
+    description: Test
+    involved:
+      - elementType: constraint
+        id: C1
+        name: T
+        text: T
+    analysis: A
+    minimalScenario: S
+    suggestedResolutions: []
+summary: Test`;
+
+      const result = freshParser.parseContradictionOutput(yamlContent);
+
+      expect(result.success).toBe(true);
+    });
+
+    it('uses js-yaml parser when PARSE_WITH_JSYAML is set to true', async () => {
+      process.env.PARSE_WITH_JSYAML = 'true';
+      vi.resetModules();
+      const freshParser = await import('./report-parser.js');
+      await new Promise((resolve) => setTimeout(resolve, 100));
+      const yamlContent = `hasContradictions: true
+contradictions:
+  - type: temporal
+    severity: critical
+    description: Test
+    involved:
+      - elementType: constraint
+        id: C1
+        name: T
+        text: T
+    analysis: A
+    minimalScenario: S
+    suggestedResolutions: []
+summary: Test`;
+
+      const result = freshParser.parseContradictionOutput(yamlContent);
+
+      expect(result.success).toBe(true);
+    });
+
+    it('parses YAML from markdown code block with js-yaml', async () => {
+      process.env.PARSE_WITH_JSYAML = 'true';
+      vi.resetModules();
+      const freshParser = await import('./report-parser.js');
+      await new Promise((resolve) => setTimeout(resolve, 100));
+      const yamlContent = `\`\`\`yaml
+hasContradictions: true
+contradictions:
+  - type: temporal
+    severity: critical
+    description: Test
+    involved:
+      - elementType: constraint
+        id: C1
+        name: T
+        text: T
+    analysis: A
+    minimalScenario: S
+    suggestedResolutions: []
+summary: Test
+\`\`\``;
+
+      const result = freshParser.parseContradictionOutput(yamlContent);
+
+      expect(result.success).toBe(true);
     });
   });
 });

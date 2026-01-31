@@ -15,6 +15,58 @@ import type {
 } from '../adapters/typescript/signature.js';
 
 /**
+ * Standard TypeScript types that don't need to be imported or defined in spec.
+ * Includes built-in types, utility types, and common generics.
+ */
+const STANDARD_TS_TYPES = new Set([
+  // Built-in object types
+  'Promise',
+  'Map',
+  'Set',
+  'Array',
+  'Date',
+  'Error',
+  'RegExp',
+  'WeakMap',
+  'WeakSet',
+  'Symbol',
+  'BigInt',
+  // Result type (custom but treated as built-in)
+  'Result',
+  // Readonly variants
+  'ReadonlyArray',
+  'ReadonlyMap',
+  'ReadonlySet',
+  'Readonly',
+  // Partial/Required/Optional utilities
+  'Partial',
+  'Required',
+  // Property manipulation utilities
+  'Record',
+  'Pick',
+  'Omit',
+  // Union/Intersection utilities
+  'Exclude',
+  'Extract',
+  'NonNullable',
+  // Function utilities
+  'ReturnType',
+  'Parameters',
+  'ConstructorParameters',
+  'InstanceType',
+  'ThisParameterType',
+  'OmitThisParameter',
+  'ThisType',
+  // String manipulation utilities
+  'Uppercase',
+  'Lowercase',
+  'Capitalize',
+  'Uncapitalize',
+  // Promise utilities
+  'Awaited',
+]);
+
+/**
  * Result of parsing a spec method parameter.
  */
 export interface ParsedParameter {
@@ -312,19 +364,28 @@ export function parseSpecParameter(param: string): ParsedParameter {
  */
 export function parseSpecReturnType(returnType: string): ParsedReturnType {
   const trimmed = returnType.trim();
-  const mapped = mapSpecTypeToTypeScript(trimmed);
 
-  // Check if it's a Result type
-  const resultMatch = /^Result<(.+),\s*(.+)>$/.exec(mapped);
-  if (resultMatch?.[1] !== undefined && resultMatch[2] !== undefined) {
-    return {
-      type: mapped,
-      isResult: true,
-      successType: resultMatch[1],
-      errorType: resultMatch[2],
-    };
+  // Check if it's a Result type via prefix check
+  if (trimmed.startsWith('Result<') && trimmed.endsWith('>')) {
+    const inner = trimmed.slice(7, -1);
+    const args = splitGenericArgs(inner);
+
+    if (args.length === 2) {
+      const [successArg, errorArg] = args;
+      if (successArg !== undefined && errorArg !== undefined) {
+        const successType = mapSpecTypeToTypeScript(successArg);
+        const errorType = mapSpecTypeToTypeScript(errorArg);
+        return {
+          type: `Result<${successType}, ${errorType}>`,
+          isResult: true,
+          successType,
+          errorType,
+        };
+      }
+    }
   }
 
+  const mapped = mapSpecTypeToTypeScript(trimmed);
   return {
     type: mapped,
     isResult: false,
@@ -358,18 +419,11 @@ export function generateFunctionSignature(
 
   // Parse return type
   const returnTypeParsed = parseSpecReturnType(method.returns);
-  let returnType = returnTypeParsed.type;
-  let isAsync = false;
+  const returnType = returnTypeParsed.type;
 
-  // Check if return type is Promise or async-like
-  if (returnType.startsWith('Promise<')) {
-    isAsync = asyncForPromise;
-  }
-
-  // If return type is Result, we might want to wrap in Promise for async functions
-  if (returnTypeParsed.isResult && !returnType.startsWith('Promise<') && isAsync) {
-    returnType = `Promise<${returnType}>`;
-  }
+  // Determine async from Promise return type (asyncForPromise option controls this)
+  const isPromiseType = returnType.startsWith('Promise<');
+  const isAsync = asyncForPromise && isPromiseType;
 
   const typeParameters: TypeParameterInfo[] = [];
 
@@ -433,6 +487,10 @@ function generateJsDoc(
         lines.push(` * @ensures ${contract}`);
       } else if (lowerContract.startsWith('invariant')) {
         lines.push(` * @invariant ${contract}`);
+      } else if (lowerContract.startsWith('complexity')) {
+        lines.push(` * @complexity ${contract}`);
+      } else if (lowerContract.startsWith('purity')) {
+        lines.push(` * @purity ${contract}`);
       } else {
         lines.push(` * @contract ${contract}`);
       }
@@ -533,44 +591,39 @@ export function generateFunction(
 function collectTypeReferences(iface: SpecInterface): Set<string> {
   const refs = new Set<string>();
 
-  // Pattern to match custom type names (not primitives or built-ins)
-  const primitives = new Set([
-    'string',
-    'number',
-    'boolean',
-    'void',
-    'null',
-    'undefined',
-    'unknown',
-    'any',
-    'never',
-    'Date',
-    'Map',
-    'Set',
-    'Array',
-    'Promise',
-    'Result',
-  ]);
-
   const extractTypeRefs = (typeStr: string): void => {
-    // Remove generics for base type extraction
-    const baseMatch = /^([A-Z][a-zA-Z0-9]*)/.exec(typeStr);
-    if (baseMatch?.[1] !== undefined && !primitives.has(baseMatch[1])) {
-      refs.add(baseMatch[1]);
-    }
+    const processSegment = (segment: string): void => {
+      const trimmed = segment.trim();
 
-    // Extract types from generics
-    const genericMatch = /<(.+)>/.exec(typeStr);
-    if (genericMatch?.[1] !== undefined) {
-      const args = splitGenericArgs(genericMatch[1]);
-      for (const arg of args) {
-        extractTypeRefs(arg.trim());
+      // Handle array types - check before any cleanup
+      if (trimmed.endsWith('[]')) {
+        const elementType = trimmed.slice(0, -2).trim();
+        processSegment(elementType);
+        return;
       }
-    }
 
-    // Handle array types
-    if (typeStr.endsWith('[]')) {
-      extractTypeRefs(typeStr.slice(0, -2));
+      // Remove generics for base type extraction
+      const baseMatch = /^([A-Z][a-zA-Z0-9]*)/.exec(trimmed);
+      if (baseMatch?.[1] !== undefined && !STANDARD_TS_TYPES.has(baseMatch[1])) {
+        refs.add(baseMatch[1]);
+      }
+
+      // Extract types from generics
+      const genericMatch = /<(.+)>/.exec(trimmed);
+      if (genericMatch?.[1] !== undefined) {
+        const args = splitGenericArgs(genericMatch[1]);
+        for (const arg of args) {
+          extractTypeRefs(arg.trim());
+        }
+      }
+    };
+
+    // Split on union (|) and intersection (&) operators
+    const segments = typeStr.split(/\||&/).map((s) => s.trim());
+    for (const segment of segments) {
+      if (segment.length > 0) {
+        processSegment(segment);
+      }
     }
   };
 
@@ -629,24 +682,9 @@ function validateTypeReferences(
     }
   }
 
-  // Standard types that don't need to be defined
-  const builtInTypes = new Set([
-    'Result',
-    'Promise',
-    'Map',
-    'Set',
-    'Array',
-    'Date',
-    'Error',
-    'ReadonlyArray',
-    'Readonly',
-    'Partial',
-    'Required',
-  ]);
-
   // Check each reference
   for (const ref of typeRefs) {
-    if (!definedTypes.has(ref) && !builtInTypes.has(ref)) {
+    if (!definedTypes.has(ref) && !STANDARD_TS_TYPES.has(ref)) {
       warnings.push({
         location,
         message: `Type '${ref}' is referenced but not defined in spec. Ensure it exists in data_models, enums, or witnesses.`,
@@ -735,10 +773,7 @@ export function generateFunctionSignatures(
   }
 
   // Add Result type definition if used
-  if (
-    allTypeRefs.has('Result') ||
-    functions.some((f) => f.signature.returnType.includes('Result<'))
-  ) {
+  if (functions.some((f) => f.signature.returnType.includes('Result<'))) {
     codeLines.push('// Result type for error handling');
     codeLines.push('// This should be imported from your types module or defined here');
     codeLines.push('export type Result<T, E> = { ok: true; value: T } | { ok: false; error: E };');
@@ -770,22 +805,8 @@ function generateImports(typeRefs: Set<string>, options: FunctionGeneratorOption
   const extension = options.useJsExtension !== false ? '.js' : '';
   const imports: string[] = [];
 
-  // Filter out built-in types
-  const builtInTypes = new Set([
-    'Result',
-    'Promise',
-    'Map',
-    'Set',
-    'Array',
-    'Date',
-    'Error',
-    'ReadonlyArray',
-    'Readonly',
-    'Partial',
-    'Required',
-  ]);
-
-  const customTypes = [...typeRefs].filter((t) => !builtInTypes.has(t)).sort();
+  // Filter out standard TypeScript types that don't need imports
+  const customTypes = [...typeRefs].filter((t) => !STANDARD_TS_TYPES.has(t)).sort();
 
   if (customTypes.length > 0) {
     // Generate import from types module
@@ -809,7 +830,11 @@ export function generateFunctionsForInterface(
   interfaceName: string,
   options: FunctionGeneratorOptions = {}
 ): FunctionGenerationResult {
-  if (spec.interfaces?.[interfaceName] === undefined) {
+  if (!spec.interfaces) {
+    throw new Error('Spec has no interfaces defined');
+  }
+  const iface = spec.interfaces[interfaceName];
+  if (iface === undefined) {
     throw new Error(`Interface '${interfaceName}' not found in spec`);
   }
 
@@ -817,7 +842,7 @@ export function generateFunctionsForInterface(
   const filteredSpec: Spec = {
     ...spec,
     interfaces: {
-      [interfaceName]: spec.interfaces[interfaceName],
+      [interfaceName]: iface,
     },
   };
 

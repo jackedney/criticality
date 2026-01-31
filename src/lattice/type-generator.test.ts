@@ -672,6 +672,120 @@ fields = [{ name = "id", type = "string" }]
     expect(result.enums).toHaveLength(1);
     expect(result.code).toContain('export enum AccountStatus');
   });
+
+  it('should filter enums to only those referenced by domain models', () => {
+    const spec = parseSpec(`
+[meta]
+version = "1.0.0"
+created = "2024-01-24T12:00:00Z"
+
+[system]
+name = "test-system"
+
+[enums.AccountStatus]
+variants = ["Active", "Closed"]
+
+[enums.UserStatus]
+variants = ["Pending", "Active"]
+
+[data_models.Account]
+fields = [{ name = "status", type = "AccountStatus" }]
+
+[data_models.User]
+fields = [{ name = "status", type = "UserStatus" }]
+    `);
+
+    const result = generateDomainTypeDefinitions(spec, ['Account']);
+
+    expect(result.enums).toHaveLength(1);
+    expect(result.code).toContain('export enum AccountStatus');
+    expect(result.code).not.toContain('export enum UserStatus');
+  });
+
+  it('should detect enums referenced inside composite types (arrays and maps)', () => {
+    const spec = parseSpec(`
+[meta]
+version = "1.0.0"
+created = "2024-01-24T12:00:00Z"
+
+[system]
+name = "test-system"
+
+[enums.AccountStatus]
+variants = ["Active", "Closed"]
+
+[enums.UserStatus]
+variants = ["Pending", "Active"]
+
+[enums.UnrelatedEnum]
+variants = ["Foo", "Bar"]
+
+[data_models.Account]
+fields = [
+  { name = "statuses", type = "AccountStatus[]" },
+  { name = "userStatusMap", type = "Map<string, UserStatus>" }
+]
+    `);
+
+    const result = generateDomainTypeDefinitions(spec, ['Account']);
+
+    // Should include enums referenced inside array and Map types
+    expect(result.enums).toHaveLength(2);
+    expect(result.code).toContain('export enum AccountStatus');
+    expect(result.code).toContain('export enum UserStatus');
+    // Should exclude unrelated enums not referenced by the domain
+    expect(result.code).not.toContain('export enum UnrelatedEnum');
+  });
+
+  it('should filter witnesses to only those referenced by domain models', () => {
+    const spec: Spec = {
+      meta: { version: '1.0.0', created: '2024-01-24T12:00:00Z' },
+      system: { name: 'test-system' },
+      data_models: {
+        Account: {
+          fields: [{ name: 'balance', type: 'NonNegativeDecimal' }],
+        },
+        User: {
+          fields: [{ name: 'age', type: 'PositiveDecimal' }],
+        },
+      },
+      witnesses: {
+        non_negative: {
+          name: 'NonNegativeDecimal',
+          description: 'A non-negative decimal number',
+          base_type: 'number',
+          invariants: [
+            {
+              id: 'non_negative',
+              description: 'Value must be >= 0',
+              formal: 'value >= 0',
+              testable: true,
+            },
+          ],
+        },
+        positive: {
+          name: 'PositiveDecimal',
+          description: 'A positive decimal number',
+          base_type: 'number',
+          invariants: [
+            {
+              id: 'positive',
+              description: 'Value must be > 0',
+              formal: 'value > 0',
+              testable: true,
+            },
+          ],
+        },
+      },
+    };
+
+    const result = generateDomainTypeDefinitions(spec, ['Account']);
+
+    expect(result.brandedTypes).toHaveLength(1);
+    expect(result.brandedTypes[0]?.typeName).toBe('NonNegativeDecimal');
+    expect(result.code).toContain('type NonNegativeDecimal');
+    expect(result.code).not.toContain('type PositiveDecimal');
+  });
 });
 
 describe('example from acceptance criteria', () => {
@@ -738,5 +852,145 @@ fields = [
     // Should still document the constraint in JSDoc
     expect(result.code).toContain('@constraints');
     expect(result.code).toContain('rfc_5322_email');
+  });
+});
+
+describe('Range type name sanitization', () => {
+  it('should sanitize negative numbers in Range type names', () => {
+    const spec = parseSpec(`
+[meta]
+version = "1.0.0"
+created = "2024-01-24T12:00:00Z"
+
+[system]
+name = "test-system"
+
+[data_models.Temperature]
+fields = [{ name = "celsius", type = "number", constraints = ["range(-10, 50)"] }]
+    `);
+
+    const result = generateTypeDefinitions(spec);
+
+    expect(result.brandedTypes[0]?.typeName).toBe('RangeNeg10To50Decimal');
+    expect(result.code).toContain('type RangeNeg10To50Decimal');
+    expect(result.code).toContain('readonly celsius: RangeNeg10To50Decimal;');
+  });
+
+  it('should sanitize decimal numbers in Range type names', () => {
+    const spec = parseSpec(`
+[meta]
+version = "1.0.0"
+created = "2024-01-24T12:00:00Z"
+
+[system]
+name = "test-system"
+
+[data_models.Price]
+fields = [{ name = "value", type = "number", constraints = ["range(0.99, 100.50)"] }]
+    `);
+
+    const result = generateTypeDefinitions(spec);
+
+    expect(result.brandedTypes[0]?.typeName).toBe('Range0P99To100P50Decimal');
+    expect(result.code).toContain('type Range0P99To100P50Decimal');
+    expect(result.code).toContain('readonly value: Range0P99To100P50Decimal;');
+  });
+
+  it('should sanitize both negative and decimal numbers in Range type names', () => {
+    const spec = parseSpec(`
+[meta]
+version = "1.0.0"
+created = "2024-01-24T12:00:00Z"
+
+[system]
+name = "test-system"
+
+[data_models.Coordinate]
+fields = [{ name = "x", type = "number", constraints = ["range(-5.5, 10.5)"] }]
+    `);
+
+    const result = generateTypeDefinitions(spec);
+
+    expect(result.brandedTypes[0]?.typeName).toBe('RangeNeg5P5To10P5Decimal');
+    expect(result.code).toContain('type RangeNeg5P5To10P5Decimal');
+    expect(result.code).toContain('readonly x: RangeNeg5P5To10P5Decimal;');
+  });
+});
+
+describe('Map and Set generics parsing', () => {
+  it('should parse Map with inner generic types', () => {
+    const spec = parseSpec(`
+[meta]
+version = "1.0.0"
+created = "2024-01-24T12:00:00Z"
+
+[system]
+name = "test-system"
+
+[data_models.UserCache]
+fields = [{ name = "cache", type = "Map<string, User>" }]
+    `);
+
+    const result = generateTypeDefinitions(spec);
+
+    expect(result.code).toContain('readonly cache: Map<string, User>;');
+  });
+
+  it('should parse Set with inner generic types', () => {
+    const spec = parseSpec(`
+[meta]
+version = "1.0.0"
+created = "2024-01-24T12:00:00Z"
+
+[system]
+name = "test-system"
+
+[data_models.UniqueIds]
+fields = [{ name = "ids", type = "Set<number>" }]
+    `);
+
+    const result = generateTypeDefinitions(spec);
+
+    expect(result.code).toContain('readonly ids: Set<number>;');
+  });
+
+  it('should parse Map with nested generic types', () => {
+    const spec = parseSpec(`
+[meta]
+version = "1.0.0"
+created = "2024-01-24T12:00:00Z"
+
+[system]
+name = "test-system"
+
+[data_models.ComplexMap]
+fields = [{ name = "data", type = "Map<string, Map<number, User>>" }]
+    `);
+
+    const result = generateTypeDefinitions(spec);
+
+    expect(result.code).toContain('readonly data: Map<string, Map<number, User>>;');
+  });
+
+  it('should map inner types in Map and Set', () => {
+    const spec = parseSpec(`
+[meta]
+version = "1.0.0"
+created = "2024-01-24T12:00:00Z"
+
+[system]
+name = "test-system"
+
+[data_models.TypedCollections]
+fields = [
+  { name = "stringMap", type = "Map<string, decimal>" },
+  { name = "numberSet", type = "Set<integer>" }
+]
+    `);
+
+    const result = generateTypeDefinitions(spec);
+
+    expect(result.code).toContain('readonly stringMap: Map<string, number>;');
+    expect(result.code).toContain('readonly numberSet: Set<number>;');
   });
 });

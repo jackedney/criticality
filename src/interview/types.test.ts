@@ -167,7 +167,9 @@ describe('createTranscriptEntry', () => {
   it('should create transcript entry with all fields', () => {
     const entry = createTranscriptEntry('Discovery', 'user', 'Hello, I want to build an app');
 
-    expect(entry.id).toMatch(/^transcript_\d+_[a-z0-9]+$/);
+    expect(entry.id).toMatch(
+      /^transcript_[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/
+    );
     expect(entry.phase).toBe('Discovery');
     expect(entry.role).toBe('user');
     expect(entry.content).toBe('Hello, I want to build an app');
@@ -309,7 +311,9 @@ describe('createFeature', () => {
       'Discovery'
     );
 
-    expect(feature.id).toMatch(/^feature_\d+_[a-z0-9]+$/);
+    expect(feature.id).toMatch(
+      /^feature_[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
+    );
     expect(feature.name).toBe('User Authentication');
     expect(feature.description).toBe('Allow users to log in with email/password');
     expect(feature.classification).toBe('core');
@@ -451,14 +455,18 @@ describe('getFeaturesByClassification', () => {
 });
 
 describe('InterviewState with features', () => {
-  it('should include features array in initial state', () => {
+  beforeEach(() => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date('2024-01-15T10:00:00.000Z'));
+  });
 
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it('should include features array in initial state', () => {
     const state = createInitialInterviewState('test-project');
     expect(state.features).toEqual([]);
-
-    vi.useRealTimers();
   });
 
   it('should allow state with features', () => {

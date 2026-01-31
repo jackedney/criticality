@@ -66,6 +66,8 @@ export interface WitnessCodeResult {
   success: boolean;
   /** Error message if generation failed. */
   error?: string;
+  /** Warnings generated during code generation. */
+  warnings: readonly WitnessWarning[];
 }
 
 /**
@@ -163,7 +165,8 @@ function analyzeInvariant(invariant: WitnessInvariant): InvariantAnalysis {
 
   // Check for invariants that can be type-encoded as branded types (distinction tier)
   // These are invariants that we can validate and then "brand" the type
-  const isTypeEncodable = canBrandInvariant(formal, description);
+  // Only brandable if the invariant is actually testable (testable !== false)
+  const isTypeEncodable = invariant.testable !== false && canBrandInvariant(formal, description);
 
   if (isTypeEncodable) {
     return {
@@ -426,6 +429,7 @@ function generateWitnessCode(
     highestTier,
     jsDoc,
     success,
+    warnings,
   };
 
   if (error !== undefined) {
@@ -636,6 +640,7 @@ export function generateWitnessIntegration(
     for (const [_key, witness] of Object.entries(spec.witnesses)) {
       const result = generateWitnessCode(witness, options);
       results.push(result);
+      allWarnings.push(...result.warnings);
     }
   }
 
@@ -652,8 +657,6 @@ export function generateWitnessIntegration(
     ' *',
     ' * @packageDocumentation',
     ' */',
-    '',
-    "import * as fc from 'fast-check';",
     '',
   ];
 
@@ -698,6 +701,8 @@ export function generateWitnessIntegration(
 
   // Add Arbitraries section
   if (options.generateArbitraries !== false && results.length > 0) {
+    codeLines.push("import * as fc from 'fast-check';");
+    codeLines.push('');
     codeLines.push(
       '// ============================================================================='
     );

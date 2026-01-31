@@ -13,12 +13,18 @@ import type {
   ExtractedRequirement,
   TranscriptEntry,
 } from './types.js';
-import { INTERVIEW_PHASES, isInterviewComplete, getNextInterviewPhase } from './types.js';
+import {
+  INTERVIEW_PHASES,
+  isInterviewComplete,
+  getNextInterviewPhase,
+  createInitialInterviewState,
+} from './types.js';
 import {
   loadInterviewState,
   saveInterviewState,
   loadTranscript,
   appendTranscriptEntry,
+  appendTranscriptEntryAndUpdateState,
   interviewStateExists,
   InterviewPersistenceError,
 } from './persistence.js';
@@ -907,20 +913,7 @@ export class InterviewCli {
    * @returns True if interview completed, false if quit early.
    */
   private async startNew(): Promise<boolean> {
-    // Create initial state
-    const now = new Date().toISOString();
-    this.state = {
-      version: '1.0.0',
-      projectId: this.projectId,
-      currentPhase: 'Discovery',
-      completedPhases: [],
-      extractedRequirements: [],
-      features: [],
-      delegationPoints: [],
-      transcriptEntryCount: 0,
-      createdAt: now,
-      updatedAt: now,
-    };
+    this.state = createInitialInterviewState(this.projectId);
 
     await saveInterviewState(this.state);
 
@@ -1005,6 +998,8 @@ export class InterviewCli {
     const question = phaseQuestions[phase];
     const isDelegable = (DELEGABLE_PHASES as readonly string[]).includes(phase);
 
+    let actualAnswer: string | undefined;
+
     // For delegable phases, show options
     if (isDelegable) {
       this.writeLine(formatDelegationOptions());
@@ -1074,6 +1069,22 @@ export class InterviewCli {
         );
         return true;
       }
+
+      // If user chose 'Continue', re-prompt for actual answer
+      if (delegation?.decision === 'Continue') {
+        const actualAnswerResult = await this.prompt({
+          message: question,
+          hint: "Type 'quit' or 'q' to save and exit",
+          allowEmpty: false,
+        });
+
+        if (actualAnswerResult.quit) {
+          this.writeLine(formatInfo('Progress saved. Run again to resume.'));
+          return false;
+        }
+
+        actualAnswer = actualAnswerResult.input;
+      }
     }
 
     // Handle Approval phase specially
@@ -1081,9 +1092,8 @@ export class InterviewCli {
       return this.handleApproval();
     }
 
-    // Record the response
-    const userEntry = createTranscriptEntry(phase, 'user', result.input);
-    await appendTranscriptEntry(this.projectId, userEntry);
+    // Record the response (use actualAnswer if provided from Continue re-prompt)
+    const userEntry = createTranscriptEntry(phase, 'user', actualAnswer ?? result.input);
 
     // For now, extract a simple requirement
     // This will be enhanced with the full interview engine
@@ -1092,19 +1102,18 @@ export class InterviewCli {
         id: `req_${String(Date.now())}_${Math.random().toString(36).substring(2, 9)}`,
         sourcePhase: phase,
         category: this.getCategoryForPhase(phase),
-        text: result.input,
+        text: actualAnswer ?? result.input,
         confidence: 'medium' as const,
         extractedAt: new Date().toISOString(),
       };
 
-      this.state = {
+      // Update state with requirement and append user entry (increments count)
+      this.state = await appendTranscriptEntryAndUpdateState(this.projectId, userEntry, {
         ...this.state,
         extractedRequirements: [...this.state.extractedRequirements, requirement],
-        transcriptEntryCount: this.state.transcriptEntryCount + 1,
-        updatedAt: new Date().toISOString(),
-      };
-
-      await saveInterviewState(this.state);
+      });
+    } else {
+      await appendTranscriptEntry(this.projectId, userEntry);
     }
 
     // Acknowledge
@@ -1113,7 +1122,11 @@ export class InterviewCli {
       'assistant',
       `Got it! I've recorded your input for ${getPhaseDisplayName(phase)}.`
     );
-    await appendTranscriptEntry(this.projectId, ackEntry);
+    if (this.state !== undefined) {
+      this.state = await appendTranscriptEntryAndUpdateState(this.projectId, ackEntry, this.state);
+    } else {
+      await appendTranscriptEntry(this.projectId, ackEntry);
+    }
 
     this.writeLine(formatSuccess(`Response recorded for ${getPhaseDisplayName(phase)} phase.`));
 
@@ -1200,29 +1213,46 @@ export class InterviewCli {
         'user',
         '[Approval] Approved - all items confirmed'
       );
-      await appendTranscriptEntry(this.projectId, entry);
+      this.state = await appendTranscriptEntryAndUpdateState(this.projectId, entry, this.state);
 
       this.writeLine(formatSuccess('Specification approved!'));
       return true;
     }
 
     if (decision === 'ApproveWithConditions') {
-      const conditionsResult = await this.prompt({
-        message: 'Please specify your conditions (one per line, empty line to finish):',
-        allowEmpty: true,
-      });
+      this.writeLine('Please specify your conditions (one per line, empty line to finish):');
 
-      if (conditionsResult.quit) {
-        return false;
+      const conditions: string[] = [];
+      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition
+      while (true) {
+        const lineResult = await this.prompt({
+          message: '>',
+          allowEmpty: true,
+        });
+
+        if (lineResult.quit) {
+          return false;
+        }
+
+        if (lineResult.input.trim() === '') {
+          break;
+        }
+
+        conditions.push(lineResult.input.trim());
+      }
+
+      if (conditions.length === 0) {
+        this.writeLine(formatWarning('No conditions provided. Please try again.'));
+        return await this.handleApproval();
       }
 
       // Record conditional approval
       const entry = createTranscriptEntry(
         'Approval',
         'user',
-        `[Approval] Approved with conditions: ${conditionsResult.input}`
+        `[Approval] Approved with conditions:\n${conditions.map((c) => `- ${c}`).join('\n')}`
       );
-      await appendTranscriptEntry(this.projectId, entry);
+      this.state = await appendTranscriptEntryAndUpdateState(this.projectId, entry, this.state);
 
       this.writeLine(formatSuccess('Specification conditionally approved.'));
       this.writeLine(formatInfo('Conditions will be addressed in targeted revision.'));
@@ -1245,7 +1275,7 @@ export class InterviewCli {
       'user',
       `[Approval] Rejected with feedback: ${feedbackResult.input}`
     );
-    await appendTranscriptEntry(this.projectId, entry);
+    this.state = await appendTranscriptEntryAndUpdateState(this.projectId, entry, this.state);
 
     this.writeLine(formatWarning('Specification rejected. Returning to earlier phases.'));
 
@@ -1272,12 +1302,11 @@ export class InterviewCli {
 /**
  * Creates a readline-based input reader.
  *
- * @returns An InputReader using Node's readline.
+ * @returns A Promise resolving to an InputReader using Node's readline.
  */
-export function createReadlineReader(): InputReader {
+export async function createReadlineReader(): Promise<InputReader> {
   // Use dynamic import to avoid issues in test environments
-  // eslint-disable-next-line @typescript-eslint/no-require-imports
-  const readline = require('node:readline') as typeof import('node:readline');
+  const readline = await import('node:readline');
 
   const rl = readline.createInterface({
     input: process.stdin,

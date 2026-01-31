@@ -17,8 +17,9 @@ import type {
   ExtractedRequirement,
   DelegationPoint,
   TranscriptEntry,
+  Feature,
 } from './types.js';
-import { INTERVIEW_PHASES, isValidInterviewPhase } from './types.js';
+import { INTERVIEW_PHASES, isValidInterviewPhase, isValidFeatureClassification } from './types.js';
 
 /**
  * Error type for interview state persistence operations.
@@ -82,12 +83,59 @@ export function getCriticalityBaseDir(): string {
 }
 
 /**
+ * Validates a project ID to prevent directory traversal attacks.
+ *
+ * A valid project ID must:
+ * - Be a non-empty string
+ * - Not be an absolute path (no leading /)
+ * - Not contain directory traversal segments (..)
+ * - Not contain path separators (/ or \)
+ *
+ * @param projectId - The project identifier to validate.
+ * @throws InterviewPersistenceError if the project ID is invalid.
+ */
+export function validateProjectId(projectId: string): void {
+  if (typeof projectId !== 'string' || projectId.length === 0) {
+    throw new InterviewPersistenceError(
+      'Invalid project ID: must be a non-empty string',
+      'validation_error'
+    );
+  }
+
+  // Check for absolute paths (Unix or Windows style)
+  if (projectId.startsWith('/') || /^[a-zA-Z]:/.test(projectId)) {
+    throw new InterviewPersistenceError(
+      `Invalid project ID "${projectId}": must not be an absolute path`,
+      'validation_error'
+    );
+  }
+
+  // Check for directory traversal segments
+  if (projectId === '..' || projectId.includes('../') || projectId.includes('..\\')) {
+    throw new InterviewPersistenceError(
+      `Invalid project ID "${projectId}": must not contain directory traversal segments`,
+      'validation_error'
+    );
+  }
+
+  // Check for path separators
+  if (projectId.includes('/') || projectId.includes('\\')) {
+    throw new InterviewPersistenceError(
+      `Invalid project ID "${projectId}": must not contain path separators`,
+      'validation_error'
+    );
+  }
+}
+
+/**
  * Gets the directory path for a specific project's interview data.
  *
  * @param projectId - The project identifier.
  * @returns The path to ~/.criticality/projects/<project>/interview
+ * @throws InterviewPersistenceError if the project ID is invalid.
  */
 export function getInterviewDir(projectId: string): string {
+  validateProjectId(projectId);
   return join(getCriticalityBaseDir(), 'projects', projectId, 'interview');
 }
 
@@ -212,6 +260,68 @@ function validateExtractedRequirement(
  * @param index - The index in the array for error messages.
  * @throws InterviewPersistenceError if invalid.
  */
+function validateFeature(value: unknown, index: number): asserts value is Feature {
+  const indexStr = String(index);
+  if (value === null || typeof value !== 'object') {
+    throw new InterviewPersistenceError(
+      `Invalid interview state: features[${indexStr}] must be an object`,
+      'schema_error'
+    );
+  }
+
+  const feature = value as Record<string, unknown>;
+
+  if (typeof feature.id !== 'string') {
+    throw new InterviewPersistenceError(
+      `Invalid interview state: features[${indexStr}].id must be a string`,
+      'schema_error'
+    );
+  }
+
+  validatePhase(feature.sourcePhase, `features[${indexStr}].sourcePhase`);
+
+  if (
+    typeof feature.classification !== 'string' ||
+    !isValidFeatureClassification(feature.classification)
+  ) {
+    throw new InterviewPersistenceError(
+      `Invalid interview state: features[${indexStr}].classification must be one of: core, foundational, bolt-on`,
+      'validation_error'
+    );
+  }
+
+  if (typeof feature.name !== 'string') {
+    throw new InterviewPersistenceError(
+      `Invalid interview state: features[${indexStr}].name must be a string`,
+      'schema_error'
+    );
+  }
+
+  if (typeof feature.description !== 'string') {
+    throw new InterviewPersistenceError(
+      `Invalid interview state: features[${indexStr}].description must be a string`,
+      'schema_error'
+    );
+  }
+
+  if (typeof feature.identifiedAt !== 'string') {
+    throw new InterviewPersistenceError(
+      `Invalid interview state: features[${indexStr}].identifiedAt must be a string`,
+      'schema_error'
+    );
+  }
+
+  if (
+    feature.classificationRationale !== undefined &&
+    typeof feature.classificationRationale !== 'string'
+  ) {
+    throw new InterviewPersistenceError(
+      `Invalid interview state: features[${indexStr}].classificationRationale must be a string if provided`,
+      'schema_error'
+    );
+  }
+}
+
 function validateDelegationPoint(value: unknown, index: number): asserts value is DelegationPoint {
   const indexStr = String(index);
   if (value === null || typeof value !== 'object') {
@@ -307,6 +417,7 @@ export function deserializeInterviewState(json: string): InterviewState {
     'currentPhase',
     'completedPhases',
     'extractedRequirements',
+    'features',
     'delegationPoints',
     'transcriptEntryCount',
     'createdAt',
@@ -370,6 +481,17 @@ export function deserializeInterviewState(json: string): InterviewState {
   }
   for (let i = 0; i < obj.extractedRequirements.length; i++) {
     validateExtractedRequirement(obj.extractedRequirements[i], i);
+  }
+
+  // Validate features
+  if (!Array.isArray(obj.features)) {
+    throw new InterviewPersistenceError(
+      'Invalid interview state format: features must be an array',
+      'schema_error'
+    );
+  }
+  for (let i = 0; i < obj.features.length; i++) {
+    validateFeature(obj.features[i], i);
   }
 
   // Validate delegationPoints
@@ -503,7 +625,21 @@ export async function loadInterviewState(projectId: string): Promise<InterviewSt
 
   // Deserialize with validation
   try {
-    return deserializeInterviewState(content);
+    const state = deserializeInterviewState(content);
+
+    // Validate projectId matches to prevent directory traversal attacks
+    if (state.projectId !== projectId) {
+      throw new InterviewPersistenceError(
+        `Project ID mismatch: requested "${projectId}" but state contains "${state.projectId}"`,
+        'validation_error',
+        {
+          details:
+            'The stored state belongs to a different project. This may indicate a directory traversal attempt or file corruption.',
+        }
+      );
+    }
+
+    return state;
   } catch (error) {
     // Re-wrap errors with project context
     if (error instanceof InterviewPersistenceError) {
@@ -637,6 +773,38 @@ export async function appendTranscriptEntry(
       { cause: fileError, details: 'Check that the directory exists and is writable' }
     );
   }
+}
+
+/**
+ * Appends a transcript entry and updates state with incremented count.
+ *
+ * This helper function centralizes the pattern of:
+ * 1. Append entry to transcript
+ * 2. Increment transcriptEntryCount
+ * 3. Update updatedAt timestamp
+ * 4. Save state
+ *
+ * @param projectId - The project identifier.
+ * @param entry - The transcript entry to append.
+ * @param state - The interview state to update.
+ * @returns The updated interview state.
+ * @throws InterviewPersistenceError if entry or state cannot be saved.
+ */
+export async function appendTranscriptEntryAndUpdateState(
+  projectId: string,
+  entry: TranscriptEntry,
+  state: InterviewState
+): Promise<InterviewState> {
+  await appendTranscriptEntry(projectId, entry);
+
+  const updatedState: InterviewState = {
+    ...state,
+    transcriptEntryCount: state.transcriptEntryCount + 1,
+    updatedAt: new Date().toISOString(),
+  };
+
+  await saveInterviewState(updatedState);
+  return updatedState;
 }
 
 /**
