@@ -320,11 +320,23 @@ export async function loadLatestContradictionReport(
   try {
     content = await readFile(jsonPath, 'utf-8');
     filePath = jsonPath;
-  } catch {
+  } catch (err) {
+    if ((err as NodeJS.ErrnoException).code !== 'ENOENT') {
+      throw new ReportStorageError(`Failed to read report file: ${jsonPath}`, 'file_error', {
+        details: jsonPath,
+        cause: err as Error,
+      });
+    }
     try {
       content = await readFile(yamlPath, 'utf-8');
       filePath = yamlPath;
-    } catch {
+    } catch (yamlErr) {
+      if ((yamlErr as NodeJS.ErrnoException).code !== 'ENOENT') {
+        throw new ReportStorageError(`Failed to read report file: ${yamlPath}`, 'file_error', {
+          details: yamlPath,
+          cause: yamlErr as Error,
+        });
+      }
       return null;
     }
   }
