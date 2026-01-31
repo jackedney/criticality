@@ -312,19 +312,28 @@ export function parseSpecParameter(param: string): ParsedParameter {
  */
 export function parseSpecReturnType(returnType: string): ParsedReturnType {
   const trimmed = returnType.trim();
-  const mapped = mapSpecTypeToTypeScript(trimmed);
 
-  // Check if it's a Result type
-  const resultMatch = /^Result<(.+),\s*(.+)>$/.exec(mapped);
-  if (resultMatch?.[1] !== undefined && resultMatch[2] !== undefined) {
-    return {
-      type: mapped,
-      isResult: true,
-      successType: resultMatch[1],
-      errorType: resultMatch[2],
-    };
+  // Check if it's a Result type via prefix check
+  if (trimmed.startsWith('Result<') && trimmed.endsWith('>')) {
+    const inner = trimmed.slice(7, -1);
+    const args = splitGenericArgs(inner);
+
+    if (args.length === 2) {
+      const [successArg, errorArg] = args;
+      if (successArg !== undefined && errorArg !== undefined) {
+        const successType = mapSpecTypeToTypeScript(successArg);
+        const errorType = mapSpecTypeToTypeScript(errorArg);
+        return {
+          type: `Result<${successType}, ${errorType}>`,
+          isResult: true,
+          successType,
+          errorType,
+        };
+      }
+    }
   }
 
+  const mapped = mapSpecTypeToTypeScript(trimmed);
   return {
     type: mapped,
     isResult: false,
