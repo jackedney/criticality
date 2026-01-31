@@ -211,7 +211,14 @@ function inferComplexity(method: SpecMethod): string | undefined {
   if (methodName.includes('search') && methodName.includes('binary')) {
     return 'O(log n)';
   }
-  if (methodName === 'find' || methodName === 'filter' || methodName === 'map') {
+  // Use pattern matching to detect find/filter/map method variants
+  if (methodName.startsWith('find') || methodName.includes('find')) {
+    return 'O(n)';
+  }
+  if (methodName.startsWith('filter') || methodName.includes('filter')) {
+    return 'O(n)';
+  }
+  if (methodName.startsWith('map') || methodName.includes('map')) {
     return 'O(n)';
   }
 
@@ -523,7 +530,7 @@ function generateMethodContract(
   const complexity = inferComplexity(method);
   const purity = inferPurity(method);
 
-  // Build the contract object
+  // Build the contract object using immutable spread + conditional spreads
   const contractWithoutJsDoc: Omit<GeneratedContract, 'jsDoc'> = {
     functionName: method.name,
     interfaceName,
@@ -531,21 +538,15 @@ function generateMethodContract(
     ensures: allEnsures,
     invariants: allInvariants,
     claimRefs,
+    ...(complexity !== undefined && { complexity }),
+    ...{ purity },
   };
 
-  // Add optional fields only if they have values
-  const contractBase = { ...contractWithoutJsDoc };
-  if (complexity !== undefined) {
-    (contractBase as { complexity?: string }).complexity = complexity;
-  }
-  // purity is always defined (inferPurity always returns a value)
-  (contractBase as { purity?: PurityLevel }).purity = purity;
-
   // Generate JSDoc
-  const jsDoc = generateJsDocFromContract(contractBase, method, options);
+  const jsDoc = generateJsDocFromContract(contractWithoutJsDoc, method, options);
 
   const contract: GeneratedContract = {
-    ...contractBase,
+    ...contractWithoutJsDoc,
     jsDoc,
   };
 
@@ -785,6 +786,7 @@ export function attachContractsForInterface(
  * @returns A formatted string representation.
  */
 export function formatContractReport(result: ContractAttachmentResult): string {
+  const BOX_WIDTH = 80;
   const lines: string[] = [
     '╔══════════════════════════════════════════════════════════════════════════════╗',
     '║                      CONTRACT ATTACHMENT REPORT                              ║',
@@ -805,9 +807,9 @@ export function formatContractReport(result: ContractAttachmentResult): string {
       (result.summary.linkedClaims / result.summary.totalClaims) *
       100
     ).toFixed(1);
-    lines.push(
-      `║ Coverage: ${linkedPercentage.padStart(5)}% of claims linked to functions ${' '.repeat(33)}║`
-    );
+    const content = `Coverage: ${linkedPercentage.padStart(5)}% of claims linked to functions`;
+    const padding = ' '.repeat(BOX_WIDTH - 4 - content.length);
+    lines.push(`║ ${content}${padding}║`);
   }
 
   // Show unmatched claims
@@ -818,13 +820,15 @@ export function formatContractReport(result: ContractAttachmentResult): string {
 
     for (const warning of result.unmatchedClaimWarnings.slice(0, 5)) {
       const msg = `${warning.claimId} (${warning.claimType}): ${warning.claimText.substring(0, 40)}`;
-      lines.push(`║ • ${msg.padEnd(74)}║`);
+      const padding = ' '.repeat(BOX_WIDTH - 4 - 2 - Math.min(msg.length, 72));
+      lines.push(`║ • ${msg.substring(0, 72)}${padding}║`);
     }
 
     if (result.unmatchedClaimWarnings.length > 5) {
-      lines.push(
-        `║ ... and ${String(result.unmatchedClaimWarnings.length - 5)} more unmatched claims                                       ║`
-      );
+      const moreCount = result.unmatchedClaimWarnings.length - 5;
+      const content = `... and ${String(moreCount)} more unmatched claims`;
+      const padding = ' '.repeat(BOX_WIDTH - 4 - content.length);
+      lines.push(`║ ${content}${padding}║`);
     }
   }
 

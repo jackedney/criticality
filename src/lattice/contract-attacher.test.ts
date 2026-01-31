@@ -583,6 +583,104 @@ describe('attachContracts', () => {
 
       expect(result.contracts[0]?.complexity).toBe('O(1)');
     });
+
+    it('should detect find variants using startsWith pattern matching', () => {
+      const spec = createMinimalSpec({
+        interfaces: {
+          Collection: {
+            methods: [
+              {
+                name: 'findById',
+                params: ['id: string'],
+                returns: 'Item | undefined',
+              },
+              {
+                name: 'findByEmail',
+                params: ['email: string'],
+                returns: 'User | undefined',
+              },
+            ],
+          },
+        },
+      });
+
+      const result = attachContracts(spec);
+
+      expect(result.contracts[0]?.complexity).toBe('O(n)');
+      expect(result.contracts[1]?.complexity).toBe('O(n)');
+    });
+
+    it('should detect filter variants using startsWith pattern matching', () => {
+      const spec = createMinimalSpec({
+        interfaces: {
+          Collection: {
+            methods: [
+              {
+                name: 'filterItems',
+                params: ['predicate: (item: Item) => boolean'],
+                returns: 'Item[]',
+              },
+              {
+                name: 'filterActive',
+                params: [],
+                returns: 'Item[]',
+              },
+            ],
+          },
+        },
+      });
+
+      const result = attachContracts(spec);
+
+      expect(result.contracts[0]?.complexity).toBe('O(n)');
+      expect(result.contracts[1]?.complexity).toBe('O(n)');
+    });
+
+    it('should detect map variants using startsWith pattern matching', () => {
+      const spec = createMinimalSpec({
+        interfaces: {
+          Collection: {
+            methods: [
+              {
+                name: 'mapEntries',
+                params: ['fn: (item: Item) => Result'],
+                returns: 'Result[]',
+              },
+              {
+                name: 'mapToIds',
+                params: [],
+                returns: 'string[]',
+              },
+            ],
+          },
+        },
+      });
+
+      const result = attachContracts(spec);
+
+      expect(result.contracts[0]?.complexity).toBe('O(n)');
+      expect(result.contracts[1]?.complexity).toBe('O(n)');
+    });
+
+    it('should fall through to existing logic when method name does not match patterns', () => {
+      const spec = createMinimalSpec({
+        interfaces: {
+          Collection: {
+            methods: [
+              {
+                name: 'randomMethod',
+                params: ['x: number'],
+                returns: 'number',
+              },
+            ],
+          },
+        },
+      });
+
+      const result = attachContracts(spec);
+
+      expect(result.contracts[0]?.complexity).toBeUndefined();
+    });
   });
 
   describe('options', () => {
@@ -742,6 +840,86 @@ describe('formatContractReport', () => {
 
     expect(report).toContain('orphan_001');
     expect(report).toContain('UNMATCHED CLAIMS');
+  });
+
+  it('should dynamically compute padding for coverage line', () => {
+    const result: ContractAttachmentResult = {
+      contracts: [],
+      unmatchedClaimWarnings: [],
+      contractsByFunction: new Map(),
+      summary: {
+        totalFunctions: 5,
+        functionsWithContracts: 5,
+        totalClaims: 4,
+        linkedClaims: 2,
+        unmatchedClaims: 2,
+      },
+    };
+
+    const report = formatContractReport(result);
+    const lines = report.split('\n');
+
+    const coverageLine = lines.find((line) => line.includes('Coverage:'));
+    expect(coverageLine).toBeDefined();
+    expect(coverageLine).toMatch(/^║ Coverage:\s+\d+\.\d+% of claims linked to functions\s*║$/);
+    expect(coverageLine?.startsWith('║')).toBe(true);
+    expect(coverageLine?.endsWith('║')).toBe(true);
+  });
+
+  it('should dynamically compute padding for unmatched claims with long messages', () => {
+    const result: ContractAttachmentResult = {
+      contracts: [],
+      unmatchedClaimWarnings: [
+        {
+          claimId: 'very_long_claim_id_that_exceeds_normal_length',
+          claimText: 'This is a very long claim text that goes on for quite a while',
+          claimType: 'behavioral',
+          reason: 'No matching function',
+        },
+      ],
+      contractsByFunction: new Map(),
+      summary: {
+        totalFunctions: 1,
+        functionsWithContracts: 1,
+        totalClaims: 1,
+        linkedClaims: 0,
+        unmatchedClaims: 1,
+      },
+    };
+
+    const report = formatContractReport(result);
+    const lines = report.split('\n');
+
+    const claimLine = lines.find((line) => line.includes('very_long_claim_id'));
+    expect(claimLine).toBeDefined();
+    expect(claimLine).toMatch(/^║ • .* \(behavioral\): .* \s+║$/);
+  });
+
+  it('should dynamically compute padding for "more unmatched claims" summary', () => {
+    const result: ContractAttachmentResult = {
+      contracts: [],
+      unmatchedClaimWarnings: Array.from({ length: 10 }, (_, i) => ({
+        claimId: `claim_${String(i)}`,
+        claimText: `Claim text ${String(i)}`,
+        claimType: 'invariant',
+        reason: 'No matching function',
+      })),
+      contractsByFunction: new Map(),
+      summary: {
+        totalFunctions: 0,
+        functionsWithContracts: 0,
+        totalClaims: 10,
+        linkedClaims: 0,
+        unmatchedClaims: 10,
+      },
+    };
+
+    const report = formatContractReport(result);
+    const lines = report.split('\n');
+
+    const moreLine = lines.find((line) => line.includes('more unmatched claims'));
+    expect(moreLine).toBeDefined();
+    expect(moreLine).toMatch(/^║ \.\.\. and \d+ more unmatched claims\s+║$/);
   });
 });
 
