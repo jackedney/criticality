@@ -120,7 +120,7 @@ export interface ContractAttachmentOptions {
  * @param method - The spec method to analyze.
  * @returns The inferred purity level.
  */
-function inferPurity(method: SpecMethod): PurityLevel {
+export function inferPurity(method: SpecMethod): PurityLevel {
   const contracts = method.contracts ?? [];
   const returns = method.returns.toLowerCase();
 
@@ -176,7 +176,7 @@ function inferPurity(method: SpecMethod): PurityLevel {
  * @param method - The spec method to analyze.
  * @returns The inferred complexity notation, or undefined if not determinable.
  */
-function inferComplexity(method: SpecMethod): string | undefined {
+export function inferComplexity(method: SpecMethod): string | undefined {
   const contracts = method.contracts ?? [];
 
   // Check contracts for explicit complexity
@@ -238,7 +238,7 @@ function inferComplexity(method: SpecMethod): string | undefined {
  * @param contract - The contract string to parse.
  * @returns Object with type and expression.
  */
-function parseContractClause(contract: string): {
+export function parseContractClause(contract: string): {
   type: 'requires' | 'ensures';
   expression: string;
 } {

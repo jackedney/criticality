@@ -49,5 +49,6 @@ logs/
 .ralph/
 .serena/
 .claude/
-\n# Archive\narchive/\n
-.claude/
+
+# Archive
+archive/

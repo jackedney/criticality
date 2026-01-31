@@ -3,6 +3,7 @@
  */
 
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import fc from 'fast-check';
 import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
 import * as os from 'node:os';
@@ -567,6 +568,343 @@ describe('detectProjectConventions', () => {
     expect(conventions.sourceDir).toBe('src');
     expect(conventions.usesBarrelFiles).toBe(true);
     expect(conventions.usesJsExtension).toBe(true);
+  });
+});
+
+describe('Property-based tests for inferDomainBoundaries', () => {
+  /**
+   * Helper to create a valid Spec with given model and interface names.
+   */
+  function createSpecWithNames(modelNames: string[], interfaceNames: string[]): Spec {
+    const spec: Spec = {
+      meta: { version: '1.0.0', created: '2024-01-24T12:00:00Z' },
+      system: { name: 'test-system' },
+    };
+
+    if (modelNames.length > 0) {
+      spec.data_models = {};
+      for (const name of modelNames) {
+        spec.data_models[name] = {
+          fields: [{ name: 'id', type: 'string' }],
+        };
+      }
+    }
+
+    if (interfaceNames.length > 0) {
+      spec.interfaces = {};
+      for (const name of interfaceNames) {
+        spec.interfaces[name] = {
+          methods: [{ name: 'get', returns: 'void' }],
+        };
+      }
+    }
+
+    return spec;
+  }
+
+  /**
+   * Arbitrary for valid PascalCase identifiers (model/interface names).
+   * Uses stringMatching to generate valid identifier-like strings.
+   */
+  const pascalCaseIdentifier = fc
+    .stringMatching(/^[A-Z][a-zA-Z]{0,19}$/)
+    .filter((s) => s.length >= 1);
+
+  /**
+   * Arbitrary for arrays of unique PascalCase identifiers.
+   */
+  const uniqueIdentifiers = fc
+    .array(pascalCaseIdentifier, { minLength: 0, maxLength: 10 })
+    .map((arr) => [...new Set(arr)]);
+
+  it('should always return sorted boundary names', () => {
+    fc.assert(
+      fc.property(uniqueIdentifiers, uniqueIdentifiers, (modelNames, interfaceNames) => {
+        const spec = createSpecWithNames(modelNames, interfaceNames);
+        const boundaries = inferDomainBoundaries(spec);
+
+        // Boundaries should be sorted by name
+        const names = boundaries.map((b) => b.name);
+        const sortedNames = [...names].sort((a, b) => a.localeCompare(b));
+        expect(names).toEqual(sortedNames);
+      })
+    );
+  });
+
+  it('should group models with same domain prefix together', () => {
+    fc.assert(
+      fc.property(
+        fc.constantFrom('User', 'Account', 'Payment', 'Order'),
+        fc.array(fc.constantFrom('Profile', 'Settings', 'History', 'Details'), {
+          minLength: 1,
+          maxLength: 4,
+        }),
+        (prefix, suffixes) => {
+          // Deduplicate suffixes to ensure unique model names
+          const uniqueSuffixes = [...new Set(suffixes)];
+          const modelNames = uniqueSuffixes.map((suffix) => `${prefix}${suffix}`);
+          const spec = createSpecWithNames(modelNames, []);
+          const boundaries = inferDomainBoundaries(spec);
+
+          // All models with the same prefix should be in the same domain
+          const expectedDomainName = prefix.toLowerCase();
+          const domain = boundaries.find((b) => b.name === expectedDomainName);
+          expect(domain).toBeDefined();
+          expect(domain?.dataModels).toHaveLength(modelNames.length);
+          for (const modelName of modelNames) {
+            expect(domain?.dataModels).toContain(modelName);
+          }
+        }
+      )
+    );
+  });
+
+  it('should group interfaces with same domain prefix together', () => {
+    fc.assert(
+      fc.property(
+        fc.constantFrom('User', 'Account', 'Payment', 'Order'),
+        fc.array(fc.constantFrom('Service', 'Repository', 'Handler', 'Controller'), {
+          minLength: 1,
+          maxLength: 4,
+        }),
+        (prefix, suffixes) => {
+          // Remove duplicates from suffixes
+          const uniqueSuffixes = [...new Set(suffixes)];
+          const interfaceNames = uniqueSuffixes.map((suffix) => `${prefix}${suffix}`);
+          const spec = createSpecWithNames([], interfaceNames);
+          const boundaries = inferDomainBoundaries(spec);
+
+          // All interfaces with the same prefix should be in the same domain
+          const expectedDomainName = prefix.toLowerCase();
+          const domain = boundaries.find((b) => b.name === expectedDomainName);
+          expect(domain).toBeDefined();
+          expect(domain?.interfaces).toHaveLength(interfaceNames.length);
+          for (const interfaceName of interfaceNames) {
+            expect(domain?.interfaces).toContain(interfaceName);
+          }
+        }
+      )
+    );
+  });
+
+  it('should produce non-empty domain names for any valid input', () => {
+    fc.assert(
+      fc.property(uniqueIdentifiers, uniqueIdentifiers, (modelNames, interfaceNames) => {
+        const spec = createSpecWithNames(modelNames, interfaceNames);
+        const boundaries = inferDomainBoundaries(spec);
+
+        // All domain names should be non-empty strings
+        for (const boundary of boundaries) {
+          expect(boundary.name).toBeTruthy();
+          expect(typeof boundary.name).toBe('string');
+          expect(boundary.name.length).toBeGreaterThan(0);
+        }
+      })
+    );
+  });
+
+  it('should produce lowercase domain names without special characters', () => {
+    fc.assert(
+      fc.property(uniqueIdentifiers, uniqueIdentifiers, (modelNames, interfaceNames) => {
+        const spec = createSpecWithNames(modelNames, interfaceNames);
+        const boundaries = inferDomainBoundaries(spec);
+
+        // All domain names should be lowercase and contain only alphanumeric chars and hyphens
+        const validNamePattern = /^[a-z0-9]+(-[a-z0-9]+)*$/;
+        for (const boundary of boundaries) {
+          // Skip the default system name which may not follow this pattern
+          if (boundary.name === 'test-system') {
+            continue;
+          }
+          expect(boundary.name).toMatch(validNamePattern);
+        }
+      })
+    );
+  });
+
+  it('should return at least one domain for any spec', () => {
+    fc.assert(
+      fc.property(uniqueIdentifiers, uniqueIdentifiers, (modelNames, interfaceNames) => {
+        const spec = createSpecWithNames(modelNames, interfaceNames);
+        const boundaries = inferDomainBoundaries(spec);
+
+        // Should always have at least one domain (either from content or default)
+        expect(boundaries.length).toBeGreaterThanOrEqual(1);
+      })
+    );
+  });
+
+  it('should include all model names in exactly one domain', () => {
+    fc.assert(
+      fc.property(uniqueIdentifiers, (modelNames) => {
+        if (modelNames.length === 0) {
+          return;
+        }
+
+        const spec = createSpecWithNames(modelNames, []);
+        const boundaries = inferDomainBoundaries(spec);
+
+        // Each model should appear in exactly one domain
+        const allModelsInBoundaries = boundaries.flatMap((b) => b.dataModels);
+        for (const modelName of modelNames) {
+          const occurrences = allModelsInBoundaries.filter((m) => m === modelName).length;
+          expect(occurrences).toBe(1);
+        }
+      })
+    );
+  });
+
+  it('should include all interface names in exactly one domain', () => {
+    fc.assert(
+      fc.property(uniqueIdentifiers, (interfaceNames) => {
+        if (interfaceNames.length === 0) {
+          return;
+        }
+
+        const spec = createSpecWithNames([], interfaceNames);
+        const boundaries = inferDomainBoundaries(spec);
+
+        // Each interface should appear in exactly one domain
+        const allInterfacesInBoundaries = boundaries.flatMap((b) => b.interfaces);
+        for (const interfaceName of interfaceNames) {
+          const occurrences = allInterfacesInBoundaries.filter((i) => i === interfaceName).length;
+          expect(occurrences).toBe(1);
+        }
+      })
+    );
+  });
+
+  it('should handle mixed models and interfaces with same prefix', () => {
+    fc.assert(
+      fc.property(fc.constantFrom('User', 'Account', 'Payment'), (prefix) => {
+        const modelNames = [`${prefix}Entity`, `${prefix}Details`];
+        const interfaceNames = [`${prefix}Service`, `${prefix}Repository`];
+        const spec = createSpecWithNames(modelNames, interfaceNames);
+        const boundaries = inferDomainBoundaries(spec);
+
+        // Models and interfaces with same prefix should be in the same domain
+        const expectedDomainName = prefix.toLowerCase();
+        const domain = boundaries.find((b) => b.name === expectedDomainName);
+        expect(domain).toBeDefined();
+        expect(domain?.dataModels).toHaveLength(2);
+        expect(domain?.interfaces).toHaveLength(2);
+      })
+    );
+  });
+});
+
+describe('Property-based tests for extractDomainName via inferDomainBoundaries', () => {
+  /**
+   * Helper to extract domain name by creating a spec with a single model.
+   */
+  function getDomainNameForModel(modelName: string): string {
+    const spec: Spec = {
+      meta: { version: '1.0.0', created: '2024-01-24T12:00:00Z' },
+      system: { name: 'test-system' },
+      data_models: {
+        [modelName]: {
+          fields: [{ name: 'id', type: 'string' }],
+        },
+      },
+    };
+    const boundaries = inferDomainBoundaries(spec);
+    // There should be exactly one domain for a single model
+    return boundaries[0]?.name ?? '';
+  }
+
+  it('should strip common suffixes from names', () => {
+    const suffixes = [
+      'Service',
+      'Repository',
+      'Handler',
+      'Controller',
+      'Manager',
+      'Factory',
+      'Builder',
+      'Model',
+      'Entity',
+      'DTO',
+      'Request',
+      'Response',
+      'Event',
+      'Command',
+      'Query',
+    ];
+
+    fc.assert(
+      fc.property(
+        fc.constantFrom(...suffixes),
+        fc.constantFrom('User', 'Account', 'Payment', 'Order'),
+        (suffix, prefix) => {
+          const modelName = `${prefix}${suffix}`;
+          const domainName = getDomainNameForModel(modelName);
+
+          // Domain name should be the prefix in lowercase
+          expect(domainName).toBe(prefix.toLowerCase());
+        }
+      )
+    );
+  });
+
+  it('should extract first word from CamelCase names', () => {
+    fc.assert(
+      fc.property(
+        fc.constantFrom('User', 'Account', 'Payment', 'Order', 'Customer'),
+        fc.constantFrom('Profile', 'Balance', 'Transaction', 'Details', 'Record'),
+        (firstWord, secondWord) => {
+          const modelName = `${firstWord}${secondWord}`;
+          const domainName = getDomainNameForModel(modelName);
+
+          // Domain name should be the first word in lowercase
+          expect(domainName).toBe(firstWord.toLowerCase());
+        }
+      )
+    );
+  });
+
+  it('should handle single word names', () => {
+    fc.assert(
+      fc.property(
+        fc.constantFrom('User', 'Account', 'Payment', 'Order', 'Item', 'Product'),
+        (word) => {
+          const domainName = getDomainNameForModel(word);
+
+          // Domain name should be the word in lowercase
+          expect(domainName).toBe(word.toLowerCase());
+        }
+      )
+    );
+  });
+
+  it('should produce consistent results for the same input', () => {
+    const pascalCaseIdentifier = fc
+      .stringMatching(/^[A-Z][a-zA-Z]{0,19}$/)
+      .filter((s) => s.length >= 1);
+
+    fc.assert(
+      fc.property(pascalCaseIdentifier, (modelName) => {
+        const result1 = getDomainNameForModel(modelName);
+        const result2 = getDomainNameForModel(modelName);
+
+        // Same input should produce same output
+        expect(result1).toBe(result2);
+      })
+    );
+  });
+
+  it('should never produce empty domain names', () => {
+    const pascalCaseIdentifier = fc
+      .stringMatching(/^[A-Z][a-zA-Z]{0,19}$/)
+      .filter((s) => s.length >= 1);
+
+    fc.assert(
+      fc.property(pascalCaseIdentifier, (modelName) => {
+        const domainName = getDomainNameForModel(modelName);
+
+        expect(domainName).toBeTruthy();
+        expect(domainName.length).toBeGreaterThan(0);
+      })
+    );
   });
 });
 

@@ -704,8 +704,10 @@ export async function generateModuleStructure(
   options?: ModuleGeneratorOptions,
   projectRoot?: string
 ): Promise<ModuleStructureResult> {
-  // Merge options with defaults
-  const opts: Required<ModuleGeneratorOptions> = {
+  // Merge options with defaults (use mutable copy for convention detection)
+  const opts: {
+    -readonly [K in keyof Required<ModuleGeneratorOptions>]: Required<ModuleGeneratorOptions>[K];
+  } = {
     ...DEFAULT_OPTIONS,
     ...options,
   };
@@ -733,6 +735,13 @@ export async function generateModuleStructure(
   if (opts.detectConventions && projectRoot !== undefined) {
     try {
       conventions = await detectProjectConventions(projectRoot);
+      // Update opts with detected conventions only if caller didn't provide them
+      if (options?.baseDir === undefined) {
+        opts.baseDir = conventions.sourceDir;
+      }
+      if (options?.domainDir === undefined && conventions.domainDir !== undefined) {
+        opts.domainDir = conventions.domainDir;
+      }
     } catch {
       // Use defaults if detection fails
     }

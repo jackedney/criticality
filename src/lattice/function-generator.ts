@@ -15,6 +15,58 @@ import type {
 } from '../adapters/typescript/signature.js';
 
 /**
+ * Standard TypeScript types that don't need to be imported or defined in spec.
+ * Includes built-in types, utility types, and common generics.
+ */
+const STANDARD_TS_TYPES = new Set([
+  // Built-in object types
+  'Promise',
+  'Map',
+  'Set',
+  'Array',
+  'Date',
+  'Error',
+  'RegExp',
+  'WeakMap',
+  'WeakSet',
+  'Symbol',
+  'BigInt',
+  // Result type (custom but treated as built-in)
+  'Result',
+  // Readonly variants
+  'ReadonlyArray',
+  'ReadonlyMap',
+  'ReadonlySet',
+  'Readonly',
+  // Partial/Required/Optional utilities
+  'Partial',
+  'Required',
+  // Property manipulation utilities
+  'Record',
+  'Pick',
+  'Omit',
+  // Union/Intersection utilities
+  'Exclude',
+  'Extract',
+  'NonNullable',
+  // Function utilities
+  'ReturnType',
+  'Parameters',
+  'ConstructorParameters',
+  'InstanceType',
+  'ThisParameterType',
+  'OmitThisParameter',
+  'ThisType',
+  // String manipulation utilities
+  'Uppercase',
+  'Lowercase',
+  'Capitalize',
+  'Uncapitalize',
+  // Promise utilities
+  'Awaited',
+]);
+
+/**
  * Result of parsing a spec method parameter.
  */
 export interface ParsedParameter {
@@ -542,29 +594,10 @@ export function generateFunction(
 function collectTypeReferences(iface: SpecInterface): Set<string> {
   const refs = new Set<string>();
 
-  // Pattern to match custom type names (not primitives or built-ins)
-  const primitives = new Set([
-    'string',
-    'number',
-    'boolean',
-    'void',
-    'null',
-    'undefined',
-    'unknown',
-    'any',
-    'never',
-    'Date',
-    'Map',
-    'Set',
-    'Array',
-    'Promise',
-    'Result',
-  ]);
-
   const extractTypeRefs = (typeStr: string): void => {
     // Remove generics for base type extraction
     const baseMatch = /^([A-Z][a-zA-Z0-9]*)/.exec(typeStr);
-    if (baseMatch?.[1] !== undefined && !primitives.has(baseMatch[1])) {
+    if (baseMatch?.[1] !== undefined && !STANDARD_TS_TYPES.has(baseMatch[1])) {
       refs.add(baseMatch[1]);
     }
 
@@ -638,24 +671,9 @@ function validateTypeReferences(
     }
   }
 
-  // Standard types that don't need to be defined
-  const builtInTypes = new Set([
-    'Result',
-    'Promise',
-    'Map',
-    'Set',
-    'Array',
-    'Date',
-    'Error',
-    'ReadonlyArray',
-    'Readonly',
-    'Partial',
-    'Required',
-  ]);
-
   // Check each reference
   for (const ref of typeRefs) {
-    if (!definedTypes.has(ref) && !builtInTypes.has(ref)) {
+    if (!definedTypes.has(ref) && !STANDARD_TS_TYPES.has(ref)) {
       warnings.push({
         location,
         message: `Type '${ref}' is referenced but not defined in spec. Ensure it exists in data_models, enums, or witnesses.`,
@@ -779,22 +797,8 @@ function generateImports(typeRefs: Set<string>, options: FunctionGeneratorOption
   const extension = options.useJsExtension !== false ? '.js' : '';
   const imports: string[] = [];
 
-  // Filter out built-in types
-  const builtInTypes = new Set([
-    'Result',
-    'Promise',
-    'Map',
-    'Set',
-    'Array',
-    'Date',
-    'Error',
-    'ReadonlyArray',
-    'Readonly',
-    'Partial',
-    'Required',
-  ]);
-
-  const customTypes = [...typeRefs].filter((t) => !builtInTypes.has(t)).sort();
+  // Filter out standard TypeScript types that don't need imports
+  const customTypes = [...typeRefs].filter((t) => !STANDARD_TS_TYPES.has(t)).sort();
 
   if (customTypes.length > 0) {
     // Generate import from types module

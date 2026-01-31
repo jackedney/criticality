@@ -165,7 +165,8 @@ function analyzeInvariant(invariant: WitnessInvariant): InvariantAnalysis {
 
   // Check for invariants that can be type-encoded as branded types (distinction tier)
   // These are invariants that we can validate and then "brand" the type
-  const isTypeEncodable = canBrandInvariant(formal, description);
+  // Only brandable if the invariant is actually testable (testable !== false)
+  const isTypeEncodable = invariant.testable !== false && canBrandInvariant(formal, description);
 
   if (isTypeEncodable) {
     return {

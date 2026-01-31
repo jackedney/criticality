@@ -190,7 +190,7 @@ function parseTypeIdentifiers(typeStr: string): string[] {
 
     // Check for generic type: TypeName<...>
     const genericMatch = /^([A-Za-z_][A-Za-z0-9_]*)\s*<(.+)>$/.exec(trimmedPart);
-    if (genericMatch !== null) {
+    if (genericMatch?.[1] !== undefined && genericMatch[2] !== undefined) {
       const baseName = genericMatch[1];
       const argsStr = genericMatch[2];
 

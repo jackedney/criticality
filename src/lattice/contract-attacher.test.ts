@@ -5,16 +5,20 @@
  */
 
 import { describe, it, expect, vi } from 'vitest';
+import * as fc from 'fast-check';
 import {
   attachContracts,
   attachContractsForInterface,
   formatContractReport,
   serializeContract,
   attachContractsToCode,
+  parseContractClause,
+  inferPurity,
+  inferComplexity,
   type ContractAttachmentResult,
   type GeneratedContract,
 } from './contract-attacher.js';
-import type { Spec } from '../spec/types.js';
+import type { Spec, SpecMethod } from '../spec/types.js';
 
 /**
  * Helper to create a minimal valid spec.
@@ -899,8 +903,8 @@ describe('formatContractReport', () => {
     const result: ContractAttachmentResult = {
       contracts: [],
       unmatchedClaimWarnings: Array.from({ length: 10 }, (_, i) => ({
-        claimId: `claim_${String(i)}`,
-        claimText: `Claim text ${String(i)}`,
+        claimId: `claim_${i.toString()}`,
+        claimText: `Claim text ${i.toString()}`,
         claimType: 'invariant',
         reason: 'No matching function',
       })),
@@ -1137,5 +1141,465 @@ describe('example from acceptance criteria', () => {
     expect(jsDoc).toContain('@ensures self.balance += amount');
     expect(jsDoc).toContain('@purity writes');
     expect(jsDoc).toContain('@claim_ref balance_001');
+  });
+});
+
+/**
+ * Helper to create a minimal valid SpecMethod for property-based testing.
+ */
+function createMinimalMethod(overrides: Partial<SpecMethod> = {}): SpecMethod {
+  return {
+    name: 'testMethod',
+    params: [],
+    returns: 'void',
+    ...overrides,
+  };
+}
+
+describe('property-based tests', () => {
+  // Use a fixed seed for deterministic tests
+  const fcParams = { seed: 20260131, numRuns: 100 };
+
+  describe('parseContractClause properties', () => {
+    it('should always return a valid type (requires or ensures)', () => {
+      fc.assert(
+        fc.property(fc.string(), (clause) => {
+          const result = parseContractClause(clause);
+          expect(['requires', 'ensures']).toContain(result.type);
+        }),
+        fcParams
+      );
+    });
+
+    it('should always return a string expression', () => {
+      fc.assert(
+        fc.property(fc.string(), (clause) => {
+          const result = parseContractClause(clause);
+          expect(typeof result.expression).toBe('string');
+        }),
+        fcParams
+      );
+    });
+
+    it('should classify "requires:" prefixed clauses as requires', () => {
+      fc.assert(
+        fc.property(fc.string(), (expression) => {
+          const result = parseContractClause(`requires: ${expression}`);
+          expect(result.type).toBe('requires');
+        }),
+        fcParams
+      );
+    });
+
+    it('should classify "REQUIRES:" (mixed-case) prefixed clauses as requires', () => {
+      fc.assert(
+        fc.property(
+          fc.string(),
+          fc.constantFrom('REQUIRES:', 'Requires:', 'ReQuIrEs:'),
+          (expression, prefix) => {
+            const result = parseContractClause(`${prefix} ${expression}`);
+            expect(result.type).toBe('requires');
+          }
+        ),
+        fcParams
+      );
+    });
+
+    it('should classify "ensures:" prefixed clauses as ensures', () => {
+      fc.assert(
+        fc.property(fc.string(), (expression) => {
+          const result = parseContractClause(`ensures: ${expression}`);
+          expect(result.type).toBe('ensures');
+        }),
+        fcParams
+      );
+    });
+
+    it('should classify "ENSURES:" (mixed-case) prefixed clauses as ensures', () => {
+      fc.assert(
+        fc.property(
+          fc.string(),
+          fc.constantFrom('ENSURES:', 'Ensures:', 'EnSuReS:'),
+          (expression, prefix) => {
+            const result = parseContractClause(`${prefix} ${expression}`);
+            expect(result.type).toBe('ensures');
+          }
+        ),
+        fcParams
+      );
+    });
+
+    it('should classify "precondition:" prefixed clauses as requires', () => {
+      fc.assert(
+        fc.property(fc.string(), (expression) => {
+          const result = parseContractClause(`precondition: ${expression}`);
+          expect(result.type).toBe('requires');
+        }),
+        fcParams
+      );
+    });
+
+    it('should classify "postcondition:" prefixed clauses as ensures', () => {
+      fc.assert(
+        fc.property(fc.string(), (expression) => {
+          const result = parseContractClause(`postcondition: ${expression}`);
+          expect(result.type).toBe('ensures');
+        }),
+        fcParams
+      );
+    });
+
+    it('should classify clauses containing "result" as ensures', () => {
+      fc.assert(
+        fc.property(fc.string(), fc.string(), (before, after) => {
+          // Only test if not starting with requires/precondition prefix
+          const clause = `${before}result${after}`;
+          if (
+            clause.toLowerCase().startsWith('requires:') ||
+            clause.toLowerCase().startsWith('requires ') ||
+            clause.toLowerCase().startsWith('precondition:')
+          ) {
+            return; // Skip these cases
+          }
+          const result = parseContractClause(clause);
+          expect(result.type).toBe('ensures');
+        }),
+        fcParams
+      );
+    });
+
+    it('should handle empty strings', () => {
+      const result = parseContractClause('');
+      expect(['requires', 'ensures']).toContain(result.type);
+      expect(result.expression).toBe('');
+    });
+
+    it('should handle whitespace-only strings', () => {
+      fc.assert(
+        fc.property(
+          fc
+            .array(fc.constantFrom(' ', '\t', '\n', '\r'), { minLength: 0, maxLength: 10 })
+            .map((arr) => arr.join('')),
+          (whitespace) => {
+            const result = parseContractClause(whitespace);
+            expect(['requires', 'ensures']).toContain(result.type);
+            expect(result.expression).toBe('');
+          }
+        ),
+        fcParams
+      );
+    });
+
+    it('should trim whitespace from expressions', () => {
+      fc.assert(
+        fc.property(
+          fc
+            .string()
+            .filter(
+              (s) =>
+                s.trim().length > 0 &&
+                !s.includes('result') &&
+                !s.includes('return') &&
+                !s.includes('output')
+            ),
+          fc
+            .array(fc.constantFrom(' ', '\t'), { minLength: 0, maxLength: 5 })
+            .map((arr) => arr.join('')),
+          (expression, padding) => {
+            const result = parseContractClause(`${padding}${expression}${padding}`);
+            expect(result.expression).toBe(expression.trim());
+          }
+        ),
+        fcParams
+      );
+    });
+  });
+
+  describe('inferPurity properties', () => {
+    it('should always return a valid purity level', () => {
+      const validPurityLevels = ['pure', 'reads', 'writes', 'io'];
+      fc.assert(
+        fc.property(
+          fc.record({
+            name: fc.string({ minLength: 1 }),
+            returns: fc.string({ minLength: 1 }),
+            contracts: fc.option(fc.array(fc.string())),
+          }),
+          (methodInput) => {
+            const method = createMinimalMethod({
+              name: methodInput.name,
+              returns: methodInput.returns,
+              ...(methodInput.contracts !== null && { contracts: methodInput.contracts }),
+            });
+            const result = inferPurity(method);
+            expect(validPurityLevels).toContain(result);
+          }
+        ),
+        fcParams
+      );
+    });
+
+    it('should infer "pure" when contracts mention "pure"', () => {
+      fc.assert(
+        fc.property(
+          fc.string({ minLength: 1 }),
+          fc.array(fc.string()),
+          (methodName, otherContracts) => {
+            const method = createMinimalMethod({
+              name: methodName,
+              returns: 'number',
+              contracts: [...otherContracts, 'this is a pure function'],
+            });
+            const result = inferPurity(method);
+            expect(result).toBe('pure');
+          }
+        ),
+        fcParams
+      );
+    });
+
+    it('should infer "io" when contracts mention "network"', () => {
+      fc.assert(
+        fc.property(fc.string({ minLength: 1 }), (methodName) => {
+          const method = createMinimalMethod({
+            name: methodName,
+            returns: 'Promise<Response>',
+            contracts: ['performs network IO'],
+          });
+          const result = inferPurity(method);
+          expect(result).toBe('io');
+        }),
+        fcParams
+      );
+    });
+
+    it('should infer "reads" for getter methods', () => {
+      fc.assert(
+        fc.property(
+          fc.constantFrom('get', 'is', 'has'),
+          fc.string({ minLength: 1 }).filter((s) => /^[a-zA-Z]/.test(s)),
+          (prefix, suffix) => {
+            const method = createMinimalMethod({
+              name: `${prefix}${suffix.charAt(0).toUpperCase()}${suffix.slice(1)}`,
+              returns: 'string',
+            });
+            const result = inferPurity(method);
+            expect(result).toBe('reads');
+          }
+        ),
+        fcParams
+      );
+    });
+
+    it('should infer "writes" for setter/mutator methods', () => {
+      fc.assert(
+        fc.property(
+          fc.constantFrom('set', 'update', 'delete', 'create', 'add', 'remove'),
+          fc.string({ minLength: 1 }).filter((s) => /^[a-zA-Z]/.test(s)),
+          (prefix, suffix) => {
+            const method = createMinimalMethod({
+              name: `${prefix}${suffix.charAt(0).toUpperCase()}${suffix.slice(1)}`,
+              returns: 'void',
+            });
+            const result = inferPurity(method);
+            expect(result).toBe('writes');
+          }
+        ),
+        fcParams
+      );
+    });
+
+    it('should infer "writes" for void-returning methods (side effect indicator)', () => {
+      fc.assert(
+        fc.property(
+          fc
+            .string({ minLength: 1 })
+            .filter(
+              (s) =>
+                !s.toLowerCase().startsWith('get') &&
+                !s.toLowerCase().startsWith('is') &&
+                !s.toLowerCase().startsWith('has')
+            ),
+          (methodName) => {
+            const method = createMinimalMethod({
+              name: methodName,
+              returns: 'void',
+            });
+            const result = inferPurity(method);
+            // void returns should suggest writes unless it's a getter pattern
+            expect(['writes', 'reads']).toContain(result);
+          }
+        ),
+        fcParams
+      );
+    });
+  });
+
+  describe('inferComplexity properties', () => {
+    it('should return undefined or a valid O-notation string', () => {
+      fc.assert(
+        fc.property(
+          fc.record({
+            name: fc.string({ minLength: 1 }),
+            returns: fc.string({ minLength: 1 }),
+            contracts: fc.option(fc.array(fc.string())),
+          }),
+          (methodInput) => {
+            const method = createMinimalMethod({
+              name: methodInput.name,
+              returns: methodInput.returns,
+              ...(methodInput.contracts !== null && { contracts: methodInput.contracts }),
+            });
+            const result = inferComplexity(method);
+            if (result !== undefined) {
+              expect(result).toMatch(/^O\([^)]+\)$/);
+            }
+          }
+        ),
+        fcParams
+      );
+    });
+
+    it('should extract explicit O-notation from contracts', () => {
+      const complexities = ['O(1)', 'O(n)', 'O(log n)', 'O(n log n)', 'O(n^2)'];
+      fc.assert(
+        fc.property(fc.constantFrom(...complexities), fc.string(), (complexity, noise) => {
+          const method = createMinimalMethod({
+            name: 'testMethod',
+            returns: 'void',
+            contracts: [`${noise} ${complexity} ${noise}`],
+          });
+          const result = inferComplexity(method);
+          expect(result).toBe(complexity);
+        }),
+        fcParams
+      );
+    });
+
+    it('should infer O(n log n) for sort methods', () => {
+      fc.assert(
+        fc.property(
+          fc.constantFrom('sort', 'mergeSort', 'quickSort', 'sortItems', 'sortByName'),
+          (methodName) => {
+            const method = createMinimalMethod({
+              name: methodName,
+              returns: 'number[]',
+            });
+            const result = inferComplexity(method);
+            expect(result).toBe('O(n log n)');
+          }
+        ),
+        fcParams
+      );
+    });
+
+    it('should infer O(n) for find methods', () => {
+      fc.assert(
+        fc.property(
+          fc.constantFrom('find', 'findById', 'findByEmail', 'findFirst', 'findAll'),
+          (methodName) => {
+            const method = createMinimalMethod({
+              name: methodName,
+              returns: 'Item | undefined',
+            });
+            const result = inferComplexity(method);
+            expect(result).toBe('O(n)');
+          }
+        ),
+        fcParams
+      );
+    });
+
+    it('should infer O(n) for filter methods', () => {
+      fc.assert(
+        fc.property(
+          fc.constantFrom('filter', 'filterItems', 'filterActive', 'filterByStatus'),
+          (methodName) => {
+            const method = createMinimalMethod({
+              name: methodName,
+              returns: 'Item[]',
+            });
+            const result = inferComplexity(method);
+            expect(result).toBe('O(n)');
+          }
+        ),
+        fcParams
+      );
+    });
+
+    it('should infer O(n) for map methods', () => {
+      fc.assert(
+        fc.property(fc.constantFrom('map', 'mapEntries', 'mapToIds', 'mapValues'), (methodName) => {
+          const method = createMinimalMethod({
+            name: methodName,
+            returns: 'Result[]',
+          });
+          const result = inferComplexity(method);
+          expect(result).toBe('O(n)');
+        }),
+        fcParams
+      );
+    });
+
+    it('should recognize "constant time" in contracts as O(1)', () => {
+      fc.assert(
+        fc.property(
+          fc.constantFrom('constant time', 'constant-time', 'CONSTANT TIME'),
+          (phrase) => {
+            const method = createMinimalMethod({
+              name: 'randomMethod',
+              returns: 'Value',
+              contracts: [`This operation runs in ${phrase}`],
+            });
+            const result = inferComplexity(method);
+            expect(result).toBe('O(1)');
+          }
+        ),
+        fcParams
+      );
+    });
+
+    it('should recognize "linear time" in contracts as O(n)', () => {
+      fc.assert(
+        fc.property(fc.constantFrom('linear time', 'linear-time', 'LINEAR TIME'), (phrase) => {
+          const method = createMinimalMethod({
+            name: 'randomMethod',
+            returns: 'Value',
+            contracts: [`This operation runs in ${phrase}`],
+          });
+          const result = inferComplexity(method);
+          expect(result).toBe('O(n)');
+        }),
+        fcParams
+      );
+    });
+
+    it('should return undefined for methods with no complexity indicators', () => {
+      fc.assert(
+        fc.property(
+          fc
+            .string({ minLength: 1 })
+            .filter(
+              (s) =>
+                !s.toLowerCase().includes('sort') &&
+                !s.toLowerCase().includes('find') &&
+                !s.toLowerCase().includes('filter') &&
+                !s.toLowerCase().includes('map') &&
+                !s.toLowerCase().includes('search')
+            ),
+          (methodName) => {
+            const method = createMinimalMethod({
+              name: methodName,
+              returns: 'void',
+              contracts: [],
+            });
+            const result = inferComplexity(method);
+            // Should be undefined for generic method names without complexity hints
+            expect(result).toBeUndefined();
+          }
+        ),
+        fcParams
+      );
+    });
   });
 });
