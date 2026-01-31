@@ -270,16 +270,31 @@ export async function loadContradictionReport(
   try {
     content = await readFile(jsonPath, 'utf-8');
     filePath = jsonPath;
-  } catch {
+  } catch (error) {
+    const fileError = error instanceof Error ? error : new Error(String(error));
+    if (!hasErrorCode(error, 'ENOENT')) {
+      throw new ReportStorageError(
+        `Failed to read contradiction report from "${jsonPath}"`,
+        'file_error',
+        { cause: fileError }
+      );
+    }
     try {
       content = await readFile(yamlPath, 'utf-8');
       filePath = yamlPath;
-    } catch (error) {
-      const fileError = error instanceof Error ? error : new Error(String(error));
+    } catch (yamlError) {
+      const yamlFileError = yamlError instanceof Error ? yamlError : new Error(String(yamlError));
+      if (hasErrorCode(yamlError, 'ENOENT')) {
+        throw new ReportStorageError(
+          `Contradiction report "${reportId}" not found for project "${projectId}"`,
+          'not_found',
+          { cause: yamlFileError, details: `Looked for ${jsonPath} and ${yamlPath}` }
+        );
+      }
       throw new ReportStorageError(
-        `Contradiction report "${reportId}" not found for project "${projectId}"`,
-        'not_found',
-        { cause: fileError, details: `Looked for ${jsonPath} and ${yamlPath}` }
+        `Failed to read contradiction report from "${yamlPath}"`,
+        'file_error',
+        { cause: yamlFileError }
       );
     }
   }
@@ -335,7 +350,7 @@ function parseReportContent(content: string, filePath: string): ContradictionRep
   } catch (error) {
     parseError = error instanceof Error ? error : new Error(String(error));
     try {
-      data = yaml.load(content);
+      data = yaml.load(content, { schema: yaml.JSON_SCHEMA });
     } catch (yamlError) {
       const yamlParseError = yamlError instanceof Error ? yamlError : new Error(String(yamlError));
       throw new ReportStorageError(
