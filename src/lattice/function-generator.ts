@@ -773,10 +773,7 @@ export function generateFunctionSignatures(
   }
 
   // Add Result type definition if used
-  if (
-    allTypeRefs.has('Result') ||
-    functions.some((f) => f.signature.returnType.includes('Result<'))
-  ) {
+  if (functions.some((f) => f.signature.returnType.includes('Result<'))) {
     codeLines.push('// Result type for error handling');
     codeLines.push('// This should be imported from your types module or defined here');
     codeLines.push('export type Result<T, E> = { ok: true; value: T } | { ok: false; error: E };');
