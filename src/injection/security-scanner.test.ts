@@ -267,5 +267,19 @@ describe('security-scanner', () => {
         vulnerabilities: [],
       });
     });
+
+    it('continues scanning when failFastOnCritical is false', async () => {
+      const logger = vi.fn();
+
+      const result = await runSecurityScan({
+        projectPath: '/test/project',
+        failFastOnCritical: false,
+        logger,
+      });
+
+      // Should not throw, but return result
+      expect(result).toBeDefined();
+      expect(logger).toHaveBeenCalledWith('Running security vulnerability scan...');
+    });
   });
 });

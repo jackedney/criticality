@@ -16,6 +16,22 @@ import { ESLint } from 'eslint';
 import type { VulnerabilityType, FailureType } from './escalation.js';
 
 /**
+ * Error thrown when a critical security vulnerability is detected and failFastOnCritical is true.
+ */
+export class FailFastError extends Error {
+  /** The critical vulnerabilities that caused the failure. */
+  readonly vulnerabilities: readonly VulnerabilityDetails[];
+
+  constructor(vulnerabilities: readonly VulnerabilityDetails[]) {
+    super(
+      `Critical security vulnerability detected: ${String(vulnerabilities.length)} critical issue(s) found`
+    );
+    this.name = 'FailFastError';
+    this.vulnerabilities = vulnerabilities;
+  }
+}
+
+/**
  * Type for ESLint lint result messages.
  */
 interface ESLintLintMessage {
@@ -345,6 +361,12 @@ export async function runSecurityScan(options: SecurityScanOptions): Promise<Sec
       const filePath = result.filePath;
       const vulnerabilities = parseESLintResult(result, filePath);
       allVulnerabilities.push(...vulnerabilities);
+
+      const criticalVulnerabilities = vulnerabilities.filter((v) => v.severity === 'critical');
+      if (criticalVulnerabilities.length > 0 && options.failFastOnCritical !== false) {
+        logger('  [BLOCKING] Critical security vulnerability detected - aborting scan');
+        throw new FailFastError(criticalVulnerabilities);
+      }
     }
 
     const criticalVulnerabilities = allVulnerabilities.filter((v) => v.severity === 'critical');
