@@ -768,3 +768,260 @@ export function findTodoFunctions(project: Project): TodoFunction[] {
   const callGraph = buildCallGraph(allFunctions);
   return topologicalSort(todoFunctions, callGraph);
 }
+
+/**
+ * Information about a function inspected by AST analysis.
+ */
+export interface InspectedFunction {
+  /** The function name. */
+  readonly name: string;
+  /** The line number where the function is defined. */
+  readonly line: number;
+  /** Whether the function has a body. */
+  readonly hasBody: boolean;
+  /** Whether the function body is a TODO placeholder. */
+  readonly hasTodoBody: boolean;
+}
+
+/**
+ * A detected logic pattern that may indicate logic leakage.
+ */
+export interface LogicPattern {
+  /** The line number where the pattern was found. */
+  readonly line: number;
+  /** Description of the pattern. */
+  readonly description: string;
+  /** The function or context where it was found. */
+  readonly context?: string;
+  /** Severity of the finding. */
+  readonly severity: 'error' | 'warning';
+}
+
+/**
+ * Result of AST inspection.
+ */
+export interface AstInspectionResult {
+  /** All functions found in the file. */
+  readonly functions: readonly InspectedFunction[];
+  /** Logic patterns that may indicate leakage. */
+  readonly logicPatterns?: readonly LogicPattern[];
+  /** Whether the inspection passed (no errors). */
+  readonly passed: boolean;
+}
+
+/**
+ * Options for AST inspection.
+ */
+export interface AstInspectionOptions {
+  /** Whether to check function bodies for TODO patterns. Default: true. */
+  readonly checkFunctionBodies?: boolean;
+  /** Whether to specifically check for TODO pattern compliance. Default: true. */
+  readonly checkTodoPattern?: boolean;
+  /** Whether to detect logic patterns that shouldn't be in Lattice output. Default: true. */
+  readonly detectLogicPatterns?: boolean;
+}
+
+/**
+ * Patterns that indicate logic leakage (code that shouldn't be in Lattice output).
+ */
+const LOGIC_LEAKAGE_PATTERNS: {
+  pattern: RegExp;
+  description: string;
+  severity: 'error' | 'warning';
+}[] = [
+  {
+    pattern: /\bfetch\s*\(/,
+    description: 'Network call (fetch) detected - implementation logic',
+    severity: 'error',
+  },
+  {
+    pattern: /\bawait\s+(?!Promise\.)/,
+    description: 'Await expression detected - may indicate implementation logic',
+    severity: 'warning',
+  },
+  {
+    pattern: /\bfs\.\w+\s*\(/,
+    description: 'File system operation detected - implementation logic',
+    severity: 'error',
+  },
+  {
+    pattern: /\bconsole\.(log|warn|error|info)\s*\(/,
+    description: 'Console output detected - implementation logic',
+    severity: 'warning',
+  },
+  {
+    pattern: /\bfor\s*\(|\.forEach\s*\(|\.map\s*\(|\.filter\s*\(/,
+    description: 'Loop or array processing detected - possible implementation logic',
+    severity: 'warning',
+  },
+  {
+    pattern: /\bif\s*\(|\?\s*:/,
+    description: 'Conditional logic detected - possible implementation logic',
+    severity: 'warning',
+  },
+  {
+    pattern: /\btry\s*\{/,
+    description: 'Try-catch block detected - implementation logic',
+    severity: 'warning',
+  },
+  {
+    pattern: /\bnew\s+(?!Error\s*\(\s*['"]TODO['"]\s*\))/,
+    description: 'Object instantiation detected (not Error TODO) - implementation logic',
+    severity: 'warning',
+  },
+];
+
+/**
+ * Inspects a TypeScript file's AST to verify structural integrity.
+ *
+ * This function analyzes the AST of a TypeScript file to:
+ * - Enumerate all functions and their body status
+ * - Detect whether functions have TODO placeholder bodies
+ * - Find logic patterns that shouldn't exist in Lattice output
+ *
+ * @param filePath - Path to the TypeScript file to inspect.
+ * @param options - Inspection options.
+ * @returns The inspection result.
+ *
+ * @example
+ * ```typescript
+ * const result = await inspectAst('./generated/types.ts', {
+ *   checkFunctionBodies: true,
+ *   checkTodoPattern: true,
+ * });
+ *
+ * if (!result.passed) {
+ *   console.log('Logic leakage detected:', result.logicPatterns);
+ * }
+ * ```
+ */
+export function inspectAst(
+  filePath: string,
+  options: AstInspectionOptions = {}
+): AstInspectionResult {
+  const {
+    checkFunctionBodies = true,
+    checkTodoPattern = true,
+    detectLogicPatterns = true,
+  } = options;
+
+  // Create a project and add the file
+  const project = new Project({
+    compilerOptions: {
+      strict: true,
+      target: 99, // ScriptTarget.ESNext
+      module: 199, // ModuleKind.NodeNext
+    },
+  });
+
+  project.addSourceFilesAtPaths(filePath);
+  const sourceFile = project.getSourceFile(filePath);
+
+  if (!sourceFile) {
+    return {
+      functions: [],
+      logicPatterns: [
+        {
+          line: 0,
+          description: `Could not parse file: ${filePath}`,
+          severity: 'error',
+        },
+      ],
+      passed: false,
+    };
+  }
+
+  const inspectedFunctions: InspectedFunction[] = [];
+  const logicPatterns: LogicPattern[] = [];
+
+  // Collect all functions
+  const functions = collectFunctions(sourceFile);
+
+  for (const func of functions) {
+    const name = getFunctionName(func);
+    const line = func.getStartLineNumber();
+    const body = func.getBody();
+    const hasBody = body !== undefined;
+
+    // Compute strict isTodoBody: body must ONLY contain TODO patterns (nothing else)
+    let isTodoBody = false;
+    if (hasBody) {
+      const bodyText = body.getText();
+
+      // TODO-only patterns: entire body must match exactly
+      const todoOnlyPatterns = [
+        /^\{\s*\}$/, // Empty body {}
+        /^\{\s*throw\s+new\s+Error\s*\(\s*['"]TODO['"]\s*\)\s*;?\s*\}$/i, // Only throw new Error('TODO')
+      ];
+
+      isTodoBody = todoOnlyPatterns.some((pattern) => pattern.test(bodyText));
+    }
+
+    // hasTodoBody in InspectedFunction indicates presence of TODO marker
+    const hasTodoBody = hasBody && hasTodoMarker(func);
+
+    inspectedFunctions.push({
+      name,
+      line,
+      hasBody,
+      hasTodoBody,
+    });
+
+    // Check for non-TODO bodies when required
+    // Run LOGIC_LEAKAGE_PATTERNS scan only when not isTodoBody (strict check)
+    if (checkFunctionBodies && checkTodoPattern && hasBody && !isTodoBody) {
+      // This is a function with implementation - check if it's allowed
+      // For Lattice output, only TODO bodies should exist
+      // body is guaranteed to exist since hasBody is true
+      const bodyText = body.getText();
+
+      if (detectLogicPatterns) {
+        // Use unique context key including file path and line number
+        const contextKey = `${filePath}:${String(line)}:${name}`;
+
+        // Check for specific logic patterns
+        for (const { pattern, description, severity } of LOGIC_LEAKAGE_PATTERNS) {
+          if (pattern.test(bodyText)) {
+            logicPatterns.push({
+              line,
+              description,
+              context: contextKey,
+              severity,
+            });
+          }
+        }
+
+        // If no specific pattern matched but body is not TODO-only, flag it
+        if (
+          logicPatterns.filter((p) => p.context === contextKey).length === 0 &&
+          !bodyText.includes("throw new Error('TODO')") &&
+          !bodyText.includes('throw new Error("TODO")')
+        ) {
+          logicPatterns.push({
+            line,
+            description: 'Function has implementation body instead of TODO placeholder',
+            context: contextKey,
+            severity: 'error',
+          });
+        }
+      }
+    }
+  }
+
+  // Determine if inspection passed
+  const hasErrors = logicPatterns.some((p) => p.severity === 'error');
+
+  // Build result conditionally to satisfy exactOptionalPropertyTypes
+  if (logicPatterns.length > 0) {
+    return {
+      functions: inspectedFunctions,
+      logicPatterns,
+      passed: !hasErrors,
+    };
+  }
+
+  return {
+    functions: inspectedFunctions,
+    passed: !hasErrors,
+  };
+}
