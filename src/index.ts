@@ -49,3 +49,39 @@ export function placeholder(): string {
 export function greet(name: string): string {
   return `Hello, ${name}!`;
 }
+
+// Interview module exports for programmatic interview API
+export {
+  InterviewEngine,
+  InterviewEngineError,
+  type InterviewEngineErrorCode,
+  type ValidationDetail,
+  type CurrentQuestion,
+  type QuestionType,
+  type BaseAnswerResponse,
+  type OpenTextResponse,
+  type DelegationAnswerResponse,
+  type ApprovalAnswerResponse,
+  type AnswerResponse,
+  type AnswerResult,
+  type InterviewEngineState,
+} from './interview/engine.js';
+
+// Interview types for programmatic access
+export {
+  type InterviewState,
+  type InterviewPhase,
+  type DelegationDecision,
+  type DelegationPoint,
+  type ExtractedRequirement,
+  type TranscriptEntry,
+  type TranscriptRole,
+  INTERVIEW_PHASES,
+  INTERVIEW_STATE_VERSION,
+  isValidInterviewPhase,
+  getInterviewPhaseIndex,
+  getNextInterviewPhase,
+  isInterviewComplete,
+  createInitialInterviewState,
+  createTranscriptEntry,
+} from './interview/types.js';

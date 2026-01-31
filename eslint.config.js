@@ -33,6 +33,13 @@ export default tseslint.config(
     },
   },
   {
-    ignores: ['dist/**', 'node_modules/**', 'test-fixtures/**', '*.js', 'vitest.config.ts'],
+    ignores: [
+      'dist/**',
+      'node_modules/**',
+      'test-fixtures/**',
+      '*.js',
+      'vitest.config.ts',
+      '.claude/**',
+    ],
   }
 );

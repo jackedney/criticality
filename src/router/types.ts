@@ -607,9 +607,10 @@ export interface ModelRouter {
    *
    * @param modelAlias - The model alias to route to.
    * @param prompt - The prompt text.
+   * @param timeoutMs - Optional timeout in milliseconds for this request.
    * @returns A result containing the response or an error.
    */
-  prompt(modelAlias: ModelAlias, prompt: string): Promise<ModelRouterResult>;
+  prompt(modelAlias: ModelAlias, prompt: string, timeoutMs?: number): Promise<ModelRouterResult>;
 
   /**
    * Send a complete request with parameters.

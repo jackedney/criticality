@@ -6,6 +6,8 @@
  * @packageDocumentation
  */
 
+import type { FeatureClassification } from '../interview/types.js';
+
 /**
  * Supported implementation languages.
  */
@@ -26,6 +28,20 @@ export type ClaimType =
  * Trust level for witness constructors.
  */
 export type TrustLevel = 'safe' | 'unsafe';
+
+/**
+ * A feature in the specification with its classification.
+ */
+export interface SpecFeature {
+  /** Feature name. */
+  name: string;
+  /** Description of the feature. */
+  description: string;
+  /** Classification determining how the feature is handled in Lattice. */
+  classification: FeatureClassification;
+  /** Optional rationale for the classification. */
+  rationale?: string;
+}
 
 /**
  * Metadata about the specification.
@@ -239,6 +255,8 @@ export interface Spec {
   system: SpecSystem;
   /** System boundary definitions. */
   boundaries?: SpecBoundaries;
+  /** Features with their classifications (core/foundational/bolt-on). */
+  features?: Record<string, SpecFeature>;
   /** Enumeration type definitions. */
   enums?: Record<string, SpecEnum>;
   /** Domain data model definitions. */
