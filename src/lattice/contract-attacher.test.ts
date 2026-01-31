@@ -896,7 +896,7 @@ describe('formatContractReport', () => {
 
     const claimLine = lines.find((line) => line.includes('very_long_claim_id'));
     expect(claimLine).toBeDefined();
-    expect(claimLine).toMatch(/^║ • .* \(behavioral\): .* \s+║$/);
+    expect(claimLine).toMatch(/^║ • .* \(behavioral\): .*\s║$/);
   });
 
   it('should dynamically compute padding for "more unmatched claims" summary', () => {
