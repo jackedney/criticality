@@ -903,12 +903,29 @@ export function attachContractsToCode(
     }
 
     // Look up contract by function name
-    // Try multiple key formats since interface.method is the primary format
+    // Priority: exact key match first, then suffix matches
     let contract: GeneratedContract | undefined;
-    for (const [key, c] of contracts) {
-      if (key.endsWith(`.${m.funcName}`) || key === m.funcName) {
-        contract = c;
-        break;
+
+    // Try exact match first
+    contract = contracts.get(m.funcName);
+
+    // If no exact match, collect all suffix matches
+    if (contract === undefined) {
+      const suffixMatches: [string, GeneratedContract][] = [];
+      for (const [key, c] of contracts) {
+        if (key.endsWith(`.${m.funcName}`)) {
+          suffixMatches.push([key, c]);
+        }
+      }
+
+      if (suffixMatches.length === 1 && suffixMatches[0] !== undefined) {
+        contract = suffixMatches[0][1];
+      } else if (suffixMatches.length > 1) {
+        // Ambiguity - skip and log
+        // eslint-disable-next-line no-console -- console.warn is appropriate for ambiguity warnings
+        console.warn(
+          `Ambiguous contract match for "${m.funcName}": found ${String(suffixMatches.length)} candidates (${suffixMatches.map(([k]) => k).join(', ')}). Skipping.`
+        );
       }
     }
 

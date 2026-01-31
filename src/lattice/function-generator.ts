@@ -833,7 +833,8 @@ export function generateFunctionsForInterface(
   interfaceName: string,
   options: FunctionGeneratorOptions = {}
 ): FunctionGenerationResult {
-  if (spec.interfaces?.[interfaceName] === undefined) {
+  const iface = spec.interfaces[interfaceName];
+  if (iface === undefined) {
     throw new Error(`Interface '${interfaceName}' not found in spec`);
   }
 
@@ -841,7 +842,7 @@ export function generateFunctionsForInterface(
   const filteredSpec: Spec = {
     ...spec,
     interfaces: {
-      [interfaceName]: spec.interfaces[interfaceName],
+      [interfaceName]: iface,
     },
   };
 
