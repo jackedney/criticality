@@ -873,7 +873,7 @@ export function attachContractsToCode(
 
   // Pattern to match function declarations that might need contracts
   // Matches: export (async)? function name(...
-  const functionPattern = /^(\/\*\*[\s\S]*?\*\/\s*)?^(export\s+(?:async\s+)?function\s+(\w+))/gm;
+  const functionPattern = /^(\/\*\*[\s\S]*?\*\/\s*)?(export\s+(?:async\s+)?function\s+(\w+))/gm;
 
   // Find all function declarations and their positions
   const matches: {

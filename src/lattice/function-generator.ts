@@ -419,18 +419,11 @@ export function generateFunctionSignature(
 
   // Parse return type
   const returnTypeParsed = parseSpecReturnType(method.returns);
-  let returnType = returnTypeParsed.type;
-  let isAsync = false;
+  const returnType = returnTypeParsed.type;
 
-  // Check if return type is Promise or async-like
-  if (returnType.startsWith('Promise<')) {
-    isAsync = asyncForPromise;
-  }
-
-  // If return type is Result, we might want to wrap in Promise for async functions
-  if (returnTypeParsed.isResult && !returnType.startsWith('Promise<') && isAsync) {
-    returnType = `Promise<${returnType}>`;
-  }
+  // Determine async from Promise return type (asyncForPromise option controls this)
+  const isPromiseType = returnType.startsWith('Promise<');
+  const isAsync = asyncForPromise && isPromiseType;
 
   const typeParameters: TypeParameterInfo[] = [];
 
@@ -494,6 +487,10 @@ function generateJsDoc(
         lines.push(` * @ensures ${contract}`);
       } else if (lowerContract.startsWith('invariant')) {
         lines.push(` * @invariant ${contract}`);
+      } else if (lowerContract.startsWith('complexity')) {
+        lines.push(` * @complexity ${contract}`);
+      } else if (lowerContract.startsWith('purity')) {
+        lines.push(` * @purity ${contract}`);
       } else {
         lines.push(` * @contract ${contract}`);
       }
