@@ -443,8 +443,8 @@ export function checkCircuitBreaker(
       };
     }
 
-    // Check: max attempts exceeded
-    if (funcState.totalAttempts > config.maxAttemptsPerFunction) {
+    // Check: max attempts reached
+    if (funcState.totalAttempts >= config.maxAttemptsPerFunction) {
       return {
         shouldTrip: true,
         tripReason: {
