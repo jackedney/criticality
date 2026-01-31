@@ -942,6 +942,22 @@ export function inspectAst(
     const line = func.getStartLineNumber();
     const body = func.getBody();
     const hasBody = body !== undefined;
+
+    // Compute strict isTodoBody: body must ONLY contain TODO patterns (nothing else)
+    let isTodoBody = false;
+    if (hasBody) {
+      const bodyText = body.getText();
+
+      // TODO-only patterns: entire body must match exactly
+      const todoOnlyPatterns = [
+        /^\{\s*\}$/, // Empty body {}
+        /^\{\s*throw\s+new\s+Error\s*\(\s*['"]TODO['"]\s*\)\s*;?\s*\}$/i, // Only throw new Error('TODO')
+      ];
+
+      isTodoBody = todoOnlyPatterns.some((pattern) => pattern.test(bodyText));
+    }
+
+    // hasTodoBody in InspectedFunction indicates presence of TODO marker
     const hasTodoBody = hasBody && hasTodoMarker(func);
 
     inspectedFunctions.push({
@@ -952,43 +968,39 @@ export function inspectAst(
     });
 
     // Check for non-TODO bodies when required
-    if (checkFunctionBodies && checkTodoPattern && hasBody && !hasTodoBody) {
+    // Run LOGIC_LEAKAGE_PATTERNS scan only when not isTodoBody (strict check)
+    if (checkFunctionBodies && checkTodoPattern && hasBody && !isTodoBody) {
       // This is a function with implementation - check if it's allowed
       // For Lattice output, only TODO bodies should exist
       // body is guaranteed to exist since hasBody is true
       const bodyText = body.getText();
 
-      // Allow empty bodies and single return statements of simple types
-      const allowedPatterns = [
-        /^\{\s*\}$/, // Empty body {}
-        /^\{\s*throw\s+new\s+Error\s*\(\s*['"]TODO['"]\s*\)\s*;?\s*\}$/i, // throw new Error('TODO')
-      ];
+      if (detectLogicPatterns) {
+        // Use unique context key including file path and line number
+        const contextKey = `${filePath}:${String(line)}:${name}`;
 
-      const isAllowed = allowedPatterns.some((pattern) => pattern.test(bodyText));
-
-      if (!isAllowed && detectLogicPatterns) {
         // Check for specific logic patterns
         for (const { pattern, description, severity } of LOGIC_LEAKAGE_PATTERNS) {
           if (pattern.test(bodyText)) {
             logicPatterns.push({
               line,
               description,
-              context: name,
+              context: contextKey,
               severity,
             });
           }
         }
 
-        // If no specific pattern matched but body is not TODO, flag it
+        // If no specific pattern matched but body is not TODO-only, flag it
         if (
-          logicPatterns.filter((p) => p.context === name).length === 0 &&
+          logicPatterns.filter((p) => p.context === contextKey).length === 0 &&
           !bodyText.includes("throw new Error('TODO')") &&
           !bodyText.includes('throw new Error("TODO")')
         ) {
           logicPatterns.push({
             line,
             description: 'Function has implementation body instead of TODO placeholder',
-            context: name,
+            context: contextKey,
             severity: 'error',
           });
         }
