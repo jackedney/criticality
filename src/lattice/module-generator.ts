@@ -20,6 +20,11 @@ import type {
   ProjectConventions,
 } from './types.js';
 import { ModuleGeneratorError } from './types.js';
+import {
+  mapSpecTypeToTypeScript,
+  parseSpecParameter,
+  parseSpecReturnType,
+} from './function-generator.js';
 
 /**
  * Default options for module generation.
@@ -450,7 +455,7 @@ function generateTypesFile(
         }
         lines.push(`   */`);
       }
-      lines.push(`  readonly ${field.name}: ${field.type};`);
+      lines.push(`  readonly ${field.name}: ${mapSpecTypeToTypeScript(field.type)};`);
     }
 
     lines.push(`}`);
@@ -494,6 +499,12 @@ function generateInterfacesFile(
     lines.push(`export interface ${interfaceName} {`);
 
     for (const method of iface.methods) {
+      // Parse parameters
+      const parsedParams = method.params?.map((p) => parseSpecParameter(p)) ?? [];
+
+      // Parse return type
+      const parsedReturnType = parseSpecReturnType(method.returns);
+
       // Generate method signature with JSDoc
       lines.push(`  /**`);
       if (method.description !== undefined) {
@@ -502,13 +513,8 @@ function generateInterfacesFile(
       }
 
       // Document parameters
-      if (method.params !== undefined && method.params.length > 0) {
-        for (const param of method.params) {
-          const [paramName] = param.split(':').map((s) => s.trim());
-          if (paramName !== undefined) {
-            lines.push(`   * @param ${paramName} - TODO: Add description`);
-          }
-        }
+      for (const param of parsedParams) {
+        lines.push(`   * @param ${param.name} - TODO: Add description`);
       }
 
       // Document return type
@@ -526,8 +532,10 @@ function generateInterfacesFile(
       lines.push(`   */`);
 
       // Generate method signature
-      const params = method.params?.join(', ') ?? '';
-      lines.push(`  ${method.name}(${params}): ${method.returns};`);
+      const params = parsedParams
+        .map((p) => `${p.name}${p.isOptional ? '?' : ''}: ${p.type}`)
+        .join(', ');
+      lines.push(`  ${method.name}(${params}): ${parsedReturnType.type};`);
       lines.push(``);
     }
 

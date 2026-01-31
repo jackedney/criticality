@@ -48,5 +48,6 @@ logs/
 .agents/
 .ralph/
 .serena/
+.claude/
 \n# Archive\narchive/\n
 .claude/
