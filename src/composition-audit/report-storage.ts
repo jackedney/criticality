@@ -196,8 +196,8 @@ export async function saveContradictionReport(
   options?: ContradictionReportStorageOptions
 ): Promise<string> {
   const opts: Required<ContradictionReportStorageOptions> = {
-    ...DEFAULT_STORAGE_OPTIONS,
-    ...options,
+    format: options?.format ?? DEFAULT_STORAGE_OPTIONS.format,
+    pretty: options?.pretty ?? DEFAULT_STORAGE_OPTIONS.pretty,
   };
 
   await ensureAuditDir(report.projectId);
@@ -358,6 +358,19 @@ function parseReportContent(content: string, filePath: string): ContradictionRep
 }
 
 /**
+ * Type guard to check if an error has a specific error code.
+ *
+ * @param error - The error to check.
+ * @param code - The error code to look for.
+ * @returns True if the error has the specified code.
+ */
+function hasErrorCode(error: unknown, code: string): error is Error & { code: string } {
+  return (
+    error instanceof Error && 'code' in error && (error as Error & { code?: string }).code === code
+  );
+}
+
+/**
  * Lists all contradiction reports for a project.
  *
  * @param projectId - The project identifier.
@@ -410,8 +423,7 @@ export async function listContradictionReports(projectId: string): Promise<strin
     return result;
   } catch (error) {
     const fileError = error instanceof Error ? error : new Error(String(error));
-    const isNotFound =
-      'code' in fileError && (fileError as Error & { code?: string }).code === 'ENOENT';
+    const isNotFound = hasErrorCode(error, 'ENOENT');
 
     if (isNotFound) {
       return [];

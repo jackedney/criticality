@@ -5,11 +5,18 @@
  */
 
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+import * as fc from 'fast-check';
 import { mkdir, rm, readFile, writeFile, utimes } from 'node:fs/promises';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import * as yamlModule from 'js-yaml';
-import type { ContradictionReport } from './types.js';
+import type {
+  ContradictionReport,
+  Contradiction,
+  ContradictionType,
+  ContradictionSeverity,
+  InvolvedElement,
+} from './types.js';
 import {
   saveContradictionReport,
   loadContradictionReport,
@@ -125,6 +132,91 @@ describe('Report Storage', () => {
 
       expect(compact.length).toBeLessThan(pretty.length);
       expect(compact).not.toContain('\n');
+    });
+
+    it('preserves structure through serialization/deserialization', () => {
+      const arbContradictionType = fc.constantFrom<ContradictionType>(
+        'temporal',
+        'resource',
+        'invariant',
+        'precondition_gap',
+        'postcondition_conflict'
+      );
+      const arbSeverity = fc.constantFrom<ContradictionSeverity>('critical', 'warning');
+      const arbElementType = fc.constantFrom<InvolvedElement['elementType']>(
+        'constraint',
+        'contract',
+        'witness',
+        'claim'
+      );
+
+      const arbInvolvedElement: fc.Arbitrary<InvolvedElement> = fc.oneof(
+        fc.record({
+          elementType: arbElementType,
+          id: fc.string(),
+          name: fc.string(),
+          text: fc.string(),
+        }),
+        fc.record({
+          elementType: arbElementType,
+          id: fc.string(),
+          name: fc.string(),
+          text: fc.string(),
+          location: fc.string(),
+        })
+      );
+
+      const arbContradiction: fc.Arbitrary<Contradiction> = fc.record({
+        id: fc.string(),
+        type: arbContradictionType,
+        severity: arbSeverity,
+        description: fc.string(),
+        involved: fc.array(arbInvolvedElement),
+        analysis: fc.string(),
+        minimalScenario: fc.string(),
+        suggestedResolutions: fc.array(fc.string()),
+      });
+
+      fc.assert(
+        fc.property(fc.array(arbContradiction), (contradictions) => {
+          const report = createContradictionReport(
+            testProjectId,
+            contradictions,
+            'Property test summary',
+            false
+          );
+          const json = serializeReportToJson(report, true);
+          const parsed = JSON.parse(json) as ContradictionReport;
+
+          expect(parsed.contradictions).toHaveLength(contradictions.length);
+          expect(parsed.id).toBeDefined();
+          expect(parsed.projectId).toBe(testProjectId);
+          expect(parsed.version).toBeDefined();
+          expect(parsed.generatedAt).toBeDefined();
+          expect(parsed.summary).toBe('Property test summary');
+          expect(parsed.crossVerified).toBe(false);
+          expect(parsed.stats.total).toBe(contradictions.length);
+          expect(parsed.stats.critical).toBe(
+            contradictions.filter((c) => c.severity === 'critical').length
+          );
+          expect(parsed.stats.warning).toBe(
+            contradictions.filter((c) => c.severity === 'warning').length
+          );
+
+          for (let i = 0; i < contradictions.length; i++) {
+            const original = contradictions.at(i);
+            const restored = parsed.contradictions.at(i);
+            expect(restored).toBeDefined();
+            if (restored && original) {
+              expect(restored.id).toBe(original.id);
+              expect(restored.type).toBe(original.type);
+              expect(restored.severity).toBe(original.severity);
+              expect(restored.description).toBe(original.description);
+              expect(restored.involved).toHaveLength(original.involved.length);
+            }
+          }
+        })
+      );
     });
   });
 
@@ -327,8 +419,8 @@ describe('Report Storage', () => {
       const reports = await listContradictionReports(testProjectId);
 
       // Newest first
-      expect(reports[0]).toBe(report2.id);
-      expect(reports[1]).toBe(report1.id);
+      expect(reports.at(0)).toBe(report2.id);
+      expect(reports.at(1)).toBe(report1.id);
     });
   });
 
