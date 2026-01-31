@@ -393,13 +393,7 @@ export async function runSecurityScan(options: SecurityScanOptions): Promise<Sec
     return scanResult;
   } catch (error) {
     logger(`  Security scan error: ${error instanceof Error ? error.message : String(error)}`);
-
-    return {
-      hasVulnerabilities: false,
-      hasCriticalVulnerabilities: false,
-      vulnerabilities: [],
-      durationMs: Date.now() - startTime,
-    };
+    throw error;
   }
 }
 

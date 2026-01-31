@@ -588,6 +588,9 @@ export function add(a: number, b: number): number {
       })
     );
 
+    // Create eslint config
+    await fs.writeFile(path.join(tempDir, 'eslint.config.js'), 'export default [];\n');
+
     const mockRouter = createMockModelRouter('return a + b;');
     mockRunTypeCheck.mockResolvedValue(createSuccessTypeCheck());
     // No test file, so tests won't be run
@@ -707,6 +710,9 @@ describe('add', () => {
       })
     );
 
+    // Create eslint config
+    await fs.writeFile(path.join(tempDir, 'eslint.config.js'), 'export default [];\n');
+
     // Return wrong implementation
     const mockRouter = createMockModelRouter('return a - b;'); // Wrong!
     mockRunTypeCheck.mockResolvedValue(createSuccessTypeCheck());
@@ -799,6 +805,9 @@ describe('add', () => {
       })
     );
 
+    // Create eslint config
+    await fs.writeFile(path.join(tempDir, 'eslint.config.js'), 'export default [];\n');
+
     // Return valid implementation - example from acceptance criteria
     const mockRouter = createMockModelRouter('return arr.sort();');
     mockRunTypeCheck.mockResolvedValue(createSuccessTypeCheck());
@@ -846,6 +855,9 @@ describe('add', () => {
         include: ['src/**/*.ts'],
       })
     );
+
+    // Create eslint config
+    await fs.writeFile(path.join(tempDir, 'eslint.config.js'), 'export default [];\n');
 
     const mockRouter = createMockModelRouter(new Error('API rate limit exceeded'));
 

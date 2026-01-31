@@ -236,49 +236,42 @@ describe('security-scanner', () => {
     it('handles empty files list', async () => {
       const logger = vi.fn();
 
-      const result = await runSecurityScan({
-        projectPath: '/test/project',
-        files: [],
-        logger,
-      });
+      await expect(
+        runSecurityScan({
+          projectPath: '/test/project',
+          files: [],
+          logger,
+        })
+      ).rejects.toThrow();
 
       expect(logger).toHaveBeenCalledWith('Running security vulnerability scan...');
-      expect(result).toMatchObject({
-        hasVulnerabilities: false,
-        hasCriticalVulnerabilities: false,
-        vulnerabilities: [],
-      });
-      expect(result.durationMs).toBeGreaterThan(0);
     });
 
-    it('handles scan errors gracefully', async () => {
+    it('throws error on scan failure', async () => {
       const logger = vi.fn();
 
-      const result = await runSecurityScan({
-        projectPath: '/nonexistent/path',
-        files: ['/nonexistent/file.ts'],
-        logger,
-      });
+      await expect(
+        runSecurityScan({
+          projectPath: '/nonexistent/path',
+          files: ['/nonexistent/file.ts'],
+          logger,
+        })
+      ).rejects.toThrow();
 
-      // Should not throw, but return empty result
-      expect(result).toMatchObject({
-        hasVulnerabilities: false,
-        hasCriticalVulnerabilities: false,
-        vulnerabilities: [],
-      });
+      expect(logger).toHaveBeenCalledWith(expect.stringContaining('Security scan error:'));
     });
 
     it('continues scanning when failFastOnCritical is false', async () => {
       const logger = vi.fn();
 
-      const result = await runSecurityScan({
-        projectPath: '/test/project',
-        failFastOnCritical: false,
-        logger,
-      });
+      await expect(
+        runSecurityScan({
+          projectPath: '/test/project',
+          failFastOnCritical: false,
+          logger,
+        })
+      ).rejects.toThrow();
 
-      // Should not throw, but return result
-      expect(result).toBeDefined();
       expect(logger).toHaveBeenCalledWith('Running security vulnerability scan...');
     });
   });
