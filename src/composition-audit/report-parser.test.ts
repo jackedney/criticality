@@ -759,8 +759,10 @@ summary: Found 1 critical temporal contradiction`;
       process.env.PARSE_WITH_JSYAML = originalParseWithJsYaml;
     });
 
-    it('uses default YAML parser when PARSE_WITH_JSYAML is not set', () => {
+    it('uses default YAML parser when PARSE_WITH_JSYAML is not set', async () => {
       delete process.env.PARSE_WITH_JSYAML;
+      vi.resetModules();
+      const freshParser = await import('./report-parser.js');
       const yamlContent = `hasContradictions: true
 contradictions:
   - type: temporal
@@ -776,13 +778,16 @@ contradictions:
     suggestedResolutions: []
 summary: Test`;
 
-      const result = parseContradictionOutput(yamlContent);
+      const result = freshParser.parseContradictionOutput(yamlContent);
 
       expect(result.success).toBe(true);
     });
 
-    it('uses js-yaml parser when PARSE_WITH_JSYAML is set to true', () => {
+    it('uses js-yaml parser when PARSE_WITH_JSYAML is set to true', async () => {
       process.env.PARSE_WITH_JSYAML = 'true';
+      vi.resetModules();
+      const freshParser = await import('./report-parser.js');
+      await new Promise((resolve) => setTimeout(resolve, 100));
       const yamlContent = `hasContradictions: true
 contradictions:
   - type: temporal
@@ -798,13 +803,16 @@ contradictions:
     suggestedResolutions: []
 summary: Test`;
 
-      const result = parseContradictionOutput(yamlContent);
+      const result = freshParser.parseContradictionOutput(yamlContent);
 
       expect(result.success).toBe(true);
     });
 
-    it('parses YAML from markdown code block with js-yaml', () => {
+    it('parses YAML from markdown code block with js-yaml', async () => {
       process.env.PARSE_WITH_JSYAML = 'true';
+      vi.resetModules();
+      const freshParser = await import('./report-parser.js');
+      await new Promise((resolve) => setTimeout(resolve, 100));
       const yamlContent = `\`\`\`yaml
 hasContradictions: true
 contradictions:
@@ -822,7 +830,7 @@ contradictions:
 summary: Test
 \`\`\``;
 
-      const result = parseContradictionOutput(yamlContent);
+      const result = freshParser.parseContradictionOutput(yamlContent);
 
       expect(result.success).toBe(true);
     });

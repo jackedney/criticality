@@ -36,7 +36,8 @@ const DEFAULT_OPTIONS: Required<CompositionAuditOptions> = {
   enableCrossVerification: true,
   complexityThreshold: 3,
   timeoutMs: 120000,
-  logger: console.warn,
+  // eslint-disable-next-line @typescript-eslint/no-empty-function
+  logger: (_message: string) => {},
 };
 
 /**
@@ -517,7 +518,7 @@ export async function detectContradictions(
   // Call auditor_model to detect contradictions
   const auditorPrompt = `${createContradictionAuditorSystemPrompt()}\n\n${createContradictionAuditorUserPrompt(input)}`;
 
-  const auditorResult = await modelRouter.prompt('auditor', auditorPrompt);
+  const auditorResult = await modelRouter.prompt('auditor', auditorPrompt, opts.timeoutMs);
 
   if (!auditorResult.success) {
     opts.logger(
@@ -558,7 +559,11 @@ export async function detectContradictions(
   ) {
     const crossVerifyPrompt = `${createCrossVerificationSystemPrompt()}\n\n${createCrossVerificationUserPrompt(parsed.contradictions, input)}`;
 
-    const architectResult = await modelRouter.prompt('architect', crossVerifyPrompt);
+    const architectResult = await modelRouter.prompt(
+      'architect',
+      crossVerifyPrompt,
+      opts.timeoutMs
+    );
 
     if (architectResult.success) {
       const verifications = parseCrossVerificationResponse(architectResult.response.content);
