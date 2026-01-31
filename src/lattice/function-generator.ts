@@ -833,6 +833,9 @@ export function generateFunctionsForInterface(
   interfaceName: string,
   options: FunctionGeneratorOptions = {}
 ): FunctionGenerationResult {
+  if (!spec.interfaces) {
+    throw new Error('Spec has no interfaces defined');
+  }
   const iface = spec.interfaces[interfaceName];
   if (iface === undefined) {
     throw new Error(`Interface '${interfaceName}' not found in spec`);
