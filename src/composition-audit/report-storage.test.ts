@@ -267,17 +267,12 @@ describe('Report Storage', () => {
       expect(latest?.id).toBe(report.id);
     });
 
-    it('returns most recent after multiple saves', async () => {
+    it('returns last saved report', async () => {
       const report1 = createTestReport();
       await saveContradictionReport(report1);
 
       const report2 = createTestReport();
       await saveContradictionReport(report2);
-
-      // Set report1's mtime to be older than report2
-      const report1Path = getReportPath(testProjectId, report1.id, 'json');
-      const now = new Date();
-      await utimes(report1Path, now, new Date(now.getTime() - 10000));
 
       const latest = await loadLatestContradictionReport(testProjectId);
 

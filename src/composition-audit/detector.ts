@@ -306,7 +306,10 @@ function parseCrossVerificationResponse(content: string): CrossVerificationResul
           continue;
         }
 
-        const confirmed = item.confirmed === true;
+        const confirmed = item.confirmed;
+        if (typeof confirmed !== 'boolean') {
+          continue;
+        }
 
         const baseResult: CrossVerificationResult = {
           contradictionId,

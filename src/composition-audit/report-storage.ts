@@ -8,6 +8,7 @@
  */
 
 import { writeFile, readFile, mkdir, readdir, stat, rename, unlink } from 'node:fs/promises';
+import { realpathSync } from 'node:fs';
 import { join, dirname, resolve } from 'node:path';
 import { homedir } from 'node:os';
 import { randomUUID } from 'node:crypto';
@@ -89,9 +90,9 @@ export function getAuditDir(projectId: string): string {
 
   const auditDir = join(getCriticalityBaseDir(), 'projects', projectId, 'audit');
   const resolvedPath = resolve(auditDir);
-  const basePath = getCriticalityBaseDir();
+  const resolvedBase = realpathSync(getCriticalityBaseDir());
 
-  if (!resolvedPath.startsWith(basePath)) {
+  if (!resolvedPath.startsWith(resolvedBase)) {
     throw new Error(`Invalid projectId: path traversal detected.`);
   }
 
