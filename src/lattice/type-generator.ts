@@ -137,6 +137,86 @@ function splitGenericArgs(args: string): string[] {
 }
 
 /**
+ * Extracts all type identifiers from a composite type string.
+ *
+ * Handles arrays ("Status[]"), generics ("Map<string, UserStatus>"),
+ * unions ("A | B"), and nested combinations.
+ *
+ * @param typeStr - The type string to parse.
+ * @returns An array of extracted type identifiers.
+ */
+function parseTypeIdentifiers(typeStr: string): string[] {
+  const identifiers: string[] = [];
+  // Primitives and container types to exclude from extracted identifiers
+  const primitives = new Set([
+    'string',
+    'number',
+    'boolean',
+    'null',
+    'undefined',
+    'void',
+    'any',
+    'unknown',
+    'never',
+    'object',
+    'bigint',
+    'symbol',
+    // Container types
+    'map',
+    'set',
+    'array',
+    'promise',
+    'record',
+    'partial',
+    'required',
+    'readonly',
+    'pick',
+    'omit',
+    'exclude',
+    'extract',
+  ]);
+
+  // Remove array brackets to get base type
+  const cleaned = typeStr.replace(/\[\]/g, '');
+
+  // Split by union (|) and intersection (&) operators
+  const unionParts = cleaned.split(/\s*[|&]\s*/);
+
+  for (const part of unionParts) {
+    const trimmedPart = part.trim();
+    if (trimmedPart === '') {
+      continue;
+    }
+
+    // Check for generic type: TypeName<...>
+    const genericMatch = /^([A-Za-z_][A-Za-z0-9_]*)\s*<(.+)>$/.exec(trimmedPart);
+    if (genericMatch !== null) {
+      const baseName = genericMatch[1];
+      const argsStr = genericMatch[2];
+
+      // Add base type if not primitive
+      if (!primitives.has(baseName.toLowerCase())) {
+        identifiers.push(baseName);
+      }
+
+      // Recursively extract identifiers from generic arguments
+      const args = splitGenericArgs(argsStr);
+      for (const arg of args) {
+        identifiers.push(...parseTypeIdentifiers(arg));
+      }
+    } else {
+      // Simple type (possibly with parentheses for grouping)
+      const simpleType = trimmedPart.replace(/[()]/g, '').trim();
+      if (simpleType !== '' && !primitives.has(simpleType.toLowerCase())) {
+        identifiers.push(simpleType);
+      }
+    }
+  }
+
+  return identifiers;
+}
+
+/**
  * Maps a spec field type to a TypeScript type.
  *
  * @param specType - The type from the spec.
@@ -288,7 +368,8 @@ function parseConstraint(constraint: string): ParsedConstraint {
   }
 
   // Pattern: pattern(regex), regex(pattern), /pattern/
-  const patternMatch = /^(?:pattern|regex)\s*\(\s*["'/]?(.+?)["'/]?\s*\)$/.exec(trimmed);
+  // Use original (not lowercased) string to preserve case in regex patterns
+  const patternMatch = /^(?:pattern|regex)\s*\(\s*["'/]?(.+?)["'/]?\s*\)$/i.exec(original);
   if (patternMatch?.[1] !== undefined) {
     return { type: 'pattern', params: { pattern: patternMatch[1] }, original };
   }
@@ -963,8 +1044,12 @@ export function generateDomainTypeDefinitions(
       continue;
     }
     for (const field of model.fields) {
-      // Add field type as a reference
-      referencedTypes.add(field.type);
+      // Parse field.type to extract all referenced type identifiers
+      // This handles arrays (Status[]), generics (Map<string, UserStatus>), unions (A | B), etc.
+      const identifiers = parseTypeIdentifiers(field.type);
+      for (const identifier of identifiers) {
+        referencedTypes.add(identifier);
+      }
     }
   }
 
