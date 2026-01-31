@@ -3,9 +3,9 @@
  */
 
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import { mkdir, rm } from 'node:fs/promises';
+import { mkdir, mkdtemp, rm } from 'node:fs/promises';
 import { join } from 'node:path';
-import { homedir } from 'node:os';
+import os from 'node:os';
 import {
   formatSectionHeader,
   formatSubsectionHeader,
@@ -623,11 +623,16 @@ describe('Interview CLI', () => {
     let mockWriter: OutputWriter;
     let outputLines: string[];
     let inputQueue: string[];
+    let tempDir: string;
 
     beforeEach(async () => {
+      // Create temp directory and mock homedir to use it
+      tempDir = await mkdtemp(join(os.tmpdir(), 'criticality-test-'));
+      vi.spyOn(os, 'homedir').mockReturnValue(tempDir);
+
       projectId = `test-project-${String(Date.now())}`;
 
-      // Create mock project directory
+      // Create mock project directory inside temp homedir
       const interviewDir = getInterviewDir(projectId);
       await mkdir(interviewDir, { recursive: true });
 
@@ -655,9 +660,11 @@ describe('Interview CLI', () => {
     });
 
     afterEach(async () => {
-      // Clean up project directory
-      const critDir = join(homedir(), '.criticality', 'projects', projectId);
-      await rm(critDir, { recursive: true, force: true }).catch((): void => {
+      // Restore homedir mock before cleanup
+      vi.restoreAllMocks();
+
+      // Clean up temp directory
+      await rm(tempDir, { recursive: true, force: true }).catch((): void => {
         // Ignore cleanup errors
       });
     });

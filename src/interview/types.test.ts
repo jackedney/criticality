@@ -167,7 +167,9 @@ describe('createTranscriptEntry', () => {
   it('should create transcript entry with all fields', () => {
     const entry = createTranscriptEntry('Discovery', 'user', 'Hello, I want to build an app');
 
-    expect(entry.id).toMatch(/^transcript_\d+_[a-z0-9]+$/);
+    expect(entry.id).toMatch(
+      /^transcript_[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/
+    );
     expect(entry.phase).toBe('Discovery');
     expect(entry.role).toBe('user');
     expect(entry.content).toBe('Hello, I want to build an app');

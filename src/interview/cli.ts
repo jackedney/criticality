@@ -1220,20 +1220,37 @@ export class InterviewCli {
     }
 
     if (decision === 'ApproveWithConditions') {
-      const conditionsResult = await this.prompt({
-        message: 'Please specify your conditions (one per line, empty line to finish):',
-        allowEmpty: true,
-      });
+      this.writeLine('Please specify your conditions (one per line, empty line to finish):');
 
-      if (conditionsResult.quit) {
-        return false;
+      const conditions: string[] = [];
+      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition
+      while (true) {
+        const lineResult = await this.prompt({
+          message: '>',
+          allowEmpty: true,
+        });
+
+        if (lineResult.quit) {
+          return false;
+        }
+
+        if (lineResult.input.trim() === '') {
+          break;
+        }
+
+        conditions.push(lineResult.input.trim());
+      }
+
+      if (conditions.length === 0) {
+        this.writeLine(formatWarning('No conditions provided. Please try again.'));
+        return await this.handleApproval();
       }
 
       // Record conditional approval
       const entry = createTranscriptEntry(
         'Approval',
         'user',
-        `[Approval] Approved with conditions: ${conditionsResult.input}`
+        `[Approval] Approved with conditions:\n${conditions.map((c) => `- ${c}`).join('\n')}`
       );
       this.state = await appendTranscriptEntryAndUpdateState(this.projectId, entry, this.state);
 

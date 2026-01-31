@@ -666,31 +666,40 @@ export class InterviewEngine {
    * @throws InterviewEngineError if an interview already exists.
    */
   async start(): Promise<AnswerResult> {
-    // Check if interview already exists
-    const exists = await interviewStateExists(this.projectId);
-    if (exists) {
-      // Load existing state and resume instead
-      return this.resume();
+    try {
+      // Check if interview already exists
+      const exists = await interviewStateExists(this.projectId);
+      if (exists) {
+        // Load existing state and resume instead
+        return await this.resume();
+      }
+
+      // Create initial state
+      this.state = createInitialInterviewState(this.projectId);
+      await saveInterviewState(this.state);
+
+      // Create first question
+      this.currentQuestion = createQuestionForPhase(this.state.currentPhase);
+      this.started = true;
+
+      // Record start in transcript
+      const entry = createTranscriptEntry(this.state.currentPhase, 'system', 'Interview started');
+      this.state = await appendTranscriptEntryAndUpdateState(this.projectId, entry, this.state);
+
+      return {
+        accepted: true,
+        state: this.state,
+        nextQuestion: this.currentQuestion,
+        complete: false,
+      };
+    } catch (error) {
+      if (error instanceof InterviewPersistenceError) {
+        throw new InterviewEngineError(error.message, 'PERSISTENCE_ERROR', {
+          cause: error,
+        });
+      }
+      throw error;
     }
-
-    // Create initial state
-    this.state = createInitialInterviewState(this.projectId);
-    await saveInterviewState(this.state);
-
-    // Create first question
-    this.currentQuestion = createQuestionForPhase(this.state.currentPhase);
-    this.started = true;
-
-    // Record start in transcript
-    const entry = createTranscriptEntry(this.state.currentPhase, 'system', 'Interview started');
-    this.state = await appendTranscriptEntryAndUpdateState(this.projectId, entry, this.state);
-
-    return {
-      accepted: true,
-      state: this.state,
-      nextQuestion: this.currentQuestion,
-      complete: false,
-    };
   }
 
   /**
@@ -742,21 +751,30 @@ export class InterviewEngine {
       );
     }
 
-    // Process based on response type
-    if (validResponse.type === 'delegation') {
-      return this.processDelegationResponse(validResponse);
-    }
+    try {
+      // Process based on response type
+      if (validResponse.type === 'delegation') {
+        return await this.processDelegationResponse(validResponse);
+      }
 
-    if (validResponse.type === 'approval') {
-      return this.processApprovalResponse(validResponse);
-    }
+      if (validResponse.type === 'approval') {
+        return await this.processApprovalResponse(validResponse);
+      }
 
-    if (validResponse.type === 'feature_classification') {
-      return this.processFeatureClassificationResponse(validResponse);
-    }
+      if (validResponse.type === 'feature_classification') {
+        return await this.processFeatureClassificationResponse(validResponse);
+      }
 
-    // Process open text response
-    return this.processOpenTextResponse(validResponse);
+      // Process open text response
+      return await this.processOpenTextResponse(validResponse);
+    } catch (error) {
+      if (error instanceof InterviewPersistenceError) {
+        throw new InterviewEngineError(error.message, 'PERSISTENCE_ERROR', {
+          cause: error,
+        });
+      }
+      throw error;
+    }
   }
 
   /**

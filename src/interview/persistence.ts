@@ -625,7 +625,21 @@ export async function loadInterviewState(projectId: string): Promise<InterviewSt
 
   // Deserialize with validation
   try {
-    return deserializeInterviewState(content);
+    const state = deserializeInterviewState(content);
+
+    // Validate projectId matches to prevent directory traversal attacks
+    if (state.projectId !== projectId) {
+      throw new InterviewPersistenceError(
+        `Project ID mismatch: requested "${projectId}" but state contains "${state.projectId}"`,
+        'validation_error',
+        {
+          details:
+            'The stored state belongs to a different project. This may indicate a directory traversal attempt or file corruption.',
+        }
+      );
+    }
+
+    return state;
   } catch (error) {
     // Re-wrap errors with project context
     if (error instanceof InterviewPersistenceError) {

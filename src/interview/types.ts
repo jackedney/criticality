@@ -354,7 +354,7 @@ export function createTranscriptEntry(
   metadata?: Record<string, unknown>
 ): TranscriptEntry {
   const base = {
-    id: `transcript_${String(Date.now())}_${Math.random().toString(36).substring(2, 9)}`,
+    id: `transcript_${randomUUID()}`,
     phase,
     role,
     content,
