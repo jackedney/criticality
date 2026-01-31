@@ -321,20 +321,22 @@ export async function loadLatestContradictionReport(
     content = await readFile(jsonPath, 'utf-8');
     filePath = jsonPath;
   } catch (err) {
-    if ((err as NodeJS.ErrnoException).code !== 'ENOENT') {
+    if (!hasErrorCode(err, 'ENOENT')) {
+      const fileError = err instanceof Error ? err : new Error(String(err));
       throw new ReportStorageError(`Failed to read report file: ${jsonPath}`, 'file_error', {
         details: jsonPath,
-        cause: err as Error,
+        cause: fileError,
       });
     }
     try {
       content = await readFile(yamlPath, 'utf-8');
       filePath = yamlPath;
     } catch (yamlErr) {
-      if ((yamlErr as NodeJS.ErrnoException).code !== 'ENOENT') {
+      if (!hasErrorCode(yamlErr, 'ENOENT')) {
+        const yamlFileError = yamlErr instanceof Error ? yamlErr : new Error(String(yamlErr));
         throw new ReportStorageError(`Failed to read report file: ${yamlPath}`, 'file_error', {
           details: yamlPath,
-          cause: yamlErr as Error,
+          cause: yamlFileError,
         });
       }
       return null;
@@ -481,11 +483,17 @@ export async function contradictionReportExists(
   try {
     await stat(jsonPath);
     return true;
-  } catch {
+  } catch (err) {
+    if (!hasErrorCode(err, 'ENOENT')) {
+      throw err;
+    }
     try {
       await stat(yamlPath);
       return true;
-    } catch {
+    } catch (yamlErr) {
+      if (!hasErrorCode(yamlErr, 'ENOENT')) {
+        throw yamlErr;
+      }
       return false;
     }
   }
