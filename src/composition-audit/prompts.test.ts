@@ -182,6 +182,7 @@ describe('Composition Audit Prompts', () => {
         highestTier: 'distinction',
         jsDoc: '/** JSDoc */',
         success: true,
+        warnings: [],
       };
 
       const input: CompositionAuditInput = {
