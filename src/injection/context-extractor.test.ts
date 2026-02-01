@@ -31,6 +31,8 @@ describe('extractContext', () => {
       useInMemoryFileSystem: true,
       compilerOptions: {
         strict: true,
+        noUncheckedIndexedAccess: true,
+        exactOptionalPropertyTypes: true,
         target: ScriptTarget.ESNext,
         module: ModuleKind.NodeNext,
       },
@@ -978,6 +980,8 @@ describe('serializeContextForPrompt', () => {
       useInMemoryFileSystem: true,
       compilerOptions: {
         strict: true,
+        noUncheckedIndexedAccess: true,
+        exactOptionalPropertyTypes: true,
         target: ScriptTarget.ESNext,
         module: ModuleKind.NodeNext,
       },
@@ -1060,6 +1064,8 @@ describe('shouldEscalateToLargerModel', () => {
       useInMemoryFileSystem: true,
       compilerOptions: {
         strict: true,
+        noUncheckedIndexedAccess: true,
+        exactOptionalPropertyTypes: true,
         target: ScriptTarget.ESNext,
         module: ModuleKind.NodeNext,
       },
@@ -1185,6 +1191,8 @@ describe('property-based tests', () => {
       useInMemoryFileSystem: true,
       compilerOptions: {
         strict: true,
+        noUncheckedIndexedAccess: true,
+        exactOptionalPropertyTypes: true,
         target: ScriptTarget.ESNext,
         module: ModuleKind.NodeNext,
       },

@@ -926,7 +926,10 @@ export function createToolchainServer(config: ToolchainServerConfig): Server {
     const functions: FunctionComplexity[] = [];
 
     // Pattern to find function declarations and arrow functions
-    /* eslint-disable security/detect-unsafe-regex -- Source file content is bounded */
+    /* eslint-disable security/detect-unsafe-regex --
+       These patterns are safe: no nested quantifiers or catastrophic-backtracking constructs,
+       applied line-by-line with bounded lookahead, and [ \t] instead of \s reduces ambiguity
+       by matching only horizontal whitespace. */
     const funcPatterns = [
       // Function declarations: function name(...)
       /function[ \t]+(\w+)[ \t]*\([^)]*\)/g,
