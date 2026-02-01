@@ -465,9 +465,9 @@ function extractReferencedFromClass(classDecl: ClassDeclaration): Set<string> {
   }
 
   // From constructors
-  for (const constructor of classDecl.getConstructors()) {
+  for (const ctor of classDecl.getConstructors()) {
     // Parameter types (constructors don't have return types)
-    for (const param of constructor.getParameters()) {
+    for (const param of ctor.getParameters()) {
       const paramType = param.getTypeNode();
       if (paramType !== undefined) {
         for (const name of extractTypeNamesFromString(paramType.getText())) {

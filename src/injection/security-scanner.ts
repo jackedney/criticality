@@ -255,8 +255,8 @@ function determineSeverity(
     return 'high';
   }
 
-  // Command injection is critical
-  if (vulnerabilityType === 'injection' && (ruleId.includes('exec') || ruleId.includes('eval'))) {
+  // Eval injection is critical
+  if (vulnerabilityType === 'injection' && ruleId.includes('eval')) {
     return 'critical';
   }
 

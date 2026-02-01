@@ -286,7 +286,8 @@ describe('security-scanner', () => {
     beforeEach(async () => {
       tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'security-scan-test-'));
       const nodeModulesPath = path.join(projectRoot, 'node_modules');
-      await fs.symlink(nodeModulesPath, path.join(tempDir, 'node_modules'));
+      const type = process.platform === 'win32' ? 'junction' : 'dir';
+      await fs.symlink(nodeModulesPath, path.join(tempDir, 'node_modules'), type);
     });
 
     afterEach(async () => {

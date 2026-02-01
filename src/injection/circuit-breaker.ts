@@ -320,6 +320,7 @@ export function recordSuccess(state: CircuitBreakerState, functionId: string): C
   newFunctions.set(functionId, {
     ...funcState,
     status: 'success',
+    didEscalate: false,
   });
 
   return {
@@ -384,6 +385,7 @@ export function recordFailure(
     ...funcState,
     status: 'failed',
     lastFailure: failure,
+    didEscalate: false,
   });
 
   return {
@@ -483,7 +485,7 @@ export function checkCircuitBreaker(
       // Check for warning (19% case from spec example)
       if (
         escalationRate >= config.moduleEscalationWarningThreshold &&
-        escalationRate <= config.moduleEscalationThreshold
+        escalationRate < config.moduleEscalationThreshold
       ) {
         warnings.push({
           type: 'module_escalation_warning',

@@ -14,7 +14,7 @@
  */
 
 import { describe, it, expect, beforeEach } from 'vitest';
-import { Project } from 'ts-morph';
+import { Project, ScriptTarget, ModuleKind } from 'ts-morph';
 import {
   extractContext,
   serializeContextForPrompt,
@@ -30,8 +30,8 @@ describe('extractContext', () => {
       useInMemoryFileSystem: true,
       compilerOptions: {
         strict: true,
-        target: 99, // ESNext
-        module: 199, // NodeNext
+        target: ScriptTarget.ESNext,
+        module: ModuleKind.NodeNext,
       },
     });
   });
@@ -977,8 +977,8 @@ describe('serializeContextForPrompt', () => {
       useInMemoryFileSystem: true,
       compilerOptions: {
         strict: true,
-        target: 99,
-        module: 199,
+        target: ScriptTarget.ESNext,
+        module: ModuleKind.NodeNext,
       },
     });
   });
@@ -1059,8 +1059,8 @@ describe('shouldEscalateToLargerModel', () => {
       useInMemoryFileSystem: true,
       compilerOptions: {
         strict: true,
-        target: 99,
-        module: 199,
+        target: ScriptTarget.ESNext,
+        module: ModuleKind.NodeNext,
       },
     });
   });

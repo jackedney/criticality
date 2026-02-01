@@ -50,6 +50,7 @@ import {
   determineEscalation,
   type ModelTier,
   createFunctionAttempts,
+  recordAttempt,
   MODEL_TIER_TO_ALIAS,
 } from './escalation.js';
 
@@ -274,8 +275,8 @@ export function extractRequiredTypes(project: Project, todoFunction: TodoFunctio
   // Extract type names from the signature
   const signature = todoFunction.signature;
 
-  // Simple regex to find type references (handles common patterns)
-  // Matches: TypeName, TypeName<...>, TypeName[], etc.
+  // Enhanced regex patterns to handle various type reference scenarios
+  // 1. Basic type annotations: `: TypeName`
   const typePattern = /:\s*([A-Z][a-zA-Z0-9]*)/g;
   let match;
   while ((match = typePattern.exec(signature)) !== null) {
@@ -285,9 +286,38 @@ export function extractRequiredTypes(project: Project, todoFunction: TodoFunctio
     }
   }
 
-  // Also check generic type parameters
-  const genericPattern = /<([A-Z][a-zA-Z0-9]*)/g;
+  // 2. Generic type parameters and nested generics: `<TypeName>`, `<string, UserData>`
+  const genericPattern = /<([^<>]+)>/g;
   while ((match = genericPattern.exec(signature)) !== null) {
+    const genericContent = match[1];
+    if (genericContent !== undefined) {
+      // Split by comma to handle multiple type args: Map<string, UserData>
+      const typeArgs = genericContent.split(',').map((s) => s.trim());
+      for (const typeArg of typeArgs) {
+        // Extract the type name (handle nested generics by taking first word)
+        const typeNameMatch = /^([A-Z][a-zA-Z0-9]*)/.exec(typeArg);
+        if (typeNameMatch !== null && typeNameMatch[1] !== undefined) {
+          const typeName = typeNameMatch[1];
+          if (!isBuiltInType(typeName)) {
+            typeNames.add(typeName);
+          }
+        }
+      }
+    }
+  }
+
+  // 3. Union types: `Foo | Bar`
+  const unionPattern = /\|\s*([A-Z][a-zA-Z0-9]*)/g;
+  while ((match = unionPattern.exec(signature)) !== null) {
+    const typeName = match[1];
+    if (typeName !== undefined && !isBuiltInType(typeName)) {
+      typeNames.add(typeName);
+    }
+  }
+
+  // 4. Intersection types: `Foo & Bar`
+  const intersectionPattern = /&\s*([A-Z][a-zA-Z0-9]*)/g;
+  while ((match = intersectionPattern.exec(signature)) !== null) {
     const typeName = match[1];
     if (typeName !== undefined && !isBuiltInType(typeName)) {
       typeNames.add(typeName);
@@ -861,6 +891,9 @@ export class RalphLoop {
     const attempts: ImplementationAttempt[] = [];
     let currentTier: ModelTier = 'worker';
 
+    // Maintain persistent attempts tracker for this function across retries
+    let functionAttempts = createFunctionAttempts(functionId);
+
     for (let attemptNum = 0; attemptNum < this.options.maxAttemptsPerFunction; attemptNum++) {
       // Record attempt start with circuit breaker
       this.circuitBreaker.recordAttemptStart(functionId, currentTier);
@@ -875,6 +908,10 @@ export class RalphLoop {
 
       // Extract failure type from attempt
       const failureType = attempt.failureType;
+
+      // Update the persistent attempts tracker with this attempt (and failure if present)
+      functionAttempts = recordAttempt(functionAttempts, currentTier, failureType);
+
       if (failureType === undefined) {
         // No specific failure type, give up
         const base = { accepted: false, attempts };
@@ -884,12 +921,8 @@ export class RalphLoop {
         return base;
       }
 
-      // Determine escalation action
-      const decision = determineEscalation(
-        failureType,
-        createFunctionAttempts(functionId),
-        currentTier
-      );
+      // Determine escalation action using persistent attempts tracker
+      const decision = determineEscalation(failureType, functionAttempts, currentTier);
 
       this.options.logger(
         `  Attempt ${String(attemptNum + 1)} (${currentTier}): ${decision.reason}`
@@ -1027,17 +1060,35 @@ export class RalphLoop {
         cwd: this.options.projectPath,
       });
     } catch (error) {
-      this.options.logger(
-        `  Test execution error: ${error instanceof Error ? error.message : String(error)}`
-      );
-      // Return a failed result rather than undefined to trigger rejection
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      const errorStack = error instanceof Error ? error.stack : undefined;
+      this.options.logger(`  Test execution error: ${errorMessage}`);
+
+      // Return a consistent failed result with synthetic test entry
+      // Build error object conditionally to satisfy exactOptionalPropertyTypes
+      const testError: { message: string; stack?: string } = {
+        message: errorMessage,
+      };
+      if (errorStack !== undefined) {
+        testError.stack = errorStack;
+      }
+
       return {
         success: false,
-        totalTests: 0,
+        totalTests: 1,
         passedTests: 0,
         failedTests: 1,
         skippedTests: 0,
-        tests: [],
+        tests: [
+          {
+            name: `${todoFunction.name} (execution error)`,
+            fullName: `${todoFunction.name} test execution failed`,
+            file: todoFunction.filePath,
+            status: 'failed',
+            durationMs: 0,
+            error: testError,
+          },
+        ],
       };
     }
   }

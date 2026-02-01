@@ -296,18 +296,12 @@ return sum;`;
 });
 
 describe('extractRequiredTypes', () => {
-  let tempDir: string;
   let project: Project;
 
-  beforeEach(async () => {
-    tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'ralph-loop-test-'));
+  beforeEach(() => {
     project = new Project({
       useInMemoryFileSystem: true,
     });
-  });
-
-  afterEach(async () => {
-    await fs.rm(tempDir, { recursive: true, force: true });
   });
 
   it('should extract interface types from signature', () => {
@@ -615,7 +609,7 @@ export function add(a: number, b: number): number {
     const completeMock = vi.mocked(mockRouter.complete);
     const firstCall = completeMock.mock.calls[0];
     expect(firstCall).toBeDefined();
-    // eslint-disable-next-line @typescript-eslint/non-nullable-type-assertion-style -- using ?. after expect assertion
+
     const callArgs = firstCall?.[0] as ModelRouterRequest;
     expect(callArgs.modelAlias).toBe('worker');
     expect(callArgs.prompt).toContain('function add');
