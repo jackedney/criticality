@@ -1,16 +1,13 @@
 /**
  * Browser-injectable snapshot script.
  *
- * This module provides the snapshot functionality as a string that can be
+ * This module provides snapshot functionality as a string that can be
  * injected into the browser via page.addScriptTag() or page.evaluate().
  *
- * The approach is to read the compiled JavaScript at runtime and bundle it
- * into a single script that exposes window.__devBrowser_getAISnapshot() and
+ * The approach is to inline all necessary functions into a single script that
+ * exposes window.__devBrowser_getAISnapshot() and
  * window.__devBrowser_selectSnapshotRef().
  */
-
-import * as fs from "fs";
-import * as path from "path";
 
 // Cache the bundled script
 let cachedScript: string | null = null;
@@ -25,10 +22,7 @@ let cachedScript: string | null = null;
 export function getSnapshotScript(): string {
   if (cachedScript) return cachedScript;
 
-  // Read the compiled JavaScript files
-  const snapshotDir = path.dirname(new URL(import.meta.url).pathname);
-
-  // For now, we'll inline the functions directly
+  // Inlining functions directly
   // In production, we could use a bundler like esbuild to create a single file
   cachedScript = `
 (function() {
