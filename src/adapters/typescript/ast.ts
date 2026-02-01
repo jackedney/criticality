@@ -899,7 +899,8 @@ const LOGIC_LEAKAGE_PATTERNS: {
  */
 export function inspectAst(
   filePath: string,
-  options: AstInspectionOptions = {}
+  options: AstInspectionOptions = {},
+  project?: Project
 ): AstInspectionResult {
   const {
     checkFunctionBodies = true,
@@ -907,33 +908,25 @@ export function inspectAst(
     detectLogicPatterns = true,
   } = options;
 
-  // Create a project and add the file
-  const project = new Project({
-    compilerOptions: {
-      strict: true,
-      noUncheckedIndexedAccess: true,
-      exactOptionalPropertyTypes: true,
-      target: 99, // ScriptTarget.ESNext
-      module: 199, // ModuleKind.NodeNext
-    },
-  });
+  let inspectionProject: Project;
 
-  let sourceFile: SourceFile;
-  try {
-    sourceFile = project.addSourceFileAtPath(filePath);
-  } catch {
-    return {
-      functions: [],
-      logicPatterns: [
-        {
-          line: 0,
-          description: `Could not parse file: ${filePath}`,
-          severity: 'error',
-        },
-      ],
-      passed: false,
-    };
+  if (project !== undefined) {
+    inspectionProject = project;
+  } else {
+    // Create a new project if one wasn't provided
+    inspectionProject = new Project({
+      compilerOptions: {
+        strict: true,
+        target: 99, // ScriptTarget.ESNext
+        module: 199, // ModuleKind.NodeNext
+        noUncheckedIndexedAccess: true,
+        exactOptionalPropertyTypes: true,
+      },
+    });
   }
+
+  const sourceFile =
+    inspectionProject.getSourceFile(filePath) ?? inspectionProject.addSourceFileAtPath(filePath);
 
   const inspectedFunctions: InspectedFunction[] = [];
   const logicPatterns: LogicPattern[] = [];
