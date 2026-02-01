@@ -332,6 +332,7 @@ export default [
       });
 
       expect(result.hasVulnerabilities).toBe(true);
+      expect(result.hasCriticalVulnerabilities).toBe(true);
       expect(result.vulnerabilities.length).toBeGreaterThan(0);
 
       const evalVuln = result.vulnerabilities.find(
