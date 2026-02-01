@@ -412,8 +412,10 @@ export function createToolchainServer(config: ToolchainServerConfig): Server {
 
       case 'python': {
         // mypy format: file:line:col: error: message [error-code]
-        // Regex is safe: input comes from compiler output, not user input
-        /* eslint-disable security/detect-unsafe-regex */
+        /* eslint-disable security/detect-unsafe-regex --
+           pyRegex is safe: anchored with ^ and $, uses only bounded character classes
+           ([^:]+, [^\]]+, [^[]+?) with no nested quantifiers or catastrophic-backtracking
+           constructs, and [ \t] instead of \s reduces ambiguity. */
         const pyRegex =
           /^([^:]+):(\d+):(\d+):[ \t]+(error|warning):[ \t]+([^[]+?)(?:[ \t]+\[([^\]]+)\])?$/gm;
         /* eslint-enable security/detect-unsafe-regex */

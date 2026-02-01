@@ -1412,8 +1412,12 @@ describe('property-based tests', () => {
             const source1 = makeSource(contracts1);
             const source2 = makeSource(contracts2);
 
-            project.createSourceFile(`/test/mono1-${fnSig.fnName}.ts`, source1);
-            project.createSourceFile(`/test/mono2-${fnSig.fnName}.ts`, source2);
+            project.createSourceFile(`/test/mono1-${fnSig.fnName}.ts`, source1, {
+              overwrite: true,
+            });
+            project.createSourceFile(`/test/mono2-${fnSig.fnName}.ts`, source2, {
+              overwrite: true,
+            });
 
             const todoFunction1: TodoFunction = {
               name: fnSig.fnName,
@@ -1487,8 +1491,12 @@ describe('property-based tests', () => {
             const source1 = makeSource(chain1);
             const source2 = makeSource(chain2);
 
-            project.createSourceFile(`/test/complex1-${fnSig.fnName}.ts`, source1);
-            project.createSourceFile(`/test/complex2-${fnSig.fnName}.ts`, source2);
+            project.createSourceFile(`/test/complex1-${fnSig.fnName}.ts`, source1, {
+              overwrite: true,
+            });
+            project.createSourceFile(`/test/complex2-${fnSig.fnName}.ts`, source2, {
+              overwrite: true,
+            });
 
             const todoFunction1: TodoFunction = {
               name: fnSig.fnName,
