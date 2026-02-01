@@ -69,6 +69,7 @@ git add -A  # all changes
 ```
 
 **NEVER commit**:
+
 - `.env`, `credentials.json`, secrets
 - `node_modules/`, `__pycache__/`, `.venv/`
 - Large binary files without explicit approval
@@ -76,11 +77,13 @@ git add -A  # all changes
 ### 3. Create Commit
 
 **Simple change**:
+
 ```bash
 git commit -m "fix(auth): use hmac.compare_digest for secure comparison"
 ```
 
 **Complex change (with body)**:
+
 ```bash
 git commit -m "$(cat <<'EOF'
 feat(validation): add URLValidator with domain whitelist
@@ -181,6 +184,7 @@ Addresses review comment #123456789."
 ### From github-pr-creation
 
 Before creating PR, ensure all commits follow this format. The PR skill will:
+
 1. Analyze commits for proper format
 2. Extract types for PR labels
 3. Build PR description from commit bodies
@@ -198,6 +202,7 @@ Before creating PR, ensure all commits follow this format. The PR skill will:
 ## Examples
 
 **Good**:
+
 ```
 feat(validation): add URLValidator with domain whitelist
 fix(auth): use hmac.compare_digest for secure key comparison
@@ -206,6 +211,7 @@ test(security): add 102 path traversal prevention tests
 ```
 
 **Bad**:
+
 ```
 update validation code           # no type, no scope, vague
 feat: add stuff                  # missing scope, too vague
