@@ -1,7 +1,7 @@
-import { chromium } from "playwright";
-import type { Browser, BrowserContext, Page } from "playwright";
-import { beforeAll, afterAll, beforeEach, afterEach, describe, test, expect } from "vitest";
-import { getSnapshotScript, clearSnapshotScriptCache } from "../browser-script";
+import { chromium } from 'playwright';
+import type { Browser, BrowserContext, Page } from 'playwright';
+import { beforeAll, afterAll, beforeEach, afterEach, describe, test, expect } from 'vitest';
+import { getSnapshotScript, clearSnapshotScriptCache } from '../browser-script';
 
 let browser: Browser;
 let context: BrowserContext;
@@ -26,20 +26,17 @@ afterEach(async () => {
 });
 
 async function setContent(html: string): Promise<void> {
-  await page.setContent(html, { waitUntil: "domcontentloaded" });
+  await page.setContent(html, { waitUntil: 'domcontentloaded' });
 }
 
 async function getSnapshot(): Promise<string> {
   const script = getSnapshotScript();
-  return await page.evaluate((s: string) => {
+  await page.addScriptTag({ content: script });
+  return await page.evaluate(() => {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const w = globalThis as any;
-    if (!w.__devBrowser_getAISnapshot) {
-      // eslint-disable-next-line no-eval
-      eval(s);
-    }
     return w.__devBrowser_getAISnapshot();
-  }, script);
+  });
 }
 
 async function selectRef(ref: string): Promise<unknown> {
@@ -54,8 +51,8 @@ async function selectRef(ref: string): Promise<unknown> {
   }, ref);
 }
 
-describe("ARIA Snapshot", () => {
-  test("generates snapshot for simple page", async () => {
+describe('ARIA Snapshot', () => {
+  test('generates snapshot for simple page', async () => {
     await setContent(`
       <html>
         <body>
@@ -67,13 +64,13 @@ describe("ARIA Snapshot", () => {
 
     const snapshot = await getSnapshot();
 
-    expect(snapshot).toContain("heading");
-    expect(snapshot).toContain("Hello World");
-    expect(snapshot).toContain("button");
-    expect(snapshot).toContain("Click me");
+    expect(snapshot).toContain('heading');
+    expect(snapshot).toContain('Hello World');
+    expect(snapshot).toContain('button');
+    expect(snapshot).toContain('Click me');
   });
 
-  test("assigns refs to interactive elements", async () => {
+  test('assigns refs to interactive elements', async () => {
     await setContent(`
       <html>
         <body>
@@ -89,7 +86,7 @@ describe("ARIA Snapshot", () => {
     expect(snapshot).toMatch(/\[ref=e\d+\]/);
   });
 
-  test("refs persist on window.__devBrowserRefs", async () => {
+  test('refs persist on window.__devBrowserRefs', async () => {
     await setContent(`
       <html>
         <body>
@@ -104,13 +101,13 @@ describe("ARIA Snapshot", () => {
     const hasRefs = await page.evaluate(() => {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const w = globalThis as any;
-      return typeof w.__devBrowserRefs === "object" && Object.keys(w.__devBrowserRefs).length > 0;
+      return typeof w.__devBrowserRefs === 'object' && Object.keys(w.__devBrowserRefs).length > 0;
     });
 
     expect(hasRefs).toBe(true);
   });
 
-  test("selectSnapshotRef returns element for valid ref", async () => {
+  test('selectSnapshotRef returns element for valid ref', async () => {
     await setContent(`
       <html>
         <body>
@@ -129,11 +126,11 @@ describe("ARIA Snapshot", () => {
 
     // Select the element by ref
     const result = (await selectRef(ref)) as { tagName: string; textContent: string };
-    expect(result.tagName).toBe("BUTTON");
-    expect(result.textContent).toBe("My Button");
+    expect(result.tagName).toBe('BUTTON');
+    expect(result.textContent).toBe('My Button');
   });
 
-  test("includes links with URLs", async () => {
+  test('includes links with URLs', async () => {
     await setContent(`
       <html>
         <body>
@@ -144,13 +141,13 @@ describe("ARIA Snapshot", () => {
 
     const snapshot = await getSnapshot();
 
-    expect(snapshot).toContain("link");
-    expect(snapshot).toContain("Example Link");
+    expect(snapshot).toContain('link');
+    expect(snapshot).toContain('Example Link');
     // URL should be included as a prop
-    expect(snapshot).toContain("/url:");
+    expect(snapshot).toContain('/url:');
   });
 
-  test("includes form elements", async () => {
+  test('includes form elements', async () => {
     await setContent(`
       <html>
         <body>
@@ -166,12 +163,12 @@ describe("ARIA Snapshot", () => {
 
     const snapshot = await getSnapshot();
 
-    expect(snapshot).toContain("textbox");
-    expect(snapshot).toContain("checkbox");
-    expect(snapshot).toContain("combobox");
+    expect(snapshot).toContain('textbox');
+    expect(snapshot).toContain('checkbox');
+    expect(snapshot).toContain('combobox');
   });
 
-  test("renders nested structure correctly", async () => {
+  test('renders nested structure correctly', async () => {
     await setContent(`
       <html>
         <body>
@@ -187,13 +184,13 @@ describe("ARIA Snapshot", () => {
 
     const snapshot = await getSnapshot();
 
-    expect(snapshot).toContain("navigation");
-    expect(snapshot).toContain("list");
-    expect(snapshot).toContain("listitem");
-    expect(snapshot).toContain("link");
+    expect(snapshot).toContain('navigation');
+    expect(snapshot).toContain('list');
+    expect(snapshot).toContain('listitem');
+    expect(snapshot).toContain('link');
   });
 
-  test("handles disabled elements", async () => {
+  test('handles disabled elements', async () => {
     await setContent(`
       <html>
         <body>
@@ -204,10 +201,10 @@ describe("ARIA Snapshot", () => {
 
     const snapshot = await getSnapshot();
 
-    expect(snapshot).toContain("[disabled]");
+    expect(snapshot).toContain('[disabled]');
   });
 
-  test("handles checked checkboxes", async () => {
+  test('handles checked checkboxes', async () => {
     await setContent(`
       <html>
         <body>
@@ -218,6 +215,6 @@ describe("ARIA Snapshot", () => {
 
     const snapshot = await getSnapshot();
 
-    expect(snapshot).toContain("[checked]");
+    expect(snapshot).toContain('[checked]');
   });
 });
