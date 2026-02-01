@@ -4,7 +4,7 @@ Extended examples for each commit type with body content.
 
 ## feat - New Features
 
-```
+```text
 feat(validation): add URLValidator with domain whitelist
 
 Implement URLValidator class supporting:
@@ -17,7 +17,7 @@ Addresses Requirement 31: Input validation
 Part of Task 5.1: Input Validation Utilities
 ```
 
-```
+```text
 feat(api): add video metadata endpoint
 
 New GET /api/v1/videos/{id}/metadata endpoint:
@@ -30,7 +30,7 @@ Part of Task 6.2: API Endpoints
 
 ## fix - Bug Fixes
 
-```
+```text
 fix(auth): use hmac.compare_digest for secure key comparison
 
 Replace direct string equality with hmac.compare_digest to prevent
@@ -40,7 +40,7 @@ regardless of key length or content.
 Addresses security best practice for sensitive data comparison
 ```
 
-```
+```text
 fix(download): handle network timeout during video fetch
 
 Add retry logic with exponential backoff for network failures:
@@ -53,7 +53,7 @@ Fixes issue where downloads would fail silently on flaky connections
 
 ## refactor - Code Improvements
 
-```
+```text
 refactor(template): consolidate filename sanitization logic
 
 Extract common sanitization patterns into helper methods:
@@ -64,7 +64,7 @@ Extract common sanitization patterns into helper methods:
 Improves code maintainability and reduces duplication
 ```
 
-```
+```text
 refactor(providers): extract common yt-dlp options builder
 
 Move duplicated option building from get_info/download to
@@ -76,7 +76,7 @@ No behavior change, pure refactoring
 
 ## test - Test Changes
 
-```
+```text
 test(security): add 102 path traversal prevention tests
 
 Comprehensive test coverage for TemplateProcessor including:
@@ -88,7 +88,7 @@ Comprehensive test coverage for TemplateProcessor including:
 Part of Task 5.4: Security Test Suite
 ```
 
-```
+```text
 test(validation): add parametrized URL validation tests
 
 Add 25 test cases covering:
@@ -102,7 +102,7 @@ Coverage for URLValidator: 98%
 
 ## perf - Performance
 
-```
+```text
 perf(cache): implement LRU eviction for metadata cache
 
 Replace dict-based cache with LRU implementation:
@@ -115,7 +115,7 @@ Addresses memory growth issue in long-running instances
 
 ## security - Security Fixes
 
-```
+```text
 security(cookie): validate cookie file integrity before use
 
 Add SHA256 checksum verification for cookie files:
@@ -129,7 +129,7 @@ Addresses Requirement 33: Security validation
 
 ## ci - CI/CD Changes
 
-```
+```text
 ci(github): add security scanning to PR workflow
 
 Enable Bandit security scanner in GitHub Actions:
@@ -142,7 +142,7 @@ Part of Task 15.3: Basic security validation
 
 ## docs - Documentation
 
-```
+```text
 docs(api): add OpenAPI description for download endpoint
 
 Document /api/v1/download endpoint:
@@ -155,7 +155,7 @@ Improves API documentation for consumers
 
 ## chore - Maintenance
 
-```
+```text
 chore(deps): update yt-dlp to 2024.12.06
 
 Update yt-dlp from 2024.11.15 to 2024.12.06:
@@ -168,7 +168,7 @@ No breaking changes expected
 
 ## style - Formatting
 
-```
+```text
 style(providers): apply black formatting to youtube.py
 
 Apply black formatter with 88 char line length.
@@ -179,7 +179,7 @@ No functional changes, formatting only.
 
 ### Feature Branch to Develop
 
-```
+```text
 Merge pull request #5 from fvadicamo/feature/input-validation-security
 
 feat(security): implement input validation and security (Task 5)
@@ -227,7 +227,7 @@ Test Coverage:
 
 ### Develop to Main (Release)
 
-```
+```text
 Merge pull request #10 from fvadicamo/develop
 
 release: v0.1.0 - MVP with YouTube provider
@@ -255,7 +255,7 @@ Documentation:
 ## Commits with Trailers
 
 ### Single Issue
-```
+```text
 fix(validation): prevent XSS in user input
 
 Escape HTML entities before rendering.
@@ -264,7 +264,7 @@ Fixes #78
 ```
 
 ### Multiple Issues + Co-author
-```
+```text
 fix(auth): resolve session and token issues
 
 - Fix session expiry not triggering logout
@@ -278,14 +278,14 @@ Co-authored-by: Bob <bob@example.com>
 ## Breaking Changes
 
 ### With ! Notation
-```
+```text
 feat(api)!: migrate to v2 endpoints
 
 BREAKING CHANGE: /api/v1/* endpoints removed. Update base URL to /api/v2/.
 ```
 
 ### Config Breaking Change
-```
+```text
 chore(config)!: rename environment variables
 
 BREAKING CHANGE: DATABASE_URL -> APP_DATABASE_URL, API_KEY -> APP_API_KEY
