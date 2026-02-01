@@ -651,6 +651,158 @@ function process(input: Level1): void {
     });
   });
 
+  describe('class method/constructor/accessor type extraction', () => {
+    it('should extract types from class methods', () => {
+      project.createSourceFile(
+        '/test/class-methods.ts',
+        `
+interface Data {
+  value: string;
+}
+
+interface Result {
+  success: boolean;
+}
+
+class Processor {
+  process(data: Data): Result {
+    throw new Error('TODO');
+  }
+}
+
+function createProcessor(): Processor {
+  throw new Error('TODO');
+}
+`
+      );
+
+      const todoFunction: TodoFunction = {
+        name: 'createProcessor',
+        filePath: '/test/class-methods.ts',
+        line: 14,
+        signature: 'function createProcessor(): Processor',
+        hasTodoBody: true,
+      };
+
+      const context = extractContext(project, todoFunction);
+
+      // Should extract Processor class which references Data and Result
+      const typeNames = context.requiredTypes.map((t) => t.name).sort();
+      expect(typeNames).toContain('Processor');
+      expect(typeNames).toContain('Data');
+      expect(typeNames).toContain('Result');
+    });
+
+    it('should extract types from class constructors', () => {
+      project.createSourceFile(
+        '/test/class-ctor.ts',
+        `
+interface Config {
+  timeout: number;
+}
+
+class Service {
+  constructor(config: Config) {
+    throw new Error('TODO');
+  }
+}
+
+function createService(config: Config): Service {
+  throw new Error('TODO');
+}
+`
+      );
+
+      const todoFunction: TodoFunction = {
+        name: 'createService',
+        filePath: '/test/class-ctor.ts',
+        line: 12,
+        signature: 'function createService(config: Config): Service',
+        hasTodoBody: true,
+      };
+
+      const context = extractContext(project, todoFunction);
+
+      // Should extract Service class which references Config
+      const typeNames = context.requiredTypes.map((t) => t.name).sort();
+      expect(typeNames).toContain('Service');
+      expect(typeNames).toContain('Config');
+    });
+
+    it('should extract types from class accessors', () => {
+      project.createSourceFile(
+        '/test/class-accessors.ts',
+        `
+interface Value {
+  amount: number;
+}
+
+class Account {
+  private _balance: Value;
+
+  get balance(): Value {
+    return this._balance;
+  }
+
+  set balance(value: Value) {
+    this._balance = value;
+  }
+}
+
+function getAccount(account: Account): Value {
+  throw new Error('TODO');
+}
+`
+      );
+
+      const todoFunction: TodoFunction = {
+        name: 'getAccount',
+        filePath: '/test/class-accessors.ts',
+        line: 18,
+        signature: 'function getAccount(account: Account): Value',
+        hasTodoBody: true,
+      };
+
+      const context = extractContext(project, todoFunction);
+
+      // Should extract Account class which references Value
+      const typeNames = context.requiredTypes.map((t) => t.name).sort();
+      expect(typeNames).toContain('Account');
+      expect(typeNames).toContain('Value');
+    });
+
+    it('should handle class with methods without types', () => {
+      project.createSourceFile(
+        '/test/class-no-types.ts',
+        `
+class Simple {
+  doSomething() {
+    throw new Error('TODO');
+  }
+}
+
+function createSimple(): Simple {
+  throw new Error('TODO');
+}
+`
+      );
+
+      const todoFunction: TodoFunction = {
+        name: 'createSimple',
+        filePath: '/test/class-no-types.ts',
+        line: 9,
+        signature: 'function createSimple(): Simple',
+        hasTodoBody: true,
+      };
+
+      const context = extractContext(project, todoFunction);
+
+      // Should still extract Simple class even with untyped methods
+      expect(context.requiredTypes).toHaveLength(1);
+      expect(context.requiredTypes[0]?.name).toBe('Simple');
+    });
+  });
+
   describe('context size tracking', () => {
     it('should track context size metrics', () => {
       project.createSourceFile(

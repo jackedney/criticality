@@ -444,6 +444,61 @@ function extractReferencedFromClass(classDecl: ClassDeclaration): Set<string> {
     }
   }
 
+  // From methods
+  for (const method of classDecl.getMethods()) {
+    // Return type
+    const returnType = method.getReturnTypeNode();
+    if (returnType !== undefined) {
+      for (const name of extractTypeNamesFromString(returnType.getText())) {
+        names.add(name);
+      }
+    }
+    // Parameter types
+    for (const param of method.getParameters()) {
+      const paramType = param.getTypeNode();
+      if (paramType !== undefined) {
+        for (const name of extractTypeNamesFromString(paramType.getText())) {
+          names.add(name);
+        }
+      }
+    }
+  }
+
+  // From constructors
+  for (const constructor of classDecl.getConstructors()) {
+    // Parameter types (constructors don't have return types)
+    for (const param of constructor.getParameters()) {
+      const paramType = param.getTypeNode();
+      if (paramType !== undefined) {
+        for (const name of extractTypeNamesFromString(paramType.getText())) {
+          names.add(name);
+        }
+      }
+    }
+  }
+
+  // From get accessors
+  for (const getAccessor of classDecl.getGetAccessors()) {
+    const returnType = getAccessor.getReturnTypeNode();
+    if (returnType !== undefined) {
+      for (const name of extractTypeNamesFromString(returnType.getText())) {
+        names.add(name);
+      }
+    }
+  }
+
+  // From set accessors
+  for (const setAccessor of classDecl.getSetAccessors()) {
+    for (const param of setAccessor.getParameters()) {
+      const paramType = param.getTypeNode();
+      if (paramType !== undefined) {
+        for (const name of extractTypeNamesFromString(paramType.getText())) {
+          names.add(name);
+        }
+      }
+    }
+  }
+
   return names;
 }
 
