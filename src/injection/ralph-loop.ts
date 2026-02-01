@@ -45,6 +45,13 @@ import {
   securityScanToFailure,
   type SecurityScanResult,
 } from './security-scanner.js';
+import type { FailureType } from './escalation.js';
+import {
+  determineEscalation,
+  type ModelTier,
+  createFunctionAttempts,
+  MODEL_TIER_TO_ALIAS,
+} from './escalation.js';
 
 /**
  * Local context for a single function implementation.
@@ -84,8 +91,12 @@ export interface ImplementationAttempt {
   readonly compilationResult: TypeCheckResult;
   /** Test result after injection (only if compilation succeeded). */
   readonly testResult?: TestRunResult;
+  /** Security scan result (if performed). */
+  readonly securityScanResult?: SecurityScanResult;
   /** Reason for rejection (if not accepted). */
   readonly rejectionReason?: string;
+  /** The failure type for circuit breaker tracking. */
+  readonly failureType?: FailureType;
   /** Duration in milliseconds. */
   readonly durationMs: number;
 }
@@ -551,10 +562,13 @@ export class RalphLoop {
       this.options.logger(`Processing: ${todoFunction.name}`);
 
       const functionId = `${todoFunction.filePath}:${todoFunction.name}`;
-      const attempt = await this.implementFunction(project, todoFunction);
-      attempts.push(attempt);
+      const finalAttempt = await this.implementFunctionWithRetry(project, todoFunction, functionId);
 
-      if (attempt.accepted) {
+      for (const attempt of finalAttempt.attempts) {
+        attempts.push(attempt);
+      }
+
+      if (finalAttempt.accepted) {
         implementedCount++;
         this.options.logger(`  Accepted: ${todoFunction.name}`);
         this.circuitBreaker.recordSuccess(functionId);
@@ -562,44 +576,15 @@ export class RalphLoop {
         failedCount++;
         remainingTodos.push(todoFunction);
         this.options.logger(
-          `  Rejected: ${todoFunction.name} - ${attempt.rejectionReason ?? 'unknown reason'}`
+          `  Rejected: ${todoFunction.name} - ${finalAttempt.finalRejectionReason ?? 'unknown reason'}`
         );
 
-        let failure:
-          | {
-              type: 'test';
-              failingTests: readonly {
-                testName: string;
-                expected: string;
-                actual: string;
-                errorMessage?: string;
-              }[];
-            }
-          | { type: 'type'; compilerError: string };
-
-        if (attempt.testResult !== undefined && !attempt.testResult.success) {
-          failure = {
-            type: 'test',
-            failingTests: attempt.testResult.tests
-              .filter((t) => t.status === 'failed' && t.error !== undefined)
-              .map((t) => ({
-                testName: t.name,
-                expected: '<unknown>',
-                actual: '<unknown>',
-                errorMessage: t.error?.message ?? 'Test failed',
-              })),
-          };
-        } else {
-          failure = {
-            type: 'type',
-            compilerError: attempt.rejectionReason ?? 'Unknown error',
-          };
+        if (finalAttempt.finalFailureType !== undefined) {
+          this.circuitBreaker.recordFailure(functionId, finalAttempt.finalFailureType);
         }
-
-        this.circuitBreaker.recordFailure(functionId, failure);
       }
 
-      // Check circuit breaker after each attempt
+      // Check circuit breaker after each function
       const circuitCheck = this.circuitBreaker.check();
 
       if (circuitCheck.shouldTrip) {
@@ -651,11 +636,13 @@ export class RalphLoop {
    *
    * @param project - The ts-morph Project.
    * @param todoFunction - The function to implement.
+   * @param tier - The model tier to use.
    * @returns The implementation attempt result.
    */
   private async implementFunction(
     project: Project,
-    todoFunction: TodoFunction
+    todoFunction: TodoFunction,
+    tier: ModelTier = 'worker'
   ): Promise<ImplementationAttempt> {
     const startTime = Date.now();
 
@@ -665,9 +652,9 @@ export class RalphLoop {
     // Generate implementation prompt
     const prompt = generateImplementationPrompt(context);
 
-    // Request implementation from worker_model
+    // Request implementation from the appropriate model tier
     const request: ModelRouterRequest = {
-      modelAlias: 'worker',
+      modelAlias: MODEL_TIER_TO_ALIAS[tier],
       prompt,
       parameters: {
         systemPrompt: IMPLEMENTATION_SYSTEM_PROMPT,
@@ -731,12 +718,18 @@ export class RalphLoop {
           .map((e) => `${e.code}: ${e.message}`)
           .join('; ');
 
+        const failure: FailureType = {
+          type: 'type',
+          compilerError: errorMessages,
+        };
+
         return {
           function: todoFunction,
           accepted: false,
           generatedBody,
           compilationResult,
           rejectionReason: `Compilation failed: ${errorMessages}`,
+          failureType: failure,
           durationMs: Date.now() - startTime,
         };
       }
@@ -763,7 +756,9 @@ export class RalphLoop {
             accepted: false,
             generatedBody,
             compilationResult,
+            securityScanResult,
             rejectionReason: `Security vulnerabilities: ${vulnSummary}`,
+            failureType: failure,
             durationMs: Date.now() - startTime,
           };
         }
@@ -783,13 +778,27 @@ export class RalphLoop {
           .map((t) => t.name)
           .join(', ');
 
+        const failure: FailureType = {
+          type: 'test',
+          failingTests: testResult.tests
+            .filter((t) => t.status === 'failed' && t.error !== undefined)
+            .map((t) => ({
+              testName: t.name,
+              expected: '<unknown>',
+              actual: '<unknown>',
+              errorMessage: t.error?.message ?? 'Test failed',
+            })),
+        };
+
         return {
           function: todoFunction,
           accepted: false,
           generatedBody,
           compilationResult,
           testResult,
+          securityScanResult,
           rejectionReason: `Tests failed: ${failedTests}`,
+          failureType: failure,
           durationMs: Date.now() - startTime,
         };
       }
@@ -803,6 +812,7 @@ export class RalphLoop {
           generatedBody,
           compilationResult,
           testResult,
+          securityScanResult,
           durationMs: Date.now() - startTime,
         };
       }
@@ -812,6 +822,7 @@ export class RalphLoop {
         accepted: true,
         generatedBody,
         compilationResult,
+        securityScanResult,
         durationMs: Date.now() - startTime,
       };
     } catch (error) {
@@ -825,15 +836,109 @@ export class RalphLoop {
   }
 
   /**
+   * Attempts to implement a single function with retry and escalation.
+   *
+   * This method implements the retry/escalation logic:
+   * - Retries up to maxAttemptsPerFunction
+   * - Escalates to higher tiers based on failure type
+   * - Records attempts to circuit breaker
+   *
+   * @param project - The ts-morph Project.
+   * @param todoFunction - The function to implement.
+   * @param functionId - The function ID for circuit breaker tracking.
+   * @returns An object with all attempts and final status.
+   */
+  private async implementFunctionWithRetry(
+    project: Project,
+    todoFunction: TodoFunction,
+    functionId: string
+  ): Promise<{
+    accepted: boolean;
+    attempts: ImplementationAttempt[];
+    finalRejectionReason?: string;
+    finalFailureType?: FailureType;
+  }> {
+    const attempts: ImplementationAttempt[] = [];
+    let currentTier: ModelTier = 'worker';
+
+    for (let attemptNum = 0; attemptNum < this.options.maxAttemptsPerFunction; attemptNum++) {
+      // Record attempt start with circuit breaker
+      this.circuitBreaker.recordAttemptStart(functionId, currentTier);
+
+      // Attempt implementation at current tier
+      const attempt = await this.implementFunction(project, todoFunction, currentTier);
+      attempts.push(attempt);
+
+      if (attempt.accepted) {
+        return { accepted: true, attempts };
+      }
+
+      // Extract failure type from attempt
+      const failureType = attempt.failureType;
+      if (failureType === undefined) {
+        // No specific failure type, give up
+        const base = { accepted: false, attempts };
+        if (attempt.rejectionReason !== undefined) {
+          return { ...base, finalRejectionReason: attempt.rejectionReason };
+        }
+        return base;
+      }
+
+      // Determine escalation action
+      const decision = determineEscalation(
+        failureType,
+        createFunctionAttempts(functionId),
+        currentTier
+      );
+
+      this.options.logger(
+        `  Attempt ${String(attemptNum + 1)} (${currentTier}): ${decision.reason}`
+      );
+
+      // Check for circuit break decision
+      if (decision.action.type === 'circuit_break') {
+        this.options.logger(`  Circuit breaker: ${decision.action.reason}`);
+        const base = { accepted: false, attempts };
+        if (attempt.rejectionReason !== undefined) {
+          return { ...base, finalRejectionReason: attempt.rejectionReason };
+        }
+        return { ...base, finalFailureType: failureType };
+      }
+
+      // Check for escalation decision
+      if (decision.action.type === 'escalate') {
+        if (decision.nextTier !== undefined) {
+          this.circuitBreaker.recordEscalation(functionId, decision.nextTier);
+          currentTier = decision.nextTier;
+          this.options.logger(`  Escalating to ${currentTier}`);
+          continue; // Retry with new tier
+        }
+      }
+
+      // Otherwise, retry on same tier
+      if (decision.action.type === 'retry_same') {
+        this.options.logger(`  Retrying same tier ${currentTier}`);
+        continue;
+      }
+    }
+
+    // Max attempts exceeded
+    const lastRejectionReason =
+      attempts[attempts.length - 1]?.rejectionReason ?? 'Max attempts exceeded';
+    return { accepted: false, attempts, finalRejectionReason: lastRejectionReason };
+  }
+
+  /**
    * Creates a rejected attempt result.
    */
   private createRejectedAttempt(
     todoFunction: TodoFunction,
     generatedBody: string,
     reason: string,
-    startTime: number
+    startTime: number,
+    failureType?: FailureType
   ): ImplementationAttempt {
-    return {
+    const base = {
       function: todoFunction,
       accepted: false,
       generatedBody,
@@ -846,6 +951,12 @@ export class RalphLoop {
       rejectionReason: reason,
       durationMs: Date.now() - startTime,
     };
+
+    if (failureType !== undefined) {
+      return { ...base, failureType };
+    }
+
+    return base;
   }
 
   /**
