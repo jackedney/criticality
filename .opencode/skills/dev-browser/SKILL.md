@@ -34,7 +34,7 @@ Connects to user's existing Chrome browser. Use this when:
 - The user is already logged into sites and wants you to do things behind an authed experience that isn't local dev.
 - The user asks you to use the extension
 
-**Important**: The core flow is still the same. You create named pages inside of their browser.
+**Important**: The core flow is still the same. You create named pages inside their browser.
 
 **Start the relay server:**
 
