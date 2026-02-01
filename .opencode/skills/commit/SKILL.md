@@ -108,7 +108,7 @@ git show --stat HEAD
 
 ## Body Format (Recommended for Complex Changes)
 
-```
+```text
 <blank line>
 Explain HOW and WHY the change was made.
 - Use bullet points for multiple items
@@ -117,6 +117,8 @@ Explain HOW and WHY the change was made.
 Reference: Task X.Y
 Addresses: Req N
 ```
+
+## Git Trailers
 
 ## Git Trailers
 
@@ -132,7 +134,7 @@ Place trailers at end of body after blank line. See `references/commit_examples.
 
 For incompatible API/behavior changes, use `!` after scope OR `BREAKING CHANGE:` footer:
 
-```
+```text
 feat(api)!: change response format to JSON:API
 
 BREAKING CHANGE: Response envelope changed from `{ data }` to `{ data: { type, id, attributes } }`.
@@ -203,7 +205,7 @@ Before creating PR, ensure all commits follow this format. The PR skill will:
 
 **Good**:
 
-```
+```text
 feat(validation): add URLValidator with domain whitelist
 fix(auth): use hmac.compare_digest for secure key comparison
 refactor(template): consolidate filename sanitization logic
@@ -212,7 +214,7 @@ test(security): add 102 path traversal prevention tests
 
 **Bad**:
 
-```
+```text
 update validation code           # no type, no scope, vague
 feat: add stuff                  # missing scope, too vague
 fix(auth): fix bug               # circular, not specific
