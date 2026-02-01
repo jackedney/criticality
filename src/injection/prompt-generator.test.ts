@@ -12,7 +12,7 @@
  */
 
 import { describe, it, expect, beforeEach } from 'vitest';
-import { Project } from 'ts-morph';
+import { Project, ScriptTarget, ModuleKind } from 'ts-morph';
 import {
   generateMinimalPrompt,
   generateMinimalPromptFromComponents,
@@ -32,8 +32,8 @@ describe('generateMinimalPrompt', () => {
       useInMemoryFileSystem: true,
       compilerOptions: {
         strict: true,
-        target: 99, // ESNext
-        module: 199, // NodeNext
+        target: ScriptTarget.ESNext,
+        module: ModuleKind.NodeNext,
       },
     });
   });
