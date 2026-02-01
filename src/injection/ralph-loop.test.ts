@@ -402,6 +402,8 @@ describe('RalphLoop', () => {
           target: 'ES2020',
           module: 'NodeNext',
           strict: true,
+          noUncheckedIndexedAccess: true,
+          exactOptionalPropertyTypes: true,
         },
         include: ['src/**/*.ts'],
       })
@@ -446,6 +448,8 @@ export function add(a: number, b: number): number {
           target: 'ES2020',
           module: 'NodeNext',
           strict: true,
+          noUncheckedIndexedAccess: true,
+          exactOptionalPropertyTypes: true,
         },
         include: ['src/**/*.ts'],
       })
@@ -505,6 +509,8 @@ export function add(a: number, b: number): number {
           target: 'ES2020',
           module: 'NodeNext',
           strict: true,
+          noUncheckedIndexedAccess: true,
+          exactOptionalPropertyTypes: true,
         },
         include: ['src/**/*.ts'],
       })
@@ -568,6 +574,8 @@ describe('add', () => {
           target: 'ES2020',
           module: 'NodeNext',
           strict: true,
+          noUncheckedIndexedAccess: true,
+          exactOptionalPropertyTypes: true,
         },
         include: ['src/**/*.ts'],
       })
@@ -615,6 +623,8 @@ describe('add', () => {
           target: 'ES2020',
           module: 'NodeNext',
           strict: true,
+          noUncheckedIndexedAccess: true,
+          exactOptionalPropertyTypes: true,
         },
         include: ['src/**/*.ts'],
       })
@@ -663,6 +673,8 @@ describe('add', () => {
           target: 'ES2020',
           module: 'NodeNext',
           strict: true,
+          noUncheckedIndexedAccess: true,
+          exactOptionalPropertyTypes: true,
         },
         include: ['src/**/*.ts'],
       })
@@ -714,6 +726,8 @@ describe('add', () => {
           target: 'ES2020',
           module: 'NodeNext',
           strict: true,
+          noUncheckedIndexedAccess: true,
+          exactOptionalPropertyTypes: true,
         },
         include: ['src/**/*.ts'],
       })

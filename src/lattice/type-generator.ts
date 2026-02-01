@@ -352,7 +352,7 @@ function parseConstraint(constraint: string): ParsedConstraint {
   // Range: range(min, max), [min, max], min..max
   /* eslint-disable security/detect-unsafe-regex -- Short constraint strings from spec */
   const rangeMatch =
-    /^(?:range[ \t]*\(|\[)?[ \t]*(-?\d+(?:\.\d+)?)[ \t]*[,.][ \t]*(-?\d+(?:\.\d+)?)[ \t]*(?:\)|\])?$/.exec(
+    /^(?:range[ \t]*\(|\[)?[ \t]*(-?\d+(?:\.\d+)?)[ \t]*(?:(?:\.\.)|,)[ \t]*(-?\d+(?:\.\d+)?)[ \t]*(?:\)|\])?$/.exec(
       trimmed
     );
   /* eslint-enable security/detect-unsafe-regex */

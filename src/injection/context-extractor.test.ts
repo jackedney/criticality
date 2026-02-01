@@ -1284,7 +1284,9 @@ describe('property-based tests', () => {
               .map((p) => `${p.name}: ${p.type}`)
               .join(', ')}): ${fnSig.returnType} {\n  throw new Error('TODO');\n}`;
 
-            project.createSourceFile(`/test/property-${fnSig.fnName}.ts`, sourceCode);
+            project.createSourceFile(`/test/property-${fnSig.fnName}.ts`, sourceCode, {
+              overwrite: true,
+            });
 
             const todoFunction: TodoFunction = {
               name: fnSig.fnName,
@@ -1339,7 +1341,9 @@ describe('property-based tests', () => {
               .map((p) => `${p.name}: ${p.type}`)
               .join(', ')}): ${fnSig.returnType} {\n  throw new Error('TODO');\n}`;
 
-            project.createSourceFile(`/test/serial-${fnSig.fnName}.ts`, sourceCode);
+            project.createSourceFile(`/test/serial-${fnSig.fnName}.ts`, sourceCode, {
+              overwrite: true,
+            });
 
             const todoFunction: TodoFunction = {
               name: fnSig.fnName,

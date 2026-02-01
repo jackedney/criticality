@@ -412,9 +412,11 @@ export function createToolchainServer(config: ToolchainServerConfig): Server {
 
       case 'python': {
         // mypy format: file:line:col: error: message [error-code]
-        // eslint-disable-next-line security/detect-unsafe-regex, no-useless-escape -- Compiler output is bounded
+        // Regex is safe: input comes from compiler output, not user input
+        /* eslint-disable security/detect-unsafe-regex */
         const pyRegex =
-          /^([^:]+):(\d+):(\d+):[ \t]+(error|warning):[ \t]+([^\[]+?)(?:[ \t]+\[([^\]]+)\])?$/gm;
+          /^([^:]+):(\d+):(\d+):[ \t]+(error|warning):[ \t]+([^[]+?)(?:[ \t]+\[([^\]]+)\])?$/gm;
+        /* eslint-enable security/detect-unsafe-regex */
         let match;
         while ((match = pyRegex.exec(output)) !== null) {
           errors.push({

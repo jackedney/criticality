@@ -421,9 +421,18 @@ export class RalphLoop {
           `  Rejected: ${todoFunction.name} - ${finalAttempt.finalRejectionReason ?? 'unknown reason'}`
         );
 
-        if (finalAttempt.finalFailureType !== undefined) {
-          this.circuitBreaker.recordFailure(functionId, finalAttempt.finalFailureType);
-        }
+        // Always record failure for circuit breaker tracking
+        // Use the actual failure type if available, otherwise create a fallback semantic failure
+        const failureToRecord: FailureType = finalAttempt.finalFailureType ?? {
+          type: 'semantic',
+          violation: {
+            type: 'contract',
+            description:
+              finalAttempt.finalRejectionReason ??
+              'Implementation failed without specific failure type',
+          },
+        };
+        this.circuitBreaker.recordFailure(functionId, failureToRecord);
       }
 
       // Check circuit breaker after each function
@@ -507,6 +516,9 @@ export class RalphLoop {
 
     let generatedBody = '';
     let compilationResult: TypeCheckResult;
+    // Track original content for rollback - will be set before injection
+    let originalContent: string | undefined;
+    let injectionOccurred = false;
 
     try {
       const result = await this.options.modelRouter.complete(request);
@@ -532,11 +544,12 @@ export class RalphLoop {
       }
 
       // Save original file content for potential rollback
-      const originalContent = await fs.readFile(todoFunction.filePath, 'utf-8');
+      originalContent = await fs.readFile(todoFunction.filePath, 'utf-8');
 
       // Inject implementation via AST
       try {
         injectFunctionBody(project, todoFunction.filePath, todoFunction.name, generatedBody);
+        injectionOccurred = true;
       } catch (injectError) {
         return this.createRejectedAttempt(
           todoFunction,
@@ -668,6 +681,17 @@ export class RalphLoop {
         durationMs: Date.now() - startTime,
       };
     } catch (error) {
+      // Rollback: restore original file if injection occurred
+      if (injectionOccurred && originalContent !== undefined) {
+        try {
+          await fs.writeFile(todoFunction.filePath, originalContent, 'utf-8');
+          void project.getSourceFile(todoFunction.filePath)?.refreshFromFileSystem();
+        } catch {
+          // Rollback failed - log but continue with error reporting
+          this.options.logger(`  Warning: Failed to rollback ${todoFunction.filePath} after error`);
+        }
+      }
+
       return this.createRejectedAttempt(
         todoFunction,
         generatedBody,
@@ -850,20 +874,28 @@ export class RalphLoop {
 
     if (testPattern === undefined) {
       // Default: look for a test file matching the source file
+      // Try both .test.ts and .spec.ts conventions
       const baseName = path.basename(todoFunction.filePath, '.ts');
       const dirName = path.dirname(todoFunction.filePath);
       const testFile = path.join(dirName, `${baseName}.test.ts`);
+      const specFile = path.join(dirName, `${baseName}.spec.ts`);
 
-      // Check if test file exists
+      // Check if .test.ts file exists first, then fall back to .spec.ts
       try {
         await fs.access(testFile);
         testPattern = testFile;
       } catch {
-        // No matching test file found, skip test verification
-        this.options.logger(
-          `  No test file found for ${todoFunction.name}, skipping test verification`
-        );
-        return undefined;
+        // .test.ts not found, try .spec.ts
+        try {
+          await fs.access(specFile);
+          testPattern = specFile;
+        } catch {
+          // Neither test file convention found, skip test verification
+          this.options.logger(
+            `  No test file found for ${todoFunction.name}, skipping test verification`
+          );
+          return undefined;
+        }
       }
     }
 
