@@ -146,7 +146,7 @@ Output a JSON file with this shape (include detailed top-level fields so the PRD
 - **UI stories**: include explicit routes, components, and UI states
 - **New projects**: include initial setup stories (scaffold, env/config, local dev, deploy basics, **package installs**)
 - **Dependencies**: any new package/library introduced must be called out with install commands in acceptance criteria (e.g., `npm install <pkg>`), plus any required config or scripts.
-- **Ordering**: if this is a new project, the **first story must be setup** (scaffold + installs + scripts + env/config). Migrations or data model work come after setup.
+- **Ordering**: if this is a new project, the **first story must be set up** (scaffold + installs + scripts + env/config). Migrations or data model work come after setup.
 
 ---
 
@@ -160,7 +160,7 @@ After saving, tell the user:
 `PRD JSON saved to <path>. Close this chat and run \`ralph build\`.`
 
 If the prompt provides a **directory** (not a filename), choose a short filename:
-- `prd-<short-slug>.json` where `<short-slug>` is 1–3 meaningful words (avoid filler like “i want to”).
+- `prd-<short-slug>.json` where `<short-slug>` is 1–3 meaningful words (avoid filler like "I want to").
 - Examples: `prd-workout-tracker.json`, `prd-usage-billing.json`
 
 ---
