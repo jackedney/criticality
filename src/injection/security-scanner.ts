@@ -229,6 +229,8 @@ const RULE_TO_CWE: Readonly<Record<string, keyof typeof CWE_MAPPINGS>> = {
   'security/detect-exec': 'command-injection',
   'security/detect-eval-with-expression': 'eval',
   'security/detect-implied-eval': 'eval',
+  'security/detect-no-csrf-before': 'no-csrf',
+  'security/detect-no-csrf-after': 'no-csrf',
 } as const;
 
 /**

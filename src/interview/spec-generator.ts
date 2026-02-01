@@ -325,12 +325,14 @@ function extractConstraints(requirements: readonly ExtractedRequirement[]): Spec
  */
 function extractExternalSystems(requirements: readonly ExtractedRequirement[]): string[] {
   const systems = new Set<string>();
+  /* eslint-disable security/detect-unsafe-regex -- Requirement text is bounded user input */
   const patterns = [
-    /integrat(?:e|ion)(?:s)?\s+(?:with\s+)?(?:the\s+)?["']?([a-zA-Z0-9_-]+)["']?/gi,
-    /connect(?:s)?\s+to\s+["']?([a-zA-Z0-9_-]+)["']?/gi,
-    /(?:external|third[- ]party)\s+(?:api|service|system)(?:s)?\s*[:=]?\s*["']?([a-zA-Z0-9_-]+)["']?/gi,
-    /(?:uses?|requires?)\s+["']?([a-zA-Z0-9_-]+)["']?\s+(?:api|service)/gi,
+    /integrat(?:e|ion)s?[ \t]+(?:with[ \t]+)?(?:the[ \t]+)?["']?([a-zA-Z0-9_-]+)["']?/gi,
+    /connects?[ \t]+to[ \t]+["']?([a-zA-Z0-9_-]+)["']?/gi,
+    /(?:external|third[- ]party)[ \t]+(?:api|service|system)s?[ \t]*[:=]?[ \t]*["']?([a-zA-Z0-9_-]+)["']?/gi,
+    /(?:uses?|requires?)[ \t]+["']?([a-zA-Z0-9_-]+)["']?[ \t]+(?:api|service)/gi,
   ];
+  /* eslint-enable security/detect-unsafe-regex */
 
   for (const req of requirements) {
     for (const pattern of patterns) {

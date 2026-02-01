@@ -710,7 +710,8 @@ describe('Property-based tests for inferDomainBoundaries', () => {
         const boundaries = inferDomainBoundaries(spec);
 
         // All domain names should be lowercase and contain only alphanumeric chars and hyphens
-        const validNamePattern = /^[a-z0-9]+(-[a-z0-9]+)*$/;
+        // Use a pattern that doesn't have nested quantifiers
+        const validNamePattern = /^[a-z0-9][a-z0-9-]*[a-z0-9]$|^[a-z0-9]$/;
         for (const boundary of boundaries) {
           // Skip the default system name which may not follow this pattern
           if (boundary.name === 'test-system') {

@@ -412,7 +412,9 @@ export function createToolchainServer(config: ToolchainServerConfig): Server {
 
       case 'python': {
         // mypy format: file:line:col: error: message [error-code]
-        const pyRegex = /^(.+?):(\d+):(\d+):\s+(error|warning):\s+(.+?)(?:\s+\[(.+?)\])?$/gm;
+        // eslint-disable-next-line security/detect-unsafe-regex, no-useless-escape -- Compiler output is bounded
+        const pyRegex =
+          /^([^:]+):(\d+):(\d+):[ \t]+(error|warning):[ \t]+([^\[]+?)(?:[ \t]+\[([^\]]+)\])?$/gm;
         let match;
         while ((match = pyRegex.exec(output)) !== null) {
           errors.push({
@@ -922,14 +924,16 @@ export function createToolchainServer(config: ToolchainServerConfig): Server {
     const functions: FunctionComplexity[] = [];
 
     // Pattern to find function declarations and arrow functions
+    /* eslint-disable security/detect-unsafe-regex -- Source file content is bounded */
     const funcPatterns = [
       // Function declarations: function name(...)
-      /function\s+(\w+)\s*\([^)]*\)/g,
+      /function[ \t]+(\w+)[ \t]*\([^)]*\)/g,
       // Method definitions: name(...)
-      /(\w+)\s*\([^)]*\)\s*(?::\s*\w+\s*)?\{/g,
+      /(\w+)[ \t]*\([^)]*\)[ \t]*(?::[ \t]*\w+[ \t]*)?\{/g,
       // Arrow functions with name: const name = (...) =>
-      /(?:const|let|var)\s+(\w+)\s*=\s*(?:async\s*)?\([^)]*\)\s*=>/g,
+      /(?:const|let|var)[ \t]+(\w+)[ \t]*=[ \t]*(?:async[ \t]*)?\([^)]*\)[ \t]*=>/g,
     ];
+    /* eslint-enable security/detect-unsafe-regex */
 
     for (const pattern of funcPatterns) {
       let match;

@@ -40,7 +40,7 @@ export const REPORT_VERSION = '1.0.0';
  * Module-level default logger for parse operations.
  * Initially a no-op, can be configured via setDefaultParserLogger.
  */
-let defaultParserLogger: (message: string) => void = (): void => {}; // eslint-disable-line @typescript-eslint/no-empty-function
+let defaultParserLogger: (message: string) => void = (): void => {};
 
 /**
  * Default parse options.
@@ -71,7 +71,7 @@ function getParseOptions(): Required<ContradictionParseOptions> {
  * @param logger - The logger function to use for warnings.
  */
 export function setDefaultParserLogger(logger: ContradictionParseOptions['logger']): void {
-  defaultParserLogger = logger ?? ((): void => {}); // eslint-disable-line @typescript-eslint/no-empty-function
+  defaultParserLogger = logger ?? ((): void => {});
 }
 
 /**

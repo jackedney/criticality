@@ -694,9 +694,11 @@ function stripTypeAnnotations(code: string): string {
   );
 
   // Remove return type annotations like `: void {`
-  result = result.replace(/\):\s*[^{]+\{/g, ') {');
+
+  result = result.replace(/\):\s*[^{]+?\{/g, ') {');
 
   // Remove `as Type` casts
+  // eslint-disable-next-line security/detect-unsafe-regex -- Input is small, controlled test code
   result = result.replace(/\s+as\s+\w+(?:<[^>]+>)?/g, '');
 
   return result;

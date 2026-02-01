@@ -9,8 +9,6 @@ export {
   createRalphLoop,
   generateImplementationPrompt,
   parseImplementationResponse,
-  extractRequiredTypes,
-  extractWitnessTypes,
   buildFunctionContext,
   buildExtractedContext,
   formatRalphLoopReport,

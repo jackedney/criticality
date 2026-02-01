@@ -36,7 +36,7 @@ const DEFAULT_OPTIONS: Required<CompositionAuditOptions> = {
   enableCrossVerification: true,
   complexityThreshold: 3,
   timeoutMs: 120000,
-  // eslint-disable-next-line @typescript-eslint/no-empty-function
+
   logger: (_message: string) => {},
 };
 

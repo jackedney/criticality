@@ -320,7 +320,6 @@ export function recordSuccess(state: CircuitBreakerState, functionId: string): C
   newFunctions.set(functionId, {
     ...funcState,
     status: 'success',
-    didEscalate: false,
   });
 
   return {
@@ -385,7 +384,6 @@ export function recordFailure(
     ...funcState,
     status: 'failed',
     lastFailure: failure,
-    didEscalate: false,
   });
 
   return {
@@ -959,7 +957,11 @@ export class CircuitBreaker {
    * Gets the current state.
    */
   getState(): CircuitBreakerState {
-    return this.state;
+    return {
+      ...this.state,
+      functions: new Map(this.state.functions),
+      warnings: Array.from(this.state.warnings),
+    };
   }
 
   /**

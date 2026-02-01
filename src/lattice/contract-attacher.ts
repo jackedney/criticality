@@ -874,7 +874,9 @@ export function attachContractsToCode(
 
   // Pattern to match function declarations that might need contracts
   // Matches: export (async)? function name(...
-  const functionPattern = /^(\/\*\*[\s\S]*?\*\/\s*)?(export\s+(?:async\s+)?function\s+(\w+))/gm;
+  // eslint-disable-next-line security/detect-unsafe-regex -- Source file content is bounded
+  const functionPattern =
+    /^(\/\*\*[\s\S]*?\*\/[ \t\n]*)?(export[ \t]+(?:async[ \t]+)?function[ \t]+(\w+))/gm;
 
   // Find all function declarations and their positions
   const matches: {

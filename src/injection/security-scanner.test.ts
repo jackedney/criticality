@@ -288,6 +288,12 @@ describe('security-scanner', () => {
       const nodeModulesPath = path.join(projectRoot, 'node_modules');
       const type = process.platform === 'win32' ? 'junction' : 'dir';
       await fs.symlink(nodeModulesPath, path.join(tempDir, 'node_modules'), type);
+
+      // Create package.json to mark directory as ESM
+      await fs.writeFile(
+        path.join(tempDir, 'package.json'),
+        JSON.stringify({ type: 'module' }, null, 2)
+      );
     });
 
     afterEach(async () => {

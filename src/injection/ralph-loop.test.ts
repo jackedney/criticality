@@ -12,6 +12,7 @@
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import * as fc from 'fast-check';
 import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
 import * as os from 'node:os';
@@ -20,12 +21,11 @@ import {
   createRalphLoop,
   generateImplementationPrompt,
   parseImplementationResponse,
-  extractRequiredTypes,
-  extractWitnessTypes,
   buildFunctionContext,
   formatRalphLoopReport,
   type FunctionContext,
   type RalphLoopResult,
+  type ImplementationAttempt,
 } from './ralph-loop.js';
 import type { TodoFunction } from '../adapters/typescript/ast.js';
 import type { ModelRouter, ModelRouterResult, ModelRouterRequest } from '../router/types.js';
@@ -292,137 +292,6 @@ return sum;`;
 
     expect(body).toContain('const sum = a + b;');
     expect(body).toContain('return sum;');
-  });
-});
-
-describe('extractRequiredTypes', () => {
-  let project: Project;
-
-  beforeEach(() => {
-    project = new Project({
-      useInMemoryFileSystem: true,
-    });
-  });
-
-  it('should extract interface types from signature', () => {
-    project.createSourceFile(
-      '/test/file.ts',
-      `
-interface UserData {
-  name: string;
-  age: number;
-}
-
-function processUser(data: UserData): void {
-  throw new Error('TODO');
-}
-`
-    );
-
-    const todoFunction: TodoFunction = {
-      name: 'processUser',
-      filePath: '/test/file.ts',
-      line: 7,
-      signature: 'function processUser(data: UserData): void',
-      hasTodoBody: true,
-    };
-
-    const types = extractRequiredTypes(project, todoFunction);
-
-    expect(types.length).toBe(1);
-    expect(types[0]).toContain('interface UserData');
-  });
-
-  it('should extract type alias from signature', () => {
-    project.createSourceFile(
-      '/test/file.ts',
-      `
-type Result = { success: boolean; data?: string };
-
-function getResult(): Result {
-  throw new Error('TODO');
-}
-`
-    );
-
-    const todoFunction: TodoFunction = {
-      name: 'getResult',
-      filePath: '/test/file.ts',
-      line: 5,
-      signature: 'function getResult(): Result',
-      hasTodoBody: true,
-    };
-
-    const types = extractRequiredTypes(project, todoFunction);
-
-    expect(types.length).toBe(1);
-    expect(types[0]).toContain('type Result');
-  });
-
-  it('should not include built-in types', () => {
-    project.createSourceFile(
-      '/test/file.ts',
-      `
-function process(data: string): Promise<number> {
-  throw new Error('TODO');
-}
-`
-    );
-
-    const todoFunction: TodoFunction = {
-      name: 'process',
-      filePath: '/test/file.ts',
-      line: 2,
-      signature: 'function process(data: string): Promise<number>',
-      hasTodoBody: true,
-    };
-
-    const types = extractRequiredTypes(project, todoFunction);
-
-    expect(types.length).toBe(0);
-  });
-});
-
-describe('extractWitnessTypes', () => {
-  let project: Project;
-
-  beforeEach(() => {
-    project = new Project({
-      useInMemoryFileSystem: true,
-    });
-  });
-
-  it('should extract branded witness types', () => {
-    project.createSourceFile(
-      '/test/file.ts',
-      `
-type NonEmptyString = string & { readonly __brand: 'NonEmptyString' };
-type PositiveNumber = number & { readonly __brand: 'PositiveNumber' };
-type NormalType = string;
-`
-    );
-
-    const typeNames = new Set(['NonEmptyString', 'PositiveNumber', 'NormalType']);
-    const witnesses = extractWitnessTypes(project, '/test/file.ts', typeNames);
-
-    expect(witnesses.length).toBe(2);
-    expect(witnesses.some((w) => w.includes('NonEmptyString'))).toBe(true);
-    expect(witnesses.some((w) => w.includes('PositiveNumber'))).toBe(true);
-  });
-
-  it('should not extract non-branded types', () => {
-    project.createSourceFile(
-      '/test/file.ts',
-      `
-type NormalType = string;
-interface SomeInterface { name: string; }
-`
-    );
-
-    const typeNames = new Set(['NormalType', 'SomeInterface']);
-    const witnesses = extractWitnessTypes(project, '/test/file.ts', typeNames);
-
-    expect(witnesses.length).toBe(0);
   });
 });
 
@@ -975,5 +844,214 @@ describe('formatRalphLoopReport', () => {
     expect(report).toContain('Compilation failed');
     expect(report).toContain('REMAINING TODO FUNCTIONS');
     expect(report).toContain('divide');
+  });
+
+  describe('property-based tests', () => {
+    it('should contain SUCCESS iff result.success is true', () => {
+      fc.assert(
+        fc.property(
+          fc.record({
+            success: fc.boolean(),
+            totalFunctions: fc.nat(),
+            implementedCount: fc.nat(),
+            failedCount: fc.nat(),
+            attempts: fc.constant([]),
+            totalDurationMs: fc.nat(),
+            remainingTodos: fc.constant([]),
+            circuitTripped: fc.boolean(),
+          }),
+          (result) => {
+            const report = formatRalphLoopReport(result);
+
+            if (result.success) {
+              expect(report).toContain('SUCCESS');
+              expect(report).not.toContain('INCOMPLETE');
+            } else {
+              expect(report).toContain('INCOMPLETE');
+              expect(report).not.toContain('SUCCESS');
+            }
+          }
+        )
+      );
+    });
+
+    it('should reflect counts in the report text', () => {
+      fc.assert(
+        fc.property(
+          fc.record({
+            success: fc.boolean(),
+            totalFunctions: fc.nat({ max: 100 }),
+            implementedCount: fc.nat({ max: 100 }),
+            failedCount: fc.nat({ max: 100 }),
+            attempts: fc.constant([]),
+            totalDurationMs: fc.nat(),
+            remainingTodos: fc.constant([]),
+            circuitTripped: fc.boolean(),
+          }),
+          (result) => {
+            const report = formatRalphLoopReport(result);
+
+            expect(report).toContain(`Total Functions: ${String(result.totalFunctions)}`);
+            expect(report).toContain(`Implemented: ${String(result.implementedCount)}`);
+            expect(report).toContain(`Failed: ${String(result.failedCount)}`);
+          }
+        )
+      );
+    });
+
+    it('should show [ACCEPTED] for accepted attempts and [REJECTED] for rejected ones', () => {
+      const todoFunctionArb = fc.record({
+        name: fc.string({ minLength: 1, maxLength: 20 }),
+        filePath: fc.constant('/test/file.ts'),
+        line: fc.nat({ max: 1000 }),
+        signature: fc.string({ minLength: 1 }),
+        hasTodoBody: fc.constant(true as const),
+      });
+
+      const attemptArb = fc
+        .record({
+          function: todoFunctionArb,
+          accepted: fc.boolean(),
+          generatedBody: fc.string(),
+          compilationResult: fc.oneof(
+            fc.constant(createSuccessTypeCheck()),
+            fc.constant(createFailedTypeCheck('error'))
+          ),
+          rejectionReason: fc.option(fc.string(), { nil: undefined }),
+          durationMs: fc.nat({ max: 10000 }),
+        })
+        .map((r): ImplementationAttempt => {
+          // Handle exactOptionalPropertyTypes - omit the key when undefined
+          const { rejectionReason, ...rest } = r;
+          if (rejectionReason === undefined) {
+            return rest;
+          }
+          return { ...rest, rejectionReason };
+        });
+
+      fc.assert(
+        fc.property(
+          fc.record({
+            success: fc.boolean(),
+            totalFunctions: fc.nat(),
+            implementedCount: fc.nat(),
+            failedCount: fc.nat(),
+            attempts: fc.array(attemptArb, { minLength: 1, maxLength: 10 }),
+            totalDurationMs: fc.nat(),
+            remainingTodos: fc.constant([]),
+            circuitTripped: fc.boolean(),
+          }),
+          (result) => {
+            const report = formatRalphLoopReport(result);
+
+            for (const attempt of result.attempts) {
+              if (attempt.accepted) {
+                expect(report).toContain(`[ACCEPTED] ${attempt.function.name}`);
+              } else {
+                expect(report).toContain(`[REJECTED] ${attempt.function.name}`);
+              }
+            }
+          }
+        )
+      );
+    });
+
+    it('should list all remaining todo function names under REMAINING TODO FUNCTIONS', () => {
+      const todoFunctionArb = fc.record({
+        name: fc.string({ minLength: 1, maxLength: 20 }),
+        filePath: fc.constant('/test/file.ts'),
+        line: fc.nat({ max: 1000 }),
+        signature: fc.string({ minLength: 1 }),
+        hasTodoBody: fc.constant(true as const),
+      });
+
+      fc.assert(
+        fc.property(
+          fc.record({
+            success: fc.boolean(),
+            totalFunctions: fc.nat(),
+            implementedCount: fc.nat(),
+            failedCount: fc.nat(),
+            attempts: fc.constant([]),
+            totalDurationMs: fc.nat(),
+            remainingTodos: fc.array(todoFunctionArb, { minLength: 1, maxLength: 10 }),
+            circuitTripped: fc.boolean(),
+          }),
+          (result) => {
+            const report = formatRalphLoopReport(result);
+
+            if (result.remainingTodos.length > 0) {
+              expect(report).toContain('REMAINING TODO FUNCTIONS');
+              for (const todo of result.remainingTodos) {
+                expect(report).toContain(todo.name);
+              }
+            }
+          }
+        )
+      );
+    });
+
+    it('should be consistent: counts match attempts array', () => {
+      const todoFunctionArb = fc.record({
+        name: fc.string({ minLength: 1, maxLength: 20 }),
+        filePath: fc.constant('/test/file.ts'),
+        line: fc.nat({ max: 1000 }),
+        signature: fc.string({ minLength: 1 }),
+        hasTodoBody: fc.constant(true as const),
+      });
+
+      const attemptArb = fc
+        .record({
+          function: todoFunctionArb,
+          accepted: fc.boolean(),
+          generatedBody: fc.string(),
+          compilationResult: fc.oneof(
+            fc.constant(createSuccessTypeCheck()),
+            fc.constant(createFailedTypeCheck('error'))
+          ),
+          rejectionReason: fc.option(fc.string(), { nil: undefined }),
+          durationMs: fc.nat({ max: 10000 }),
+        })
+        .map((r): ImplementationAttempt => {
+          // Handle exactOptionalPropertyTypes - omit the key when undefined
+          const { rejectionReason, ...rest } = r;
+          if (rejectionReason === undefined) {
+            return rest;
+          }
+          return { ...rest, rejectionReason };
+        });
+
+      fc.assert(
+        fc.property(fc.array(attemptArb, { maxLength: 20 }), (attempts) => {
+          const acceptedCount = attempts.filter((a) => a.accepted).length;
+          const rejectedCount = attempts.filter((a) => !a.accepted).length;
+
+          const result: RalphLoopResult = {
+            success: rejectedCount === 0,
+            totalFunctions: attempts.length,
+            implementedCount: acceptedCount,
+            failedCount: rejectedCount,
+            attempts,
+            totalDurationMs: attempts.reduce((sum, a) => sum + a.durationMs, 0),
+            remainingTodos: [],
+            circuitTripped: false,
+          };
+
+          const report = formatRalphLoopReport(result);
+
+          // Verify counts are reflected correctly
+          expect(report).toContain(`Total Functions: ${String(attempts.length)}`);
+          expect(report).toContain(`Implemented: ${String(acceptedCount)}`);
+          expect(report).toContain(`Failed: ${String(rejectedCount)}`);
+
+          // Verify status matches success flag
+          if (rejectedCount === 0) {
+            expect(report).toContain('SUCCESS');
+          } else {
+            expect(report).toContain('INCOMPLETE');
+          }
+        })
+      );
+    });
   });
 });

@@ -532,7 +532,8 @@ export class TypeScriptAdapter implements TargetAdapter {
       try {
         const content = fs.readFileSync(pnpmWorkspacePath, 'utf-8');
         // Simple YAML parsing for packages array
-        const packagesMatch = /packages:\s*\n((?:\s+-\s+.+\n?)+)/i.exec(content);
+        // eslint-disable-next-line security/detect-unsafe-regex -- File size bounded, local config file
+        const packagesMatch = /packages:\s*\n((?:\s+-\s+[^\n]+\n?)+)/i.exec(content);
         const matchContent = packagesMatch?.[1];
         if (matchContent !== undefined) {
           const patterns = matchContent

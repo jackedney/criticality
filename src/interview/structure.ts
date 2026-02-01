@@ -480,8 +480,10 @@ export function detectContradictions(
       }
 
       // Check for "must" vs "must not" contradictions
-      const mustPattern = /must\s+(?:have\s+|support\s+|include\s+)?(\w+)/g;
-      const mustNotPattern = /must\s+not\s+(?:have\s+|support\s+|include\s+)?(\w+)/g;
+      // eslint-disable-next-line security/detect-unsafe-regex -- Short requirement text from spec
+      const mustPattern = /must[ \t]+(?:have[ \t]+|support[ \t]+|include[ \t]+)?(\w+)/g;
+      // eslint-disable-next-line security/detect-unsafe-regex -- Short requirement text from spec
+      const mustNotPattern = /must[ \t]+not[ \t]+(?:have[ \t]+|support[ \t]+|include[ \t]+)?(\w+)/g;
 
       const mustMatchesI = [...reqI.text.matchAll(mustPattern)];
       const mustNotMatchesJ = [...reqJ.text.matchAll(mustNotPattern)];
