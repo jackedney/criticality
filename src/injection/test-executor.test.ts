@@ -218,6 +218,91 @@ describe('findTestFile', () => {
     const found = await findTestFile(srcFile);
     expect(found).toBeUndefined();
   });
+
+  it('should find .test.tsx file for .tsx source file', async () => {
+    const srcFile = path.join(tempDir, 'Component.tsx');
+    const testFile = path.join(tempDir, 'Component.test.tsx');
+
+    await fs.writeFile(srcFile, 'export function Component() {}');
+    await fs.writeFile(testFile, 'describe("Component", () => {})');
+
+    const found = await findTestFile(srcFile);
+    expect(found).toBe(testFile);
+  });
+
+  it('should find .spec.tsx file for .tsx source file', async () => {
+    const srcFile = path.join(tempDir, 'Component.tsx');
+    const testFile = path.join(tempDir, 'Component.spec.tsx');
+
+    await fs.writeFile(srcFile, 'export function Component() {}');
+    await fs.writeFile(testFile, 'describe("Component", () => {})');
+
+    const found = await findTestFile(srcFile);
+    expect(found).toBe(testFile);
+  });
+
+  it('should prefer .test.tsx over .spec.tsx for .tsx source', async () => {
+    const srcFile = path.join(tempDir, 'Component.tsx');
+    const testFile = path.join(tempDir, 'Component.test.tsx');
+    const specFile = path.join(tempDir, 'Component.spec.tsx');
+
+    await fs.writeFile(srcFile, 'export function Component() {}');
+    await fs.writeFile(testFile, 'describe("Component test", () => {})');
+    await fs.writeFile(specFile, 'describe("Component spec", () => {})');
+
+    const found = await findTestFile(srcFile);
+    expect(found).toBe(testFile);
+  });
+
+  it('should find .test.tsx file in __tests__ directory', async () => {
+    const srcFile = path.join(tempDir, 'Component.tsx');
+    const testsDir = path.join(tempDir, '__tests__');
+    const testFile = path.join(testsDir, 'Component.test.tsx');
+
+    await fs.writeFile(srcFile, 'export function Component() {}');
+    await fs.mkdir(testsDir, { recursive: true });
+    await fs.writeFile(testFile, 'describe("Component", () => {})');
+
+    const found = await findTestFile(srcFile);
+    expect(found).toBe(testFile);
+  });
+
+  it('should prefer same directory over __tests__ for TSX', async () => {
+    const srcFile = path.join(tempDir, 'Component.tsx');
+    const testsDir = path.join(tempDir, '__tests__');
+    const localTestFile = path.join(tempDir, 'Component.test.tsx');
+    const testsTestFile = path.join(testsDir, 'Component.test.tsx');
+
+    await fs.writeFile(srcFile, 'export function Component() {}');
+    await fs.mkdir(testsDir, { recursive: true });
+    await fs.writeFile(localTestFile, 'describe("Component local", () => {})');
+    await fs.writeFile(testsTestFile, 'describe("Component tests", () => {})');
+
+    const found = await findTestFile(srcFile);
+    expect(found).toBe(localTestFile);
+  });
+
+  it('should still find .test.ts file for .tsx source file', async () => {
+    const srcFile = path.join(tempDir, 'Component.tsx');
+    const testFile = path.join(tempDir, 'Component.test.ts');
+
+    await fs.writeFile(srcFile, 'export function Component() {}');
+    await fs.writeFile(testFile, 'describe("Component", () => {})');
+
+    const found = await findTestFile(srcFile);
+    expect(found).toBe(testFile);
+  });
+
+  it('should still find .test.ts file for .ts source file (negative case)', async () => {
+    const srcFile = path.join(tempDir, 'account.ts');
+    const testFile = path.join(tempDir, 'account.test.ts');
+
+    await fs.writeFile(srcFile, 'export function deposit() {}');
+    await fs.writeFile(testFile, 'describe("account", () => {})');
+
+    const found = await findTestFile(srcFile);
+    expect(found).toBe(testFile);
+  });
 });
 
 describe('runCompilationVerification', () => {

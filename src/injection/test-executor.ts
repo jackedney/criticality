@@ -119,22 +119,30 @@ export const DEFAULT_TEST_TIMEOUT = 30000;
  * Looks for test files in the following patterns:
  * 1. Same directory: <basename>.test.ts
  * 2. Same directory: <basename>.spec.ts
- * 3. __tests__ directory: <basename>.test.ts
- * 4. __tests__ directory: <basename>.spec.ts
+ * 3. Same directory: <basename>.test.tsx
+ * 4. Same directory: <basename>.spec.tsx
+ * 5. __tests__ directory: <basename>.test.ts
+ * 6. __tests__ directory: <basename>.spec.ts
+ * 7. __tests__ directory: <basename>.test.tsx
+ * 8. __tests__ directory: <basename>.spec.tsx
  *
  * @param sourceFilePath - The source file path.
  * @returns The test file path if found, undefined otherwise.
  */
 export async function findTestFile(sourceFilePath: string): Promise<string | undefined> {
-  const baseName = path.basename(sourceFilePath, '.ts');
+  const baseName = path.basename(sourceFilePath).replace(/\.(ts|tsx)$/, '');
   const dirName = path.dirname(sourceFilePath);
 
   // Patterns to check
   const candidates = [
     path.join(dirName, `${baseName}.test.ts`),
     path.join(dirName, `${baseName}.spec.ts`),
+    path.join(dirName, `${baseName}.test.tsx`),
+    path.join(dirName, `${baseName}.spec.tsx`),
     path.join(dirName, '__tests__', `${baseName}.test.ts`),
     path.join(dirName, '__tests__', `${baseName}.spec.ts`),
+    path.join(dirName, '__tests__', `${baseName}.test.tsx`),
+    path.join(dirName, '__tests__', `${baseName}.spec.tsx`),
   ];
 
   for (const candidate of candidates) {
