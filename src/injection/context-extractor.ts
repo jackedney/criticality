@@ -113,10 +113,6 @@ export interface ContextSizeMetrics {
 export interface ContextExtractionOptions {
   /** Maximum depth for transitive type extraction. Default: 5. */
   readonly maxTypeDepth?: number;
-  /** Whether to include type members in extracted definitions. Default: true. */
-  readonly includeTypeMembers?: boolean;
-  /** Whether to detect and flatten circular references. Default: true. */
-  readonly flattenCircularReferences?: boolean;
   /** Maximum total types to extract (prevents explosion). Default: 50. */
   readonly maxTypes?: number;
 }
@@ -745,8 +741,6 @@ export function extractContext(
 ): ExtractedContext {
   const resolvedOptions: Required<ContextExtractionOptions> = {
     maxTypeDepth: options.maxTypeDepth ?? 5,
-    includeTypeMembers: options.includeTypeMembers ?? true,
-    flattenCircularReferences: options.flattenCircularReferences ?? true,
     maxTypes: options.maxTypes ?? 50,
   };
 
