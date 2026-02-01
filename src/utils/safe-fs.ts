@@ -16,6 +16,7 @@
  */
 
 import * as fs from 'node:fs/promises';
+import * as fsSync from 'node:fs';
 import * as path from 'node:path';
 
 /**
@@ -134,6 +135,19 @@ export async function safeExists(filePath: string): Promise<boolean> {
   } catch {
     return false;
   }
+}
+
+/**
+ * Synchronously checks if a file or directory exists after validating the path.
+ *
+ * @param filePath - The path to check.
+ * @returns True if the path exists, false otherwise.
+ * @throws {PathValidationError} If the path is invalid.
+ */
+export function safeExistsSync(filePath: string): boolean {
+  const validatedPath = validatePath(filePath);
+  // eslint-disable-next-line security/detect-non-literal-fs-filename -- path is validated by validatePath
+  return fsSync.existsSync(validatedPath);
 }
 
 /**
