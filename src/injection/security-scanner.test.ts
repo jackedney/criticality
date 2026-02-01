@@ -4,7 +4,10 @@
  * @packageDocumentation
  */
 
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import * as fs from 'node:fs/promises';
+import * as path from 'node:path';
+import * as os from 'node:os';
 import {
   runSecurityScan,
   securityScanToFailure,
@@ -273,6 +276,156 @@ describe('security-scanner', () => {
       ).rejects.toThrow();
 
       expect(logger).toHaveBeenCalledWith('Running security vulnerability scan...');
+    });
+  });
+
+  describe('runSecurityScan integration tests', () => {
+    let tempDir: string;
+    const projectRoot = process.cwd();
+
+    beforeEach(async () => {
+      tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'security-scan-test-'));
+      const nodeModulesPath = path.join(projectRoot, 'node_modules');
+      await fs.symlink(nodeModulesPath, path.join(tempDir, 'node_modules'));
+    });
+
+    afterEach(async () => {
+      await fs.rm(tempDir, { recursive: true, force: true });
+    });
+
+    it('detects eval() usage in vulnerable code', async () => {
+      const vulnerableFile = path.join(tempDir, 'vulnerable.js');
+      const eslintConfig = path.join(tempDir, 'eslint.config.js');
+
+      await fs.writeFile(
+        vulnerableFile,
+        `export function evaluate(input) {
+  return eval(input);
+}`
+      );
+
+      await fs.writeFile(
+        eslintConfig,
+        `import securityPlugin from 'eslint-plugin-security';
+
+export default [
+  {
+    plugins: {
+      security: securityPlugin,
+    },
+    rules: {
+      'security/detect-eval-with-expression': 'warn',
+      'security/detect-child-process': 'warn',
+    },
+  },
+];`
+      );
+
+      const logger = vi.fn();
+
+      const result = await runSecurityScan({
+        projectPath: tempDir,
+        eslintConfigPath: eslintConfig,
+        files: [vulnerableFile],
+        logger,
+        failFastOnCritical: false,
+      });
+
+      expect(result.hasVulnerabilities).toBe(true);
+      expect(result.vulnerabilities.length).toBeGreaterThan(0);
+
+      const evalVuln = result.vulnerabilities.find(
+        (v) => v.vulnerabilityType === 'injection' && v.ruleId.includes('eval')
+      );
+      expect(evalVuln).toBeDefined();
+      expect(evalVuln?.severity).toBe('critical');
+      expect(evalVuln?.filePath).toBe(vulnerableFile);
+    });
+
+    it('returns clean result for code without vulnerabilities', async () => {
+      const cleanFile = path.join(tempDir, 'clean.js');
+      const eslintConfig = path.join(tempDir, 'eslint.config.js');
+
+      await fs.writeFile(
+        cleanFile,
+        `export function add(a, b) {
+  return a + b;
+}`
+      );
+
+      await fs.writeFile(
+        eslintConfig,
+        `import securityPlugin from 'eslint-plugin-security';
+
+export default [
+  {
+    plugins: {
+      security: securityPlugin,
+    },
+    rules: {
+      'security/detect-eval-with-expression': 'warn',
+      'security/detect-child-process': 'warn',
+    },
+  },
+];`
+      );
+
+      const logger = vi.fn();
+
+      const result = await runSecurityScan({
+        projectPath: tempDir,
+        eslintConfigPath: eslintConfig,
+        files: [cleanFile],
+        logger,
+        failFastOnCritical: false,
+      });
+
+      expect(result.hasVulnerabilities).toBe(false);
+      expect(result.hasCriticalVulnerabilities).toBe(false);
+      expect(result.vulnerabilities.length).toBe(0);
+    });
+
+    it('detects child_process.exec() usage', async () => {
+      const vulnerableFile = path.join(tempDir, 'vulnerable.js');
+      const eslintConfig = path.join(tempDir, 'eslint.config.js');
+
+      await fs.writeFile(
+        vulnerableFile,
+        `import { exec } from 'child_process';
+
+export function executeCommand(command) {
+  return exec(command);
+}`
+      );
+
+      await fs.writeFile(
+        eslintConfig,
+        `import securityPlugin from 'eslint-plugin-security';
+
+export default [
+  {
+    plugins: {
+      security: securityPlugin,
+    },
+    rules: {
+      'security/detect-child-process': 'warn',
+    },
+  },
+];`
+      );
+
+      const logger = vi.fn();
+
+      const result = await runSecurityScan({
+        projectPath: tempDir,
+        eslintConfigPath: eslintConfig,
+        files: [vulnerableFile],
+        logger,
+        failFastOnCritical: false,
+      });
+
+      expect(result.hasVulnerabilities).toBe(true);
+      expect(result.vulnerabilities.length).toBeGreaterThan(0);
     });
   });
 });
