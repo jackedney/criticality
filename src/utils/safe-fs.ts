@@ -151,6 +151,49 @@ export function safeExistsSync(filePath: string): boolean {
 }
 
 /**
+ * Synchronously reads a file after validating the path.
+ *
+ * @param filePath - The path to the file to read.
+ * @param options - Optional encoding or file read options.
+ * @returns The file contents as a string or Buffer.
+ * @throws {PathValidationError} If the path is invalid.
+ * @throws {Error} If the file cannot be read (e.g., file not found, permission denied).
+ */
+export function safeReadFileSync(
+  filePath: string,
+  options?: { encoding?: BufferEncoding | null; flag?: string } | BufferEncoding | null
+): string | Buffer {
+  const validatedPath = validatePath(filePath);
+  // eslint-disable-next-line security/detect-non-literal-fs-filename -- path is validated by validatePath
+  return fsSync.readFileSync(validatedPath, options);
+}
+
+/**
+ * Synchronously reads a directory after validating the path.
+ *
+ * Overload signatures for different option types.
+ */
+export function safeReaddirSync(
+  filePath: string,
+  options?: { withFileTypes?: boolean }
+): import('node:fs').Dirent[];
+export function safeReaddirSync(filePath: string, options?: BufferEncoding | null): string[];
+export function safeReaddirSync(
+  filePath: string,
+  options?: { withFileTypes?: boolean } | BufferEncoding | null
+): string[] | import('node:fs').Dirent[] {
+  const validatedPath = validatePath(filePath);
+  return (
+    // eslint-disable-next-line security/detect-non-literal-fs-filename -- path is validated by validatePath
+    fsSync.readdirSync(
+      validatedPath,
+      // eslint-disable-next-line @typescript-eslint/no-unsafe-argument, @typescript-eslint/no-explicit-any -- type safety enforced by overload signatures
+      options as any
+    )
+  );
+}
+
+/**
  * Safely creates a directory after validating the path.
  *
  * @param filePath - The path to the directory to create.
@@ -180,8 +223,14 @@ export async function safeMkdir(
 export async function safeReaddir(filePath: string, options?: unknown): Promise<unknown> {
   const validatedPath = validatePath(filePath);
 
-  // eslint-disable-next-line @typescript-eslint/no-unsafe-argument,@typescript-eslint/no-explicit-any -- required for complex readdir options
-  return fs.readdir(validatedPath, options as any);
+  return (
+    // eslint-disable-next-line security/detect-non-literal-fs-filename -- path is validated by validatePath
+    fs.readdir(
+      validatedPath,
+      // eslint-disable-next-line @typescript-eslint/no-unsafe-argument, @typescript-eslint/no-explicit-any -- required for complex readdir options
+      options as any
+    )
+  );
 }
 
 /**
