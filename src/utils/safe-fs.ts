@@ -276,3 +276,59 @@ export async function safeRename(oldPath: string, newPath: string): Promise<void
   // eslint-disable-next-line security/detect-non-literal-fs-filename -- paths are validated by validatePath
   return fs.rename(validatedOldPath, validatedNewPath);
 }
+
+/**
+ * Synchronously writes to a file after validating the path.
+ *
+ * @param filePath - The path to the file to write.
+ * @param data - The data to write to the file.
+ * @param options - Optional encoding or file write options.
+ * @throws {PathValidationError} If the path is invalid.
+ * @throws {Error} If the file cannot be written (e.g., permission denied, directory does not exist).
+ */
+export function safeWriteFileSync(
+  filePath: string,
+  data: string | Buffer | DataView,
+  options?:
+    | { encoding?: BufferEncoding | null; mode?: number; flag?: string }
+    | BufferEncoding
+    | null
+): void {
+  const validatedPath = validatePath(filePath);
+  // eslint-disable-next-line security/detect-non-literal-fs-filename -- path is validated by validatePath
+  fsSync.writeFileSync(validatedPath, data, options);
+}
+
+/**
+ * Synchronously creates a directory after validating the path.
+ *
+ * @param filePath - The path to the directory to create.
+ * @param options - Optional recursive mode and mode options.
+ * @throws {PathValidationError} If the path is invalid.
+ * @throws {Error} If the directory cannot be created (e.g., permission denied, file exists).
+ */
+export function safeMkdirSync(
+  filePath: string,
+  options?: { recursive?: boolean; mode?: number }
+): string | undefined {
+  const validatedPath = validatePath(filePath);
+  // eslint-disable-next-line security/detect-non-literal-fs-filename -- path is validated by validatePath
+  return fsSync.mkdirSync(validatedPath, options);
+}
+
+/**
+ * Synchronously removes a file or directory after validating the path.
+ *
+ * @param filePath - The path to the file or directory to remove.
+ * @param options - Options for removal.
+ * @throws {PathValidationError} If the path is invalid.
+ * @throws {Error} If the path cannot be removed (e.g., not found, permission denied).
+ */
+export function safeRmSync(
+  filePath: string,
+  options?: { force?: boolean; maxRetries?: number; recursive?: boolean; retryDelay?: number }
+): void {
+  const validatedPath = validatePath(filePath);
+
+  fsSync.rmSync(validatedPath, options);
+}

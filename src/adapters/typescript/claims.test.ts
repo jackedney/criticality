@@ -15,6 +15,7 @@ import {
   type Claim,
   DEFAULT_CLAIM_TYPE,
 } from './claims.js';
+import { safeWriteFileSync } from '../../utils/safe-fs.js';
 
 const FIXTURES_DIR = path.resolve(__dirname, '../../../test-fixtures/claims');
 
@@ -173,7 +174,7 @@ name = "test-system"
 [claims]
 `;
         const specPath = path.join(tempDir, 'empty-claims.toml');
-        fs.writeFileSync(specPath, specContent);
+        safeWriteFileSync(specPath, specContent);
 
         const claims = parseClaims(specPath);
         expect(claims).toEqual([]);
@@ -197,7 +198,7 @@ text = "Another claim"
 type = "invariant"
 `;
         const specPath = path.join(tempDir, 'custom-ids.toml');
-        fs.writeFileSync(specPath, specContent);
+        safeWriteFileSync(specPath, specContent);
 
         const claims = parseClaims(specPath);
         const claimIds = claims.map((c) => c.id).sort();

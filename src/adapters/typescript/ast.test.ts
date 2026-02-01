@@ -14,6 +14,7 @@ import {
   inspectAst,
   type TodoFunction,
 } from './ast.js';
+import { safeWriteFileSync, safeReadFileSync, safeExistsSync } from '../../utils/safe-fs.js';
 
 describe('createProject', () => {
   let tempDir: string;
@@ -36,7 +37,7 @@ describe('createProject', () => {
           strict: true,
         },
       };
-      fs.writeFileSync(tsConfigPath, JSON.stringify(tsConfigContent, null, 2));
+      safeWriteFileSync(tsConfigPath, JSON.stringify(tsConfigContent, null, 2));
 
       const project = createProject(tsConfigPath);
 
@@ -52,7 +53,7 @@ describe('createProject', () => {
           noImplicitAny: false,
         },
       };
-      fs.writeFileSync(tsConfigPath, JSON.stringify(tsConfigContent, null, 2));
+      safeWriteFileSync(tsConfigPath, JSON.stringify(tsConfigContent, null, 2));
 
       const project = createProject(tsConfigPath);
       const compilerOptions = project.getCompilerOptions();
@@ -78,7 +79,7 @@ describe('createProject', () => {
 
     it('resolves relative paths correctly', () => {
       const tsConfigPath = path.join(tempDir, 'tsconfig.json');
-      fs.writeFileSync(tsConfigPath, JSON.stringify({ compilerOptions: {} }));
+      safeWriteFileSync(tsConfigPath, JSON.stringify({ compilerOptions: {} }));
 
       const cwd = process.cwd();
       process.chdir(tempDir);
@@ -164,7 +165,7 @@ describe('findTodoFunctions', () => {
 
   function addSourceFile(filename: string, content: string): string {
     const filePath = path.join(tempDir, filename);
-    fs.writeFileSync(filePath, content);
+    safeWriteFileSync(filePath, content);
     project.addSourceFileAtPath(filePath);
     return filePath;
   }
@@ -522,7 +523,7 @@ describe('findTodoFunctions', () => {
       const fixtureDir = path.resolve(process.cwd(), 'test-fixtures/todo-patterns');
       const fixturePath = path.join(fixtureDir, 'todo-single-quotes.ts');
 
-      if (fs.existsSync(fixturePath)) {
+      if (safeExistsSync(fixturePath)) {
         const fixtureProject = createProject();
         fixtureProject.addSourceFileAtPath(fixturePath);
 
@@ -537,7 +538,7 @@ describe('findTodoFunctions', () => {
       const fixtureDir = path.resolve(process.cwd(), 'test-fixtures/todo-patterns');
       const fixturePath = path.join(fixtureDir, 'todo-double-quotes.ts');
 
-      if (fs.existsSync(fixturePath)) {
+      if (safeExistsSync(fixturePath)) {
         const fixtureProject = createProject();
         fixtureProject.addSourceFileAtPath(fixturePath);
 
@@ -565,13 +566,13 @@ describe('injectFunctionBody', () => {
 
   function addSourceFile(filename: string, content: string): string {
     const filePath = path.join(tempDir, filename);
-    fs.writeFileSync(filePath, content);
+    safeWriteFileSync(filePath, content);
     project.addSourceFileAtPath(filePath);
     return filePath;
   }
 
   function readFileContent(filePath: string): string {
-    return fs.readFileSync(filePath, 'utf-8');
+    return safeReadFileSync(filePath, 'utf-8') as string;
   }
 
   describe('basic injection', () => {
@@ -1088,7 +1089,7 @@ describe('orderByDependency', () => {
 
   function addSourceFile(filename: string, content: string): string {
     const filePath = path.join(tempDir, filename);
-    fs.writeFileSync(filePath, content);
+    safeWriteFileSync(filePath, content);
     project.addSourceFileAtPath(filePath);
     return filePath;
   }
@@ -1731,7 +1732,7 @@ describe('inspectAst', () => {
 
   function createSourceFile(filename: string, content: string): string {
     const filePath = path.join(tempDir, filename);
-    fs.writeFileSync(filePath, content);
+    safeWriteFileSync(filePath, content);
     return filePath;
   }
 
