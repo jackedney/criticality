@@ -332,3 +332,39 @@ export function safeRmSync(
 
   fsSync.rmSync(validatedPath, options);
 }
+
+/**
+ * Safely appends data to a file after validating the path.
+ *
+ * @param filePath - The path to the file to append to.
+ * @param data - The data to append.
+ * @param options - Optional encoding or file append options.
+ * @returns A promise that resolves when the file is appended to.
+ * @throws {PathValidationError} If the path is invalid.
+ * @throws {Error} If the file cannot be appended to (e.g., permission denied, directory does not exist).
+ */
+export async function safeAppendFile(
+  filePath: string,
+  data: string,
+  options?:
+    | { encoding?: BufferEncoding | null; mode?: number; flag?: string }
+    | BufferEncoding
+    | null
+): Promise<void> {
+  const validatedPath = validatePath(filePath);
+
+  if (typeof options === 'string') {
+    return fs.appendFile(validatedPath, data, options);
+  }
+  return fs.appendFile(validatedPath, data, options);
+}
+
+export async function safeAppendFileWithOptions(
+  filePath: string,
+  data: string | Buffer,
+  options: { encoding?: BufferEncoding | null; mode?: number; flag?: string }
+): Promise<void> {
+  const validatedPath = validatePath(filePath);
+  // eslint-disable-next-line security/detect-non-literal-fs-filename -- path is validated by validatePath
+  return fs.appendFile(validatedPath, data, options);
+}

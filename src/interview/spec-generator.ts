@@ -8,7 +8,7 @@
  */
 
 import * as TOML from '@iarna/toml';
-import { writeFile, readFile, mkdir, readdir } from 'node:fs/promises';
+import { safeWriteFile, safeReadFile, safeMkdir, safeReaddir } from '../utils/safe-fs.js';
 import { join, dirname } from 'node:path';
 import type {
   ClaimType,
@@ -685,9 +685,9 @@ export async function getNextProposalVersion(projectId: string): Promise<number>
   const proposalsDir = getProposalsDir(projectId);
 
   try {
-    const files = await readdir(proposalsDir);
-    const versions = files
-      .filter((f) => /^v\d+\.toml$/.test(f))
+    const files = await safeReaddir(proposalsDir);
+    const versions = (files as string[])
+      .filter((f: string) => /^v\d+\.toml$/.test(f))
       .map((f) => {
         const match = /^v(\d+)\.toml$/.exec(f);
         const versionStr = match?.[1];
@@ -732,7 +732,7 @@ export async function saveProposal(spec: Spec, projectId: string): Promise<SaveP
   const proposalsDir = getProposalsDir(projectId);
 
   // Ensure directory exists
-  await mkdir(proposalsDir, { recursive: true });
+  await safeMkdir(proposalsDir, { recursive: true });
 
   // Serialize the spec once (content is the same across retries)
   const tomlContent = serializeSpec(spec);
@@ -746,7 +746,7 @@ export async function saveProposal(spec: Spec, projectId: string): Promise<SaveP
 
     try {
       // Use exclusive creation flag 'wx' to prevent race conditions
-      await writeFile(proposalPath, tomlContent, { encoding: 'utf-8', flag: 'wx' });
+      await safeWriteFile(proposalPath, tomlContent, { encoding: 'utf-8', flag: 'wx' });
 
       // Success - return the result
       return {
@@ -801,7 +801,7 @@ export async function loadProposal(projectId: string, version: number): Promise<
   const proposalPath = join(getProposalsDir(projectId), `v${String(version)}.toml`);
 
   try {
-    return await readFile(proposalPath, 'utf-8');
+    return (await safeReadFile(proposalPath, 'utf-8')) as string;
   } catch (error) {
     const err = error instanceof Error ? error : new Error(String(error));
     throw new SpecGeneratorError(
@@ -822,9 +822,9 @@ export async function listProposals(projectId: string): Promise<readonly number[
   const proposalsDir = getProposalsDir(projectId);
 
   try {
-    const files = await readdir(proposalsDir);
-    return files
-      .filter((f) => /^v\d+\.toml$/.test(f))
+    const files = await safeReaddir(proposalsDir);
+    return (files as string[])
+      .filter((f: string) => /^v\d+\.toml$/.test(f))
       .map((f) => {
         const match = /^v(\d+)\.toml$/.exec(f);
         const versionStr = match?.[1];
@@ -861,12 +861,12 @@ export async function finalizeSpec(spec: Spec, projectRoot: string): Promise<Fin
   const specPath = join(projectRoot, 'spec.toml');
 
   // Ensure directory exists
-  await mkdir(dirname(specPath), { recursive: true });
+  await safeMkdir(dirname(specPath), { recursive: true });
 
   // Serialize and write
   try {
     const tomlContent = serializeSpec(spec);
-    await writeFile(specPath, tomlContent, 'utf-8');
+    await safeWriteFile(specPath, tomlContent, 'utf-8');
   } catch (error) {
     const err = error instanceof Error ? error : new Error(String(error));
     throw new SpecGeneratorError(
