@@ -305,13 +305,15 @@ export async function loadContradictionReport(
       filePath = yamlPath;
     } catch (yamlError) {
       const yamlFileError = yamlError instanceof Error ? yamlError : new Error(String(yamlError));
-      if (!hasErrorCode(yamlError, 'ENOENT')) {
+      if (hasErrorCode(yamlError, 'ENOENT')) {
+        // Both JSON and YAML files don't exist - report not found
         throw new ReportStorageError(
           `Contradiction report "${reportId}" not found for project "${projectId}"`,
           'not_found',
           { cause: yamlFileError, details: `Looked for ${jsonPath} and ${yamlPath}` }
         );
       }
+      // YAML file exists but couldn't be read for another reason
       throw new ReportStorageError(
         `Failed to read contradiction report from "${yamlPath}"`,
         'file_error',

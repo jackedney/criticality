@@ -911,7 +911,7 @@ name = "my-system"
             fc.integer({ min: 0, max: 100 }),
             fc.integer({ min: 0, max: 100 })
           ),
-          fc.date(),
+          fc.date().filter((d) => !isNaN(d.getTime())), // Filter out invalid dates (NaN)
           fc.stringMatching(/^[a-z][a-z0-9-]*$/),
           ([major, minor, patch], created, systemName) => {
             const toml = `
