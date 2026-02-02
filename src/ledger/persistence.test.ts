@@ -3,6 +3,7 @@ import { rm } from 'node:fs/promises';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { randomUUID } from 'node:crypto';
+import * as fc from 'fast-check';
 import { safeReadFile, safeWriteFile, safeMkdir, safeReaddir } from '../utils/safe-fs.js';
 import {
   Ledger,
@@ -12,7 +13,14 @@ import {
   loadLedger,
   LedgerSerializationError,
 } from './index.js';
-import type { DecisionInput, LedgerData } from './index.js';
+import type {
+  DecisionInput,
+  LedgerData,
+  DecisionCategory,
+  DecisionSource,
+  ConfidenceLevel,
+  DecisionPhase,
+} from './index.js';
 
 describe('Ledger Persistence', () => {
   const createTestInput = (overrides: Partial<DecisionInput> = {}): DecisionInput => ({
@@ -382,6 +390,249 @@ describe('Ledger Persistence', () => {
 
       expect(newDecision.id).toBe('architectural_002'); // Should continue ID sequence
       expect(restored.size).toBe(2);
+    });
+  });
+
+  describe('Property-based tests', () => {
+    const categories: DecisionCategory[] = [
+      'architectural',
+      'phase_structure',
+      'injection',
+      'ledger',
+      'type_witnesses',
+      'contracts',
+      'models',
+      'blocking',
+      'testing',
+      'orchestrator',
+      'language_support',
+      'data_model',
+      'interface',
+      'constraint',
+      'security',
+    ];
+
+    const sources: DecisionSource[] = [
+      'user_explicit',
+      'design_principle',
+      'original_design',
+      'discussion',
+      'design_choice',
+      'design_review',
+      'injection_failure',
+      'auditor_contradiction',
+      'composition_audit',
+      'mesoscopic_failure',
+      'human_resolution',
+    ];
+
+    const confidenceLevels: ConfidenceLevel[] = [
+      'canonical',
+      'delegated',
+      'inferred',
+      'provisional',
+      'suspended',
+      'blocking',
+    ];
+
+    const phases: DecisionPhase[] = [
+      'design',
+      'ignition',
+      'lattice',
+      'composition_audit',
+      'injection',
+      'mesoscopic',
+      'mass_defect',
+    ];
+
+    const nonEmptyStringArbitrary = fc.string({ minLength: 1 }).filter((s) => s.trim().length > 0);
+
+    const decisionInputArbitrary = fc.record<DecisionInput>({
+      category: fc.constantFrom(...categories),
+      constraint: nonEmptyStringArbitrary,
+      rationale: fc.option(fc.string(), { nil: undefined }),
+      source: fc.constantFrom(...sources),
+      confidence: fc.constantFrom(...confidenceLevels),
+      phase: fc.constantFrom(...phases),
+      dependencies: fc.option(fc.array(nonEmptyStringArbitrary), { nil: undefined }),
+      supersedes: fc.option(fc.array(nonEmptyStringArbitrary), { nil: undefined }),
+      failure_context: fc.option(fc.string(), { nil: undefined }),
+      contradiction_resolved: fc.option(fc.string(), { nil: undefined }),
+      human_query_id: fc.option(fc.string(), { nil: undefined }),
+    });
+
+    const createLedgerWithDecisions = (inputs: DecisionInput[]): Ledger => {
+      const ledger = new Ledger({ project: 'property-test' });
+      for (const input of inputs) {
+        ledger.append(input, { skipDependencyValidation: true });
+      }
+      return ledger;
+    };
+
+    describe('serialize/deserialize round-trip', () => {
+      it('should preserve ledger through serialize/deserialize round-trip for random valid inputs', () => {
+        fc.assert(
+          fc.property(fc.array(decisionInputArbitrary, { maxLength: 20 }), (inputs) => {
+            const ledger = createLedgerWithDecisions(inputs);
+
+            const json = serialize(ledger);
+            const restored = deserialize(json);
+
+            expect(restored.size).toBe(ledger.size);
+
+            for (const original of ledger.getDecisions()) {
+              const restoredDecision = restored.getById(original.id);
+              expect(restoredDecision).toBeDefined();
+              expect(restoredDecision?.constraint).toBe(original.constraint);
+              expect(restoredDecision?.category).toBe(original.category);
+              expect(restoredDecision?.source).toBe(original.source);
+              expect(restoredDecision?.confidence).toBe(original.confidence);
+              expect(restoredDecision?.phase).toBe(original.phase);
+              expect(restoredDecision?.rationale).toBe(original.rationale);
+              expect(restoredDecision?.dependencies).toEqual(original.dependencies);
+              expect(restoredDecision?.failure_context).toBe(original.failure_context);
+            }
+          })
+        );
+      });
+
+      it('should handle edge cases: empty strings, special characters, unicode', () => {
+        fc.assert(
+          fc.property(
+            fc.constantFrom(...categories),
+            fc.string({ minLength: 1, maxLength: 100 }).filter((s) => s.trim().length > 0),
+            (category, constraint) => {
+              const ledger = new Ledger({ project: 'edge-case-test' });
+              ledger.append({
+                category,
+                constraint,
+                source: 'user_explicit',
+                confidence: 'canonical',
+                phase: 'design',
+              });
+
+              const json = serialize(ledger);
+              const restored = deserialize(json);
+
+              expect(restored.size).toBe(1);
+              const decision = restored.getDecisions()[0];
+              expect(decision?.constraint).toBe(constraint);
+            }
+          )
+        );
+      });
+
+      it('should handle large decision arrays', () => {
+        fc.assert(
+          fc.property(
+            fc.array(decisionInputArbitrary, { minLength: 50, maxLength: 100 }),
+            (inputs) => {
+              const ledger = createLedgerWithDecisions(inputs);
+
+              const json = serialize(ledger);
+              const restored = deserialize(json);
+
+              expect(restored.size).toBe(ledger.size);
+              expect(restored.getDecisions().length).toBe(ledger.getDecisions().length);
+            }
+          )
+        );
+      });
+
+      it('should preserve decision relationships through round-trip', () => {
+        fc.assert(
+          fc.property(
+            fc.array(decisionInputArbitrary, { minLength: 2, maxLength: 20 }),
+            (inputs) => {
+              const ledger = createLedgerWithDecisions(inputs);
+
+              const json = serialize(ledger);
+              const restored = deserialize(json);
+
+              const originalDecisions = ledger.getDecisions();
+              const restoredDecisions = restored.getDecisions();
+
+              expect(restoredDecisions).toHaveLength(originalDecisions.length);
+
+              for (let i = 0; i < originalDecisions.length; i++) {
+                // eslint-disable-next-line security/detect-object-injection -- safe: iterating over array with known length
+                const original = originalDecisions[i];
+                // eslint-disable-next-line security/detect-object-injection -- safe: iterating over array with known length
+                const restored = restoredDecisions[i];
+                expect(restored?.dependencies).toEqual(original?.dependencies);
+                expect(restored?.supersedes).toEqual(original?.supersedes);
+                expect(restored?.superseded_by).toEqual(original?.superseded_by);
+              }
+            }
+          )
+        );
+      });
+    });
+
+    describe('malformed data handling', () => {
+      it('should throw LedgerSerializationError for invalid JSON syntax', () => {
+        fc.assert(
+          fc.property(
+            fc.string().filter((s) => !s.startsWith('{') || !s.endsWith('}')),
+            (invalidJson) => {
+              expect(() => deserialize(invalidJson)).toThrow(LedgerSerializationError);
+            }
+          )
+        );
+      });
+
+      it('should throw LedgerSerializationError for missing meta field', () => {
+        const withoutMeta = { decisions: [] };
+        const json = JSON.stringify(withoutMeta);
+        expect(() => deserialize(json)).toThrow(LedgerSerializationError);
+        expect(() => deserialize(json)).toThrow(/missing required field "meta"/);
+      });
+
+      it('should throw LedgerSerializationError for missing decisions field', () => {
+        fc.assert(
+          fc.property(fc.string(), (version) => {
+            const data = {
+              meta: { version, created: '2024-01-20T12:00:00.000Z', project: 'test' },
+            };
+            const json = JSON.stringify(data);
+            expect(() => deserialize(json)).toThrow(LedgerSerializationError);
+            expect(() => deserialize(json)).toThrow(/missing required field "decisions"/);
+          })
+        );
+      });
+
+      it('should throw LedgerSerializationError for invalid semver format', () => {
+        fc.assert(
+          fc.property(
+            fc.string().filter((s) => !/^\d+\.\d+\.\d+$/.test(s)),
+            (invalidVersion) => {
+              const json = JSON.stringify({
+                meta: {
+                  version: invalidVersion,
+                  created: '2024-01-20T12:00:00.000Z',
+                  project: 'test',
+                },
+                decisions: [],
+              });
+              expect(() => deserialize(json)).toThrow(LedgerSerializationError);
+              expect(() => deserialize(json)).toThrow(/does not match semver pattern/);
+            }
+          )
+        );
+      });
+
+      it('should throw LedgerSerializationError for non-array decisions', () => {
+        fc.assert(
+          fc.property(fc.constantFrom(null, 123, 'string', {}), (invalidDecisions) => {
+            const json = JSON.stringify({
+              meta: { version: '1.0.0', created: '2024-01-20T12:00:00.000Z', project: 'test' },
+              decisions: invalidDecisions,
+            });
+            expect(() => deserialize(json)).toThrow(LedgerSerializationError);
+            expect(() => deserialize(json)).toThrow(/"decisions" must be an array/);
+          })
+        );
+      });
     });
   });
 
