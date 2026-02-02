@@ -231,24 +231,24 @@ function parseMCPServerAccess(data: unknown): MCPServerAccess {
       ? (obj.mode as MCPAccessMode)
       : 'full';
 
-  // Build base access object
-  const access: MCPServerAccess = { server, mode };
+  // Filter scopedPaths and allowedTools to string arrays (only for scoped mode)
+  const scopedPaths =
+    mode === 'scoped' && Array.isArray(obj.scopedPaths)
+      ? obj.scopedPaths.filter((p): p is string => typeof p === 'string')
+      : [];
 
-  // Parse optional scoped paths (only for scoped mode)
-  if (mode === 'scoped' && Array.isArray(obj.scopedPaths)) {
-    const scopedPaths = obj.scopedPaths.filter((p): p is string => typeof p === 'string');
-    if (scopedPaths.length > 0) {
-      (access as MCPServerAccess & { scopedPaths?: string[] }).scopedPaths = scopedPaths;
-    }
-  }
+  const allowedTools =
+    mode === 'scoped' && Array.isArray(obj.allowedTools)
+      ? obj.allowedTools.filter((t): t is string => typeof t === 'string')
+      : [];
 
-  // Parse optional allowed tools (only for scoped mode)
-  if (mode === 'scoped' && Array.isArray(obj.allowedTools)) {
-    const allowedTools = obj.allowedTools.filter((t): t is string => typeof t === 'string');
-    if (allowedTools.length > 0) {
-      (access as MCPServerAccess & { allowedTools?: string[] }).allowedTools = allowedTools;
-    }
-  }
+  // Build access object using conditional spreads (immutable)
+  const access: MCPServerAccess = {
+    server,
+    mode,
+    ...(mode === 'scoped' && scopedPaths.length > 0 ? { scopedPaths } : {}),
+    ...(mode === 'scoped' && allowedTools.length > 0 ? { allowedTools } : {}),
+  };
 
   return access;
 }
