@@ -1,4 +1,5 @@
 import { describe, it, expect } from 'vitest';
+import * as fc from 'fast-check';
 import { TypedMap } from './typed-map.js';
 
 describe('TypedMap', () => {
@@ -281,6 +282,76 @@ describe('TypedMap', () => {
       const value: unknown = 'value';
       // @ts-expect-error - Testing type error: value must be number
       map.set('key', value);
+    });
+  });
+
+  describe('Property-based tests', () => {
+    describe('fromObject/toObject round-trip', () => {
+      it('TypedMap.fromObject(obj).toObject() equals original for random objects', () => {
+        fc.assert(
+          fc.property(fc.array(fc.tuple(fc.string(), fc.integer())), (entries) => {
+            const obj: Record<string, number> = {};
+            for (const [key, value] of entries) {
+              // eslint-disable-next-line security/detect-object-injection -- safe: keys from fast-check generated values
+              obj[key] = value;
+            }
+            const map = TypedMap.fromObject(obj);
+            const result = map.toObject();
+            expect(result).toEqual(obj);
+          })
+        );
+      });
+    });
+
+    describe('fromEntries', () => {
+      it('TypedMap.fromEntries size equals unique key count', () => {
+        fc.assert(
+          fc.property(fc.array(fc.tuple(fc.string(), fc.integer())), (entries) => {
+            const uniqueKeys = new Set(entries.map(([key]) => key));
+            const map = TypedMap.fromEntries(entries);
+            expect(map.size).toBe(uniqueKeys.size);
+          })
+        );
+      });
+
+      it('handles duplicate keys by using last value', () => {
+        fc.assert(
+          fc.property(
+            fc.string(),
+            fc.array(fc.tuple(fc.string(), fc.integer())),
+            (duplicateKey, otherEntries) => {
+              const filteredEntries = otherEntries.filter(([key]) => key !== duplicateKey);
+              const entries: [string, number][] = [
+                [duplicateKey, 1],
+                [duplicateKey, 2],
+                ...filteredEntries,
+              ];
+              const map = TypedMap.fromEntries(entries);
+              expect(map.get(duplicateKey)).toBe(2);
+            }
+          )
+        );
+      });
+    });
+
+    describe('has/get consistency', () => {
+      it('has(key) consistent with get(key) !== undefined', () => {
+        fc.assert(
+          fc.property(
+            fc.array(fc.tuple(fc.string(), fc.integer())),
+            fc.string(),
+            (entries, lookupKey) => {
+              const obj: Record<string, number> = {};
+              for (const [key, value] of entries) {
+                // eslint-disable-next-line security/detect-object-injection -- safe: keys from fast-check generated values
+                obj[key] = value;
+              }
+              const map = TypedMap.fromObject(obj);
+              expect(map.has(lookupKey)).toBe(map.get(lookupKey) !== undefined);
+            }
+          )
+        );
+      });
     });
   });
 });
