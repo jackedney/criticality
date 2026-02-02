@@ -666,15 +666,13 @@ function buildComplexContradictionQuery(
   lines.push('Human guidance is required to determine the resolution strategy.');
   lines.push('');
 
-  let index = 1;
-  for (const contradiction of contradictions) {
-    lines.push(`Contradiction ${String(index)}: [${contradiction.type.toUpperCase()}]`);
+  for (const [i, contradiction] of contradictions.entries()) {
+    lines.push(`Contradiction ${String(i + 1)}: [${contradiction.type.toUpperCase()}]`);
     lines.push(`  ${contradiction.description}`);
     lines.push(
       `  Involved: ${contradiction.involved.map((e) => `${e.elementType}:${e.name}`).join(', ')}`
     );
     lines.push('');
-    index++;
   }
 
   lines.push(`Affected phases: ${analysis.affectedPhases.join(', ')}`);
@@ -784,11 +782,9 @@ export function formatContradictionForUser(
   // Suggested resolutions
   if (resolutions.length > 0) {
     lines.push('Suggested resolutions:');
-    let index = 1;
-    for (const resolution of resolutions) {
-      lines.push(`  ${String(index)}. ${resolution.description}`);
+    for (const [i, resolution] of resolutions.entries()) {
+      lines.push(`  ${String(i + 1)}. ${resolution.description}`);
       lines.push(`     (affects: ${resolution.affectedPhase} phase)`);
-      index++;
     }
   }
 
