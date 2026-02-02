@@ -94,34 +94,22 @@ function formatConstraints(constraints: SpecConstraints): string {
 
   if (constraints.functional !== undefined && constraints.functional.length > 0) {
     sections.push('FUNCTIONAL CONSTRAINTS:');
-    for (let i = 0; i < constraints.functional.length; i++) {
-      // eslint-disable-next-line security/detect-object-injection -- safe: i is bounded numeric loop counter
-      const c = constraints.functional[i];
-      if (c !== undefined) {
-        sections.push(`  [FC${String(i + 1).padStart(3, '0')}] ${c}`);
-      }
+    for (const [i, c] of constraints.functional.entries()) {
+      sections.push(`  [FC${String(i + 1).padStart(3, '0')}] ${c}`);
     }
   }
 
   if (constraints.non_functional !== undefined && constraints.non_functional.length > 0) {
     sections.push('NON-FUNCTIONAL CONSTRAINTS:');
-    for (let i = 0; i < constraints.non_functional.length; i++) {
-      // eslint-disable-next-line security/detect-object-injection -- safe: i is bounded numeric loop counter
-      const c = constraints.non_functional[i];
-      if (c !== undefined) {
-        sections.push(`  [NF${String(i + 1).padStart(3, '0')}] ${c}`);
-      }
+    for (const [i, c] of constraints.non_functional.entries()) {
+      sections.push(`  [NF${String(i + 1).padStart(3, '0')}] ${c}`);
     }
   }
 
   if (constraints.security !== undefined && constraints.security.length > 0) {
     sections.push('SECURITY CONSTRAINTS:');
-    for (let i = 0; i < constraints.security.length; i++) {
-      // eslint-disable-next-line security/detect-object-injection -- safe: i is bounded numeric loop counter
-      const c = constraints.security[i];
-      if (c !== undefined) {
-        sections.push(`  [SC${String(i + 1).padStart(3, '0')}] ${c}`);
-      }
+    for (const [i, c] of constraints.security.entries()) {
+      sections.push(`  [SC${String(i + 1).padStart(3, '0')}] ${c}`);
     }
   }
 
