@@ -16,7 +16,6 @@
  */
 
 import * as path from 'node:path';
-import * as fs from 'node:fs/promises';
 import { Project } from 'ts-morph';
 import {
   findTodoFunctions,
@@ -53,7 +52,7 @@ import {
   recordAttempt,
   MODEL_TIER_TO_ALIAS,
 } from './escalation.js';
-import { safeReadFile, safeWriteFile } from '../utils/safe-fs.js';
+import { safeExists, safeReadFile, safeWriteFile } from '../utils/safe-fs.js';
 
 /**
  * Local context for a single function implementation.
@@ -883,15 +882,14 @@ export class RalphLoop {
       const specFile = path.join(dirName, `${baseName}.spec.ts`);
 
       // Check if .test.ts file exists first, then fall back to .spec.ts
-      try {
-        await fs.access(testFile);
+      const testFileExists = await safeExists(testFile);
+      if (testFileExists) {
         testPattern = testFile;
-      } catch {
-        // .test.ts not found, try .spec.ts
-        try {
-          await fs.access(specFile);
+      } else {
+        const specFileExists = await safeExists(specFile);
+        if (specFileExists) {
           testPattern = specFile;
-        } catch {
+        } else {
           // Neither test file convention found, skip test verification
           this.options.logger(
             `  No test file found for ${todoFunction.name}, skipping test verification`
