@@ -7,10 +7,10 @@
  * @packageDocumentation
  */
 
-import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
 import type { Spec, SpecDataModel, SpecInterface } from '../spec/types.js';
 import { parseSpec } from '../spec/parser.js';
+import { safeReadFile, safeReaddir, safeWriteFile, safeMkdir, safeStat } from '../utils/safe-fs.js';
 import type {
   DomainBoundary,
   DomainModule,
@@ -52,18 +52,24 @@ export async function detectProjectConventions(projectRoot: string): Promise<Pro
   try {
     // Check if src directory exists
     const srcPath = path.join(projectRoot, 'src');
-    const srcExists = await fs
-      .stat(srcPath)
-      .then((s) => s.isDirectory())
-      .catch(() => false);
+    let srcExists = false;
+    try {
+      const srcStat = await safeStat(srcPath);
+      srcExists = srcStat.isDirectory();
+    } catch {
+      srcExists = false;
+    }
 
     if (!srcExists) {
       // Check for lib directory as alternative
       const libPath = path.join(projectRoot, 'lib');
-      const libExists = await fs
-        .stat(libPath)
-        .then((s) => s.isDirectory())
-        .catch(() => false);
+      let libExists = false;
+      try {
+        const libStat = await safeStat(libPath);
+        libExists = libStat.isDirectory();
+      } catch {
+        libExists = false;
+      }
 
       if (libExists) {
         return { ...conventions, sourceDir: 'lib' };
@@ -77,10 +83,13 @@ export async function detectProjectConventions(projectRoot: string): Promise<Pro
     const domainPatterns = ['domain', 'domains', 'modules', 'features'];
     for (const pattern of domainPatterns) {
       const domainPath = path.join(srcPath, pattern);
-      const domainExists = await fs
-        .stat(domainPath)
-        .then((s) => s.isDirectory())
-        .catch(() => false);
+      let domainExists = false;
+      try {
+        const domainStat = await safeStat(domainPath);
+        domainExists = domainStat.isDirectory();
+      } catch {
+        domainExists = false;
+      }
 
       if (domainExists) {
         return { ...conventions, domainDir: pattern };
@@ -88,14 +97,16 @@ export async function detectProjectConventions(projectRoot: string): Promise<Pro
     }
 
     // Check for barrel file convention by looking for index.ts files
-    const files = await fs.readdir(srcPath).catch(() => []);
+    const files = (await safeReaddir(srcPath).catch(() => [])) as string[];
     const hasBarrelFiles = files.some((f) => f === 'index.ts' || f === 'index.js');
 
     // Check for .js extension in imports by reading a sample TypeScript file
     let usesJsExtension = true;
     for (const file of files) {
       if (file.endsWith('.ts') && !file.endsWith('.d.ts')) {
-        const content = await fs.readFile(path.join(srcPath, file), 'utf-8').catch(() => '');
+        const content = (await safeReadFile(path.join(srcPath, file), 'utf-8').catch(
+          () => ''
+        )) as string;
         if (content.includes("from './") || content.includes('from "./')) {
           // Check if imports use .js extension
           usesJsExtension = content.includes(".js'") || content.includes('.js"');
@@ -833,11 +844,11 @@ export async function writeModuleStructure(
     const fullPath = path.join(targetDir, file.relativePath);
 
     // Ensure directory exists
-    await fs.mkdir(path.dirname(fullPath), { recursive: true });
+    await safeMkdir(path.dirname(fullPath), { recursive: true });
 
     // Write file
     try {
-      await fs.writeFile(fullPath, file.content, 'utf-8');
+      await safeWriteFile(fullPath, file.content, 'utf-8');
     } catch (error) {
       const err = error instanceof Error ? error : new Error(String(error));
       throw new ModuleGeneratorError(
@@ -878,7 +889,7 @@ export async function generateAndWriteModuleStructure(
   // Read spec file
   let specContent: string;
   try {
-    specContent = await fs.readFile(specPath, 'utf-8');
+    specContent = (await safeReadFile(specPath, 'utf-8')) as string;
   } catch (error) {
     const err = error instanceof Error ? error : new Error(String(error));
     throw new ModuleGeneratorError(

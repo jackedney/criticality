@@ -1,8 +1,9 @@
 import { describe, expect, it, beforeEach, afterEach } from 'vitest';
-import { mkdir, rm, readFile, writeFile } from 'node:fs/promises';
+import { rm } from 'node:fs/promises';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { randomUUID } from 'node:crypto';
+import { safeReadFile, safeWriteFile, safeMkdir } from '../utils/safe-fs.js';
 import {
   Ledger,
   serialize,
@@ -389,7 +390,7 @@ describe('Ledger Persistence', () => {
 
     beforeEach(async () => {
       testDir = join(tmpdir(), `ledger-test-${randomUUID()}`);
-      await mkdir(testDir, { recursive: true });
+      await safeMkdir(testDir, { recursive: true });
     });
 
     afterEach(async () => {
@@ -408,7 +409,7 @@ describe('Ledger Persistence', () => {
         const filePath = join(testDir, 'ledger.json');
         await saveLedger(ledger, filePath);
 
-        const content = await readFile(filePath, 'utf-8');
+        const content = (await safeReadFile(filePath, 'utf-8')) as string;
         const parsed = JSON.parse(content) as LedgerData;
         expect(parsed.decisions).toHaveLength(1);
         expect(parsed.decisions[0]?.constraint).toBe('Test decision');
@@ -420,7 +421,7 @@ describe('Ledger Persistence', () => {
         const filePath = join(testDir, 'ledger.json');
         await saveLedger(ledger, filePath);
 
-        const content = await readFile(filePath, 'utf-8');
+        const content = (await safeReadFile(filePath, 'utf-8')) as string;
         expect(content).toContain('\n');
       });
 
@@ -430,7 +431,7 @@ describe('Ledger Persistence', () => {
         const filePath = join(testDir, 'ledger.json');
         await saveLedger(ledger, filePath, { pretty: false });
 
-        const content = await readFile(filePath, 'utf-8');
+        const content = (await safeReadFile(filePath, 'utf-8')) as string;
         expect(content).not.toContain('\n');
       });
 
@@ -442,7 +443,7 @@ describe('Ledger Persistence', () => {
         await saveLedger(ledger, filePath);
 
         // File should exist with correct content
-        const content = await readFile(filePath, 'utf-8');
+        const content = (await safeReadFile(filePath, 'utf-8')) as string;
         expect(content).toContain('Important data');
 
         // No temp files should remain
@@ -462,7 +463,7 @@ describe('Ledger Persistence', () => {
         await saveLedger(ledger1, filePath);
         await saveLedger(ledger2, filePath);
 
-        const content = await readFile(filePath, 'utf-8');
+        const content = (await safeReadFile(filePath, 'utf-8')) as string;
         expect(content).toContain('Second version');
         expect(content).not.toContain('First version');
       });
@@ -515,7 +516,7 @@ describe('Ledger Persistence', () => {
 
       it('should throw LedgerSerializationError for empty file', async () => {
         const filePath = join(testDir, 'empty.json');
-        await writeFile(filePath, '', 'utf-8');
+        await safeWriteFile(filePath, '', 'utf-8');
 
         await expect(loadLedger(filePath)).rejects.toThrow(LedgerSerializationError);
 
@@ -530,7 +531,7 @@ describe('Ledger Persistence', () => {
 
       it('should throw LedgerSerializationError for corrupted JSON', async () => {
         const filePath = join(testDir, 'corrupted.json');
-        await writeFile(filePath, '{ corrupted json data }}}', 'utf-8');
+        await safeWriteFile(filePath, '{ corrupted json data }}}', 'utf-8');
 
         await expect(loadLedger(filePath)).rejects.toThrow(LedgerSerializationError);
 
@@ -545,14 +546,14 @@ describe('Ledger Persistence', () => {
       it('should throw LedgerSerializationError for truncated file', async () => {
         const filePath = join(testDir, 'truncated.json');
         // Simulate a partially written file
-        await writeFile(filePath, '{"meta": {"version": "1.0.0", "created": "2024', 'utf-8');
+        await safeWriteFile(filePath, '{"meta": {"version": "1.0.0", "created": "2024', 'utf-8');
 
         await expect(loadLedger(filePath)).rejects.toThrow(LedgerSerializationError);
       });
 
       it('should throw descriptive error for corrupted decision data', async () => {
         const filePath = join(testDir, 'invalid-decision.json');
-        await writeFile(
+        await safeWriteFile(
           filePath,
           JSON.stringify({
             meta: { version: '1.0.0', created: '2024-01-20T12:00:00.000Z', project: 'test' },

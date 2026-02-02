@@ -17,7 +17,6 @@
  */
 
 import * as path from 'node:path';
-import * as fs from 'node:fs/promises';
 import type { CompilerError, TypeCheckResult } from '../adapters/typescript/typecheck.js';
 import { runTypeCheck } from '../adapters/typescript/typecheck.js';
 import type { ModelRouter, ModelRouterRequest } from '../router/types.js';
@@ -26,6 +25,7 @@ import {
   type AstInspectionResult,
   type InspectedFunction,
 } from '../adapters/typescript/ast.js';
+import { safeReadFile, safeReaddir, safeWriteFile } from '../utils/safe-fs.js';
 
 /**
  * Error types that can occur during compilation verification.
@@ -529,7 +529,7 @@ export interface LogicLeakageViolation {
  */
 async function readTsconfigPatterns(tsconfigPath: string): Promise<string[] | null> {
   try {
-    const tsconfigContent = await fs.readFile(tsconfigPath, 'utf-8');
+    const tsconfigContent = (await safeReadFile(tsconfigPath, 'utf-8')) as string;
     const tsconfig = JSON.parse(tsconfigContent) as { include?: string[] };
     const include = tsconfig.include;
     if (include !== undefined && include.length > 0) {
@@ -553,7 +553,9 @@ async function findTypeScriptFilesRecursive(
   projectPath: string
 ): Promise<string[]> {
   const files: string[] = [];
-  const entries = await fs.readdir(dirPath, { withFileTypes: true });
+  const entries = (await safeReaddir(dirPath, {
+    withFileTypes: true,
+  })) as import('node:fs').Dirent[];
 
   for (const entry of entries) {
     const fullPath = path.join(dirPath, entry.name);
@@ -859,7 +861,7 @@ export class CompilationVerifier {
 
     for (const file of uniqueFiles) {
       try {
-        const content = await fs.readFile(file, 'utf-8');
+        const content = (await safeReadFile(file, 'utf-8')) as string;
         fileContents.set(file, content);
       } catch {
         // File might not exist or be readable
@@ -919,13 +921,13 @@ export class CompilationVerifier {
         // Read the old content
         let oldContent: string | undefined;
         try {
-          oldContent = await fs.readFile(normalizedFile, 'utf-8');
+          oldContent = (await safeReadFile(normalizedFile, 'utf-8')) as string;
         } catch {
           // File might be new
         }
 
         // Write the new content
-        await fs.writeFile(normalizedFile, newContent, 'utf-8');
+        await safeWriteFile(normalizedFile, newContent, 'utf-8');
 
         // Find errors that this repair addresses (compare normalized paths)
         const addressedErrors = errors.filter(

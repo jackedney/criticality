@@ -16,6 +16,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
 import * as os from 'node:os';
+import { safeWriteFile, safeMkdir } from '../utils/safe-fs.js';
 import {
   CompilationVerifier,
   createCompilationVerifier,
@@ -285,7 +286,7 @@ export type Id = string;
   describe('verifyNoLogicLeakage', () => {
     it('should pass for files with only TODO bodies', async () => {
       const testFile = path.join(tempDir, 'valid.ts');
-      await fs.writeFile(
+      await safeWriteFile(
         testFile,
         `
 export function add(a: number, b: number): number {
@@ -306,7 +307,7 @@ export function subtract(a: number, b: number): number {
 
     it('should detect functions with implementation bodies', async () => {
       const testFile = path.join(tempDir, 'impl.ts');
-      await fs.writeFile(
+      await safeWriteFile(
         testFile,
         `
 export function add(a: number, b: number): number {
@@ -323,7 +324,7 @@ export function add(a: number, b: number): number {
 
     it('should detect fetch calls as logic leakage', async () => {
       const testFile = path.join(tempDir, 'fetch.ts');
-      await fs.writeFile(
+      await safeWriteFile(
         testFile,
         `
 export async function getData(): Promise<unknown> {
@@ -340,7 +341,7 @@ export async function getData(): Promise<unknown> {
 
     it('should detect console.log as logic leakage', async () => {
       const testFile = path.join(tempDir, 'console.ts');
-      await fs.writeFile(
+      await safeWriteFile(
         testFile,
         `
 export function debug(msg: string): void {
@@ -377,7 +378,7 @@ export function debug(msg: string): void {
     it('should verify successful compilation', async () => {
       // Create a valid TypeScript file
       const testFile = path.join(tempDir, 'valid.ts');
-      await fs.writeFile(
+      await safeWriteFile(
         testFile,
         `
 export interface User {
@@ -393,7 +394,7 @@ export function getUser(id: string): User {
 
       // Create a minimal tsconfig.json
       const tsConfigPath = path.join(tempDir, 'tsconfig.json');
-      await fs.writeFile(
+      await safeWriteFile(
         tsConfigPath,
         JSON.stringify({
           compilerOptions: {
@@ -428,7 +429,7 @@ export function getUser(id: string): User {
     it('should enter BLOCKED state after max repair attempts', async () => {
       // Create an invalid TypeScript file
       const testFile = path.join(tempDir, 'invalid.ts');
-      await fs.writeFile(
+      await safeWriteFile(
         testFile,
         `
 export function broken(): UndefinedType {
@@ -439,7 +440,7 @@ export function broken(): UndefinedType {
 
       // Create a minimal tsconfig.json
       const tsConfigPath = path.join(tempDir, 'tsconfig.json');
-      await fs.writeFile(
+      await safeWriteFile(
         tsConfigPath,
         JSON.stringify({
           compilerOptions: {
@@ -493,7 +494,7 @@ export function broken(): UndefinedType {
     it('should run AST inspection after successful compilation', async () => {
       // Create a valid TypeScript file with TODO body
       const testFile = path.join(tempDir, 'todo.ts');
-      await fs.writeFile(
+      await safeWriteFile(
         testFile,
         `
 export function process(): void {
@@ -504,7 +505,7 @@ export function process(): void {
 
       // Create a minimal tsconfig.json
       const tsConfigPath = path.join(tempDir, 'tsconfig.json');
-      await fs.writeFile(
+      await safeWriteFile(
         tsConfigPath,
         JSON.stringify({
           compilerOptions: {
@@ -539,7 +540,7 @@ export function process(): void {
     it('should detect logic leakage in AST inspection', async () => {
       // Create a file with implementation logic (not TODO)
       const testFile = path.join(tempDir, 'leaky.ts');
-      await fs.writeFile(
+      await safeWriteFile(
         testFile,
         `
 export function add(a: number, b: number): number {
@@ -550,7 +551,7 @@ export function add(a: number, b: number): number {
 
       // Create a minimal tsconfig.json
       const tsConfigPath = path.join(tempDir, 'tsconfig.json');
-      await fs.writeFile(
+      await safeWriteFile(
         tsConfigPath,
         JSON.stringify({
           compilerOptions: {
@@ -587,7 +588,7 @@ export function add(a: number, b: number): number {
     it('should use model router for repairs when provided', async () => {
       // Create an invalid TypeScript file with a missing import
       const testFile = path.join(tempDir, 'missing-import.ts');
-      await fs.writeFile(
+      await safeWriteFile(
         testFile,
         `
 import type { MissingType } from './missing.js';
@@ -600,7 +601,7 @@ export function process(data: MissingType): void {
 
       // Create a minimal tsconfig.json
       const tsConfigPath = path.join(tempDir, 'tsconfig.json');
-      await fs.writeFile(
+      await safeWriteFile(
         tsConfigPath,
         JSON.stringify({
           compilerOptions: {
@@ -754,7 +755,7 @@ export interface MissingType {
   describe('path normalization', () => {
     it('should derive file list when files is undefined', async () => {
       const testFile = path.join(tempDir, 'derived.ts');
-      await fs.writeFile(
+      await safeWriteFile(
         testFile,
         `
 export function add(a: number, b: number): number {
@@ -780,7 +781,7 @@ export function add(a: number, b: number): number {
     it('should throw FilesNotResolvedError when no files found', async () => {
       // Create empty directory
       const emptyDir = path.join(tempDir, 'empty');
-      await fs.mkdir(emptyDir, { recursive: true });
+      await safeMkdir(emptyDir, { recursive: true });
 
       const verifier = createCompilationVerifier({
         projectPath: emptyDir,
@@ -792,7 +793,7 @@ export function add(a: number, b: number): number {
 
     it('should apply repairs with relative paths correctly', async () => {
       const testFile = path.join(tempDir, 'fix.ts');
-      await fs.writeFile(
+      await safeWriteFile(
         testFile,
         `
 export function broken(): void {
@@ -802,7 +803,7 @@ export function broken(): void {
       );
 
       const testConfigPath = path.join(tempDir, 'tsconfig.json');
-      await fs.writeFile(
+      await safeWriteFile(
         testConfigPath,
         JSON.stringify({
           compilerOptions: {

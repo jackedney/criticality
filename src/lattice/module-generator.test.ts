@@ -7,6 +7,7 @@ import fc from 'fast-check';
 import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
 import * as os from 'node:os';
+import { safeReadFile, safeWriteFile, safeMkdir, safeStat } from '../utils/safe-fs.js';
 import {
   generateModuleStructure,
   generateAndWriteModuleStructure,
@@ -422,16 +423,13 @@ fields = [{ name = "id", type = "string" }]
     const barrelPath = path.join(tempDir, 'src', 'domain', 'account', 'index.ts');
     const rootBarrelPath = path.join(tempDir, 'src', 'domain', 'index.ts');
 
-    const typesExists = await fs
-      .stat(typesPath)
+    const typesExists = await safeStat(typesPath)
       .then(() => true)
       .catch(() => false);
-    const barrelExists = await fs
-      .stat(barrelPath)
+    const barrelExists = await safeStat(barrelPath)
       .then(() => true)
       .catch(() => false);
-    const rootBarrelExists = await fs
-      .stat(rootBarrelPath)
+    const rootBarrelExists = await safeStat(rootBarrelPath)
       .then(() => true)
       .catch(() => false);
 
@@ -440,7 +438,7 @@ fields = [{ name = "id", type = "string" }]
     expect(rootBarrelExists).toBe(true);
 
     // Verify content
-    const typesContent = await fs.readFile(typesPath, 'utf-8');
+    const typesContent = await safeReadFile(typesPath, 'utf-8');
     expect(typesContent).toContain('export interface Account');
   });
 });
@@ -454,7 +452,7 @@ describe('generateAndWriteModuleStructure', () => {
     specPath = path.join(tempDir, 'spec.toml');
 
     // Write a test spec file
-    await fs.writeFile(
+    await safeWriteFile(
       specPath,
       `
 [meta]
@@ -497,9 +495,9 @@ methods = [
     const interfacesPath = path.join(tempDir, 'src', 'domain', 'account', 'interfaces.ts');
     const barrelPath = path.join(tempDir, 'src', 'domain', 'account', 'index.ts');
 
-    const typesContent = await fs.readFile(typesPath, 'utf-8');
-    const interfacesContent = await fs.readFile(interfacesPath, 'utf-8');
-    const barrelContent = await fs.readFile(barrelPath, 'utf-8');
+    const typesContent = await safeReadFile(typesPath, 'utf-8');
+    const interfacesContent = await safeReadFile(interfacesPath, 'utf-8');
+    const barrelContent = await safeReadFile(barrelPath, 'utf-8');
 
     expect(typesContent).toContain('export interface Account');
     expect(interfacesContent).toContain('export interface AccountService');
@@ -531,7 +529,7 @@ describe('detectProjectConventions', () => {
   });
 
   it('should detect src directory', async () => {
-    await fs.mkdir(path.join(tempDir, 'src'));
+    await safeMkdir(path.join(tempDir, 'src'));
 
     const conventions = await detectProjectConventions(tempDir);
 
@@ -539,7 +537,7 @@ describe('detectProjectConventions', () => {
   });
 
   it('should detect lib directory as alternative', async () => {
-    await fs.mkdir(path.join(tempDir, 'lib'));
+    await safeMkdir(path.join(tempDir, 'lib'));
 
     const conventions = await detectProjectConventions(tempDir);
 
@@ -547,7 +545,7 @@ describe('detectProjectConventions', () => {
   });
 
   it('should detect domain directory patterns', async () => {
-    await fs.mkdir(path.join(tempDir, 'src', 'domain'), { recursive: true });
+    await safeMkdir(path.join(tempDir, 'src', 'domain'), { recursive: true });
 
     const conventions = await detectProjectConventions(tempDir);
 
@@ -555,7 +553,7 @@ describe('detectProjectConventions', () => {
   });
 
   it('should detect modules directory pattern', async () => {
-    await fs.mkdir(path.join(tempDir, 'src', 'modules'), { recursive: true });
+    await safeMkdir(path.join(tempDir, 'src', 'modules'), { recursive: true });
 
     const conventions = await detectProjectConventions(tempDir);
 
