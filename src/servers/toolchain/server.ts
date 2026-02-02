@@ -15,7 +15,6 @@ import {
   type CallToolResult,
 } from '@modelcontextprotocol/sdk/types.js';
 import { execa, type ResultPromise, type Options as ExecaOptions } from 'execa';
-import fs from 'node:fs/promises';
 import path from 'node:path';
 
 import {
@@ -70,7 +69,7 @@ export function createToolchainServer(config: ToolchainServerConfig): Server {
 
     for (const { file, lang } of checks) {
       try {
-        await fs.access(path.join(projectRoot, file));
+        await safeStat(path.join(projectRoot, file));
         return lang;
       } catch {
         // File doesn't exist, continue
