@@ -5,9 +5,10 @@
  */
 
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
-import { rm, mkdir, readFile } from 'node:fs/promises';
+import { rm } from 'node:fs/promises';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
+import { safeMkdir, safeReadFile } from '../utils/safe-fs.js';
 import { randomUUID } from 'node:crypto';
 import * as TOML from '@iarna/toml';
 import type { InterviewState, ExtractedRequirement, Feature } from './types.js';
@@ -746,7 +747,7 @@ describe('Spec Generator', () => {
     beforeEach(async () => {
       testProjectId = `test-${randomUUID().substring(0, 8)}`;
       testDir = getInterviewDir(testProjectId);
-      await mkdir(testDir, { recursive: true });
+      await safeMkdir(testDir, { recursive: true });
     });
 
     afterEach(async () => {
@@ -800,7 +801,7 @@ describe('Spec Generator', () => {
         expect(result.spec).toEqual(spec);
 
         // Verify file exists and is valid TOML
-        const content = await readFile(result.path, 'utf-8');
+        const content = (await safeReadFile(result.path, 'utf-8')) as string;
         const parsed = TOML.parse(content);
         expect(parsed.meta).toBeDefined();
       });
@@ -939,7 +940,7 @@ describe('Spec Generator', () => {
 
     beforeEach(async () => {
       testDir = join(tmpdir(), `criticality-test-${randomUUID()}`);
-      await mkdir(testDir, { recursive: true });
+      await safeMkdir(testDir, { recursive: true });
     });
 
     afterEach(async () => {
@@ -965,7 +966,7 @@ describe('Spec Generator', () => {
 
       expect(result.path).toBe(join(testDir, 'spec.toml'));
 
-      const content = await readFile(result.path, 'utf-8');
+      const content = (await safeReadFile(result.path, 'utf-8')) as string;
       expect(content).toContain('name = "test-system"');
     });
 

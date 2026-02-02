@@ -3,9 +3,10 @@
  */
 
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import { mkdir, mkdtemp, rm } from 'node:fs/promises';
+import { mkdtemp, rm } from 'node:fs/promises';
 import { join } from 'node:path';
 import os from 'node:os';
+import { safeMkdir } from '../utils/safe-fs.js';
 import {
   formatSectionHeader,
   formatSubsectionHeader,
@@ -634,7 +635,7 @@ describe('Interview CLI', () => {
 
       // Create mock project directory inside temp homedir
       const interviewDir = getInterviewDir(projectId);
-      await mkdir(interviewDir, { recursive: true });
+      await safeMkdir(interviewDir, { recursive: true });
 
       outputLines = [];
       inputQueue = [];
