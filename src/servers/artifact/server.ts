@@ -15,7 +15,6 @@ import {
   CallToolRequestSchema,
   type CallToolResult,
 } from '@modelcontextprotocol/sdk/types.js';
-import fs from 'node:fs/promises';
 import path from 'node:path';
 import TOML from '@iarna/toml';
 import Ajv from 'ajv';
@@ -37,6 +36,7 @@ import { fromData } from '../../ledger/ledger.js';
 import type { DecisionInput, LedgerData, Decision } from '../../ledger/types.js';
 import type { ErrorObject } from 'ajv';
 import { createServerLogger } from '../logging.js';
+import { safeReadFile, safeWriteFile } from '../../utils/safe-fs.js';
 
 /**
  * Creates and configures the criticality-artifact-server.
@@ -101,7 +101,7 @@ export function createArtifactServer(config: ArtifactServerConfig): Server {
   async function readTomlArtifact(filePath: string): Promise<Record<string, unknown>> {
     const validPath = validateArtifactPath(filePath);
     try {
-      const content = await fs.readFile(validPath, 'utf-8');
+      const content = (await safeReadFile(validPath, 'utf-8')) as string;
       return TOML.parse(content) as Record<string, unknown>;
     } catch (err) {
       if ((err as NodeJS.ErrnoException).code === 'ENOENT') {
@@ -117,7 +117,7 @@ export function createArtifactServer(config: ArtifactServerConfig): Server {
   async function readSchema(schemaName: string): Promise<Record<string, unknown>> {
     const schemaPath = path.join(projectRoot, 'schemas', `${schemaName}.schema.json`);
     try {
-      const content = await fs.readFile(schemaPath, 'utf-8');
+      const content = (await safeReadFile(schemaPath, 'utf-8')) as string;
       return JSON.parse(content) as Record<string, unknown>;
     } catch (err) {
       if ((err as NodeJS.ErrnoException).code === 'ENOENT') {
@@ -133,7 +133,7 @@ export function createArtifactServer(config: ArtifactServerConfig): Server {
   async function writeTomlArtifact(filePath: string, data: Record<string, unknown>): Promise<void> {
     const validPath = validateArtifactPath(filePath);
     const content = TOML.stringify(data as TOML.JsonMap);
-    await fs.writeFile(validPath, content, 'utf-8');
+    await safeWriteFile(validPath, content, 'utf-8');
   }
 
   // Handle tool listing

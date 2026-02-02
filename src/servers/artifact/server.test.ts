@@ -20,6 +20,7 @@ import {
   WitnessNotFoundError,
   ALLOWED_ARTIFACT_FILES,
 } from './types.js';
+import { safeMkdir, safeReaddir, safeWriteFile, safeReadFile } from '../../utils/safe-fs.js';
 
 // Type for tool call result (simplified for test purposes)
 interface ToolCallResult {
@@ -67,17 +68,17 @@ describe('criticality-artifact-server', () => {
     tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'artifact-server-test-'));
 
     // Create schemas directory
-    await fs.mkdir(path.join(tempDir, 'schemas'));
+    await safeMkdir(path.join(tempDir, 'schemas'));
 
     // Copy schemas
     const schemasDir = path.join(process.cwd(), 'schemas');
-    const schemaFiles = await fs.readdir(schemasDir);
+    const schemaFiles = (await safeReaddir(schemasDir)) as string[];
     for (const file of schemaFiles) {
       await fs.copyFile(path.join(schemasDir, file), path.join(tempDir, 'schemas', file));
     }
 
     // Create examples directory
-    await fs.mkdir(path.join(tempDir, 'examples'));
+    await safeMkdir(path.join(tempDir, 'examples'));
 
     // Create a test spec.toml
     const specContent = {
@@ -118,7 +119,7 @@ describe('criticality-artifact-server', () => {
         },
       },
     };
-    await fs.writeFile(
+    await safeWriteFile(
       path.join(tempDir, 'spec.toml'),
       TOML.stringify(specContent as TOML.JsonMap)
     );
@@ -144,7 +145,7 @@ describe('criticality-artifact-server', () => {
         },
       ],
     };
-    await fs.writeFile(
+    await safeWriteFile(
       path.join(tempDir, 'DECISIONS.toml'),
       TOML.stringify(decisionsContent as TOML.JsonMap)
     );
@@ -160,7 +161,7 @@ describe('criticality-artifact-server', () => {
         },
       ],
     };
-    await fs.writeFile(
+    await safeWriteFile(
       path.join(tempDir, 'examples', 'witness.example.toml'),
       TOML.stringify(witnessContent as TOML.JsonMap)
     );
@@ -271,7 +272,7 @@ describe('criticality-artifact-server', () => {
       });
 
       // Read the file and verify
-      const content = await fs.readFile(path.join(tempDir, 'DECISIONS.toml'), 'utf-8');
+      const content = (await safeReadFile(path.join(tempDir, 'DECISIONS.toml'), 'utf-8')) as string;
       expect(content).toContain('Security constraint');
       expect(content).toContain('security_001');
     });

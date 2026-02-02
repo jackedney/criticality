@@ -20,6 +20,7 @@ import {
   type RunFunctionTestResult,
   type CheckComplexityResult,
 } from './types.js';
+import { safeWriteFile, safeMkdir } from '../../utils/safe-fs.js';
 
 // Type for tool call result (simplified for test purposes)
 interface ToolCallResult {
@@ -67,7 +68,7 @@ describe('criticality-toolchain-server', () => {
     tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'toolchain-server-test-'));
 
     // Create a minimal TypeScript project
-    await fs.writeFile(
+    await safeWriteFile(
       path.join(tempDir, 'package.json'),
       JSON.stringify({
         name: 'test-project',
@@ -78,7 +79,7 @@ describe('criticality-toolchain-server', () => {
       })
     );
 
-    await fs.writeFile(
+    await safeWriteFile(
       path.join(tempDir, 'tsconfig.json'),
       JSON.stringify({
         compilerOptions: {
@@ -93,10 +94,10 @@ describe('criticality-toolchain-server', () => {
     );
 
     // Create src directory with test files
-    await fs.mkdir(path.join(tempDir, 'src'));
+    await safeMkdir(path.join(tempDir, 'src'));
 
     // Create a valid TypeScript file
-    await fs.writeFile(
+    await safeWriteFile(
       path.join(tempDir, 'src', 'valid.ts'),
       `/**
  * A simple function for testing.
@@ -305,12 +306,12 @@ export function multiply(a: number, b: number): number {
 
     it('detects complexity violations', async () => {
       // Create a complex function
-      await fs.writeFile(
+      await safeWriteFile(
         path.join(tempDir, 'src', 'complex.ts'),
         `
 export function complexFunction(a: number, b: string, c: boolean): string {
   let result = '';
-
+ 
   if (a > 0) {
     result += 'positive';
   } else if (a < 0) {
@@ -318,7 +319,7 @@ export function complexFunction(a: number, b: string, c: boolean): string {
   } else {
     result += 'zero';
   }
-
+ 
   if (b.length > 0) {
     result += b;
   }
@@ -417,7 +418,7 @@ export function complexFunction(a: number, b: string, c: boolean): string {
       // Remove TypeScript files and add Rust files
       await fs.rm(path.join(tempDir, 'tsconfig.json'));
       await fs.rm(path.join(tempDir, 'package.json'));
-      await fs.writeFile(
+      await safeWriteFile(
         path.join(tempDir, 'Cargo.toml'),
         `
 [package]
@@ -543,19 +544,19 @@ describe('structured JSON output examples from acceptance criteria', () => {
     tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'toolchain-ac-test-'));
 
     // Create a TypeScript project
-    await fs.writeFile(
+    await safeWriteFile(
       path.join(tempDir, 'package.json'),
       JSON.stringify({ name: 'test', type: 'module' })
     );
-    await fs.writeFile(
+    await safeWriteFile(
       path.join(tempDir, 'tsconfig.json'),
       JSON.stringify({
         compilerOptions: { target: 'ES2022', module: 'NodeNext', strict: true, noEmit: true },
         include: ['src/**/*.ts'],
       })
     );
-    await fs.mkdir(path.join(tempDir, 'src'));
-    await fs.writeFile(path.join(tempDir, 'src', 'index.ts'), `export const VERSION = '1.0.0';`);
+    await safeMkdir(path.join(tempDir, 'src'));
+    await safeWriteFile(path.join(tempDir, 'src', 'index.ts'), `export const VERSION = '1.0.0';`);
 
     const pair = await createConnectedPair(tempDir);
     client = pair.client;

@@ -36,6 +36,7 @@ import {
   OutputParseError,
 } from './types.js';
 import { createServerLogger } from '../logging.js';
+import { safeStat, safeReadFile, safeReaddir } from '../../utils/safe-fs.js';
 
 const DEFAULT_TIMEOUT = 60000;
 
@@ -876,7 +877,7 @@ export function createToolchainServer(config: ToolchainServerConfig): Server {
     // Check if it's a file or directory
     let files: string[];
     try {
-      const stat = await fs.stat(fullPath);
+      const stat = await safeStat(fullPath);
       if (stat.isDirectory()) {
         files = await collectFiles(fullPath, ['.ts', '.js']);
       } else {
@@ -887,7 +888,7 @@ export function createToolchainServer(config: ToolchainServerConfig): Server {
     }
 
     for (const file of files) {
-      const content = await fs.readFile(file, 'utf-8');
+      const content = (await safeReadFile(file, 'utf-8')) as string;
       const fileFunctions = extractFunctionComplexity(content, path.relative(projectRoot, file));
       functions.push(...fileFunctions);
     }
@@ -900,7 +901,9 @@ export function createToolchainServer(config: ToolchainServerConfig): Server {
    */
   async function collectFiles(dirPath: string, extensions: string[]): Promise<string[]> {
     const files: string[] = [];
-    const entries = await fs.readdir(dirPath, { withFileTypes: true });
+    const entries = (await safeReaddir(dirPath, {
+      withFileTypes: true,
+    })) as import('node:fs').Dirent[];
 
     for (const entry of entries) {
       const fullPath = path.join(dirPath, entry.name);
@@ -1039,6 +1042,7 @@ export function createToolchainServer(config: ToolchainServerConfig): Server {
   function findMatchingBrace(content: string, start: number): number {
     let depth = 0;
     for (let i = start; i < content.length; i++) {
+      // eslint-disable-next-line security/detect-object-injection -- content[i] is safe: bounded string index access
       const char = content[i];
       if (char === '{') {
         depth++;

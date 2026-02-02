@@ -17,6 +17,7 @@ async function main(): Promise<void> {
   let debug = false;
 
   for (let i = 0; i < args.length; i++) {
+    // eslint-disable-next-line security/detect-object-injection -- args[i] is safe: bounded array access for CLI argument parsing
     const arg = args[i];
     const nextArg = args[i + 1];
     if (arg === '--project-root' && nextArg !== undefined) {

@@ -43,6 +43,7 @@ function parseArgs(): { projectRoot: string; debug: boolean } {
   let debug = false;
 
   for (let i = 0; i < args.length; i++) {
+    // eslint-disable-next-line security/detect-object-injection -- args[i] is safe: bounded array access for CLI argument parsing
     const arg = args[i];
     if (arg === '--project-root' || arg === '-p') {
       const next = args[i + 1];
