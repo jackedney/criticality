@@ -1,7 +1,7 @@
 /**
  * Integration tests for TypeScript adapter facade.
  *
- * These tests exercise of full adapter workflow including:
+ * These tests exercise the full adapter workflow including:
  * - Initialization on TypeScript projects
  * - TODO function detection
  * - Context extraction
