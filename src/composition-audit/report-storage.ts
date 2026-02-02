@@ -440,7 +440,7 @@ export async function listContradictionReports(projectId: string): Promise<strin
 
       try {
         const stats = await safeStat(fullPath);
-        reportIds.push({ id: reportId, mtime: stats.mtimeMs as number });
+        reportIds.push({ id: reportId, mtime: Number(stats.mtimeMs) });
       } catch {
         // Skip files we can't stat
         continue;
