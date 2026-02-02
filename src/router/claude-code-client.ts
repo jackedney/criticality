@@ -130,6 +130,14 @@ export async function checkClaudeCodeInstalled(executablePath = 'claude'): Promi
   }
 }
 
+const MODEL_ALIAS_MAP = TypedMap.fromObject({
+  architect: 'architect_model',
+  auditor: 'auditor_model',
+  structurer: 'structurer_model',
+  worker: 'worker_model',
+  fallback: 'fallback_model',
+});
+
 /**
  * Resolves a model alias to the actual model identifier.
  *
@@ -138,15 +146,7 @@ export async function checkClaudeCodeInstalled(executablePath = 'claude'): Promi
  * @returns The resolved model identifier.
  */
 function resolveModelAlias(alias: ModelAlias, config: Config): string {
-  const modelMap = TypedMap.fromObject({
-    architect: 'architect_model',
-    auditor: 'auditor_model',
-    structurer: 'structurer_model',
-    worker: 'worker_model',
-    fallback: 'fallback_model',
-  });
-
-  const configKey = modelMap.get(alias) ?? 'architect_model';
+  const configKey = MODEL_ALIAS_MAP.get(alias) ?? 'architect_model';
   return config.models[configKey as keyof Config['models']];
 }
 
