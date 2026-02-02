@@ -119,9 +119,9 @@ function validateBaseType(baseType: string): void {
   let parentheses = 0;
 
   for (let i = 0; i < trimmed.length; i++) {
-    // eslint-disable-next-line security/detect-object-injection -- safe: i is bounded numeric loop counter
-    const char = trimmed[i];
-    const prevChar = i > 0 ? trimmed[i - 1] : '';
+    // eslint-disable-next-line security/detect-object-injection -- safe: i is bounded numeric loop counter, trimmed is a string
+    const char = trimmed[i] ?? '';
+    const prevChar = i > 0 ? (trimmed[i - 1] ?? '') : '';
 
     switch (char) {
       case '<':
