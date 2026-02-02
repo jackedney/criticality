@@ -5,9 +5,12 @@
  */
 
 import { describe, it, expect } from 'vitest';
+import * as fc from 'fast-check';
 import {
   // Types
   type EscalationAction,
+  type ModelTier,
+  type FailureType,
   // Constants
   MODEL_TIER_ORDER,
   MODEL_TIER_TO_ALIAS,
@@ -763,5 +766,418 @@ describe('Failure Type Constructors', () => {
     const failure = createCoherenceFailure(['func1', 'func2']);
     expect(failure.type).toBe('coherence');
     expect(failure.conflictingFunctions).toEqual(['func1', 'func2']);
+  });
+});
+
+// ============================================================================
+// Property-Based Tests
+// ============================================================================
+
+describe('Property-based tests', () => {
+  const functionIdArbitrary = fc.string({ minLength: 1, maxLength: 100 });
+  const modelTierArbitrary = fc.constantFrom<ModelTier>('worker', 'fallback', 'architect');
+  const countArbitrary = fc.nat({ max: 20 });
+  const syntaxRetryLimitArbitrary = fc.nat({ max: 5 });
+  const typeRetryLimitArbitrary = fc.nat({ max: 5 });
+  const testRetryLimitArbitrary = fc.nat({ max: 10 });
+  const maxAttemptsArbitrary = fc.nat({ max: 20 });
+
+  describe('Coherence failures always circuit break across tiers', () => {
+    it('random coherence failures always trigger circuit break on any tier', () => {
+      fc.assert(
+        fc.property(modelTierArbitrary, functionIdArbitrary, (tier, functionId) => {
+          const failure = createCoherenceFailure([functionId]);
+          const attempts = createFunctionAttempts(functionId);
+          const decision = determineEscalation(failure, attempts, tier);
+
+          expect(decision.action.type).toBe('circuit_break');
+          if (decision.action.type === 'circuit_break') {
+            expect(decision.action.requiresHumanReview).toBe(false);
+            expect(decision.action.reason).toContain('Coherence');
+          }
+        })
+      );
+    });
+
+    it('random coherence failures with multiple conflicting functions always circuit break', () => {
+      fc.assert(
+        fc.property(
+          modelTierArbitrary,
+          fc.array(functionIdArbitrary, { minLength: 2, maxLength: 10 }),
+          (tier, conflictingFunctions) => {
+            const failure = createCoherenceFailure(conflictingFunctions);
+            const attempts = createFunctionAttempts('test');
+            const decision = determineEscalation(failure, attempts, tier);
+
+            expect(decision.action.type).toBe('circuit_break');
+          }
+        )
+      );
+    });
+  });
+
+  describe('Attempt-tracking immutability with random inputs', () => {
+    it('recordAttempt does not modify original attempts object', () => {
+      fc.assert(
+        fc.property(
+          functionIdArbitrary,
+          modelTierArbitrary,
+          countArbitrary,
+          (functionId, tier, count) => {
+            const original = createFunctionAttempts(functionId);
+            const originalTotalAttempts = original.totalAttempts;
+            const originalWorkerCount = original.attemptsByTier.get('worker');
+            const originalFallbackCount = original.attemptsByTier.get('fallback');
+            const originalArchitectCount = original.attemptsByTier.get('architect');
+
+            let attempts = original;
+            for (let i = 0; i < count; i++) {
+              const updated = recordAttempt(attempts, tier);
+              expect(updated.totalAttempts).toBe(originalTotalAttempts + i + 1);
+              attempts = updated;
+            }
+
+            expect(original.totalAttempts).toBe(originalTotalAttempts);
+            expect(original.attemptsByTier.get('worker')).toBe(originalWorkerCount);
+            expect(original.attemptsByTier.get('fallback')).toBe(originalFallbackCount);
+            expect(original.attemptsByTier.get('architect')).toBe(originalArchitectCount);
+          }
+        )
+      );
+    });
+
+    it('recordAttempt correctly accumulates counts across tiers', () => {
+      fc.assert(
+        fc.property(
+          functionIdArbitrary,
+          fc.array(modelTierArbitrary, { minLength: 1, maxLength: 20 }),
+          (functionId, tiers) => {
+            let attempts = createFunctionAttempts(functionId);
+            const tierCounts = { worker: 0, fallback: 0, architect: 0 };
+
+            for (const tier of tiers) {
+              attempts = recordAttempt(attempts, tier);
+              if (tier === 'worker') {
+                tierCounts.worker++;
+              } else if (tier === 'fallback') {
+                tierCounts.fallback++;
+              } else {
+                tierCounts.architect++;
+              }
+            }
+
+            expect(attempts.totalAttempts).toBe(tiers.length);
+            expect(attempts.attemptsByTier.get('worker')).toBe(tierCounts.worker);
+            expect(attempts.attemptsByTier.get('fallback')).toBe(tierCounts.fallback);
+            expect(attempts.attemptsByTier.get('architect')).toBe(tierCounts.architect);
+          }
+        )
+      );
+    });
+
+    it('recordSyntaxHint does not modify original attempts', () => {
+      fc.assert(
+        fc.property(functionIdArbitrary, fc.boolean(), (functionId, initialSyntaxHintProvided) => {
+          let attempts = createFunctionAttempts(functionId);
+          if (initialSyntaxHintProvided) {
+            attempts = recordSyntaxHint(attempts);
+          }
+
+          const updated = recordSyntaxHint(attempts);
+          expect(attempts.syntaxHintProvided).toBe(initialSyntaxHintProvided);
+          expect(updated.syntaxHintProvided).toBe(true);
+          expect(updated).not.toBe(attempts);
+        })
+      );
+    });
+
+    it('resetSyntaxHint does not modify original attempts', () => {
+      fc.assert(
+        fc.property(functionIdArbitrary, fc.boolean(), (functionId, initialSyntaxHintProvided) => {
+          let attempts = createFunctionAttempts(functionId);
+          if (initialSyntaxHintProvided) {
+            attempts = recordSyntaxHint(attempts);
+          }
+
+          const updated = resetSyntaxHint(attempts);
+          expect(attempts.syntaxHintProvided).toBe(initialSyntaxHintProvided);
+          expect(updated.syntaxHintProvided).toBe(false);
+          expect(updated).not.toBe(attempts);
+        })
+      );
+    });
+  });
+
+  describe('getRetryLimit respects DEFAULT_ESCALATION_CONFIG for all failure types', () => {
+    it('syntax failures return syntaxRetryLimit from config', () => {
+      fc.assert(
+        fc.property(
+          syntaxRetryLimitArbitrary,
+          typeRetryLimitArbitrary,
+          testRetryLimitArbitrary,
+          maxAttemptsArbitrary,
+          (syntaxRetryLimit, typeRetryLimit, testRetryLimit, maxAttempts) => {
+            const customConfig = {
+              syntaxRetryLimit,
+              typeRetryLimit,
+              testRetryLimit,
+              maxAttemptsPerFunction: maxAttempts,
+            };
+            const failure = createSyntaxFailure('test error');
+            const limit = getRetryLimit(failure, customConfig);
+
+            expect(limit).toBe(syntaxRetryLimit);
+          }
+        )
+      );
+    });
+
+    it('type failures return typeRetryLimit from config', () => {
+      fc.assert(
+        fc.property(
+          syntaxRetryLimitArbitrary,
+          typeRetryLimitArbitrary,
+          testRetryLimitArbitrary,
+          maxAttemptsArbitrary,
+          (syntaxRetryLimit, typeRetryLimit, testRetryLimit, maxAttempts) => {
+            const customConfig = {
+              syntaxRetryLimit,
+              typeRetryLimit,
+              testRetryLimit,
+              maxAttemptsPerFunction: maxAttempts,
+            };
+            const failure = createTypeFailure('type error');
+            const limit = getRetryLimit(failure, customConfig);
+
+            expect(limit).toBe(typeRetryLimit);
+          }
+        )
+      );
+    });
+
+    it('test failures return testRetryLimit from config', () => {
+      fc.assert(
+        fc.property(
+          syntaxRetryLimitArbitrary,
+          typeRetryLimitArbitrary,
+          testRetryLimitArbitrary,
+          maxAttemptsArbitrary,
+          (syntaxRetryLimit, typeRetryLimit, testRetryLimit, maxAttempts) => {
+            const customConfig = {
+              syntaxRetryLimit,
+              typeRetryLimit,
+              testRetryLimit,
+              maxAttemptsPerFunction: maxAttempts,
+            };
+            const failure = createTestFailure([{ testName: 'test1', expected: 'a', actual: 'b' }]);
+            const limit = getRetryLimit(failure, customConfig);
+
+            expect(limit).toBe(testRetryLimit);
+          }
+        )
+      );
+    });
+
+    it('complexity failures return testRetryLimit from config', () => {
+      fc.assert(
+        fc.property(
+          syntaxRetryLimitArbitrary,
+          typeRetryLimitArbitrary,
+          testRetryLimitArbitrary,
+          maxAttemptsArbitrary,
+          (syntaxRetryLimit, typeRetryLimit, testRetryLimit, maxAttempts) => {
+            const customConfig = {
+              syntaxRetryLimit,
+              typeRetryLimit,
+              testRetryLimit,
+              maxAttemptsPerFunction: maxAttempts,
+            };
+            const failure = createComplexityFailure('O(n)', 'O(n^2)');
+            const limit = getRetryLimit(failure, customConfig);
+
+            expect(limit).toBe(testRetryLimit);
+          }
+        )
+      );
+    });
+
+    it('immediate escalation failures return 0 regardless of config', () => {
+      fc.assert(
+        fc.property(
+          syntaxRetryLimitArbitrary,
+          typeRetryLimitArbitrary,
+          testRetryLimitArbitrary,
+          maxAttemptsArbitrary,
+          fc.constantFrom<'security' | 'timeout' | 'semantic' | 'coherence'>(
+            'security',
+            'timeout',
+            'semantic',
+            'coherence'
+          ),
+          (syntaxRetryLimit, typeRetryLimit, testRetryLimit, maxAttempts, type) => {
+            const customConfig = {
+              syntaxRetryLimit,
+              typeRetryLimit,
+              testRetryLimit,
+              maxAttemptsPerFunction: maxAttempts,
+            };
+            let failure;
+            switch (type) {
+              case 'security':
+                failure = createSecurityFailure('injection');
+                break;
+              case 'timeout':
+                failure = createTimeoutFailure('time', 1000);
+                break;
+              case 'semantic':
+                failure = createSemanticFailure({ type: 'invariant', description: 'test' });
+                break;
+              case 'coherence':
+                failure = createCoherenceFailure(['func1']);
+                break;
+            }
+            const limit = getRetryLimit(failure as FailureType, customConfig);
+
+            expect(limit).toBe(0);
+          }
+        )
+      );
+    });
+
+    it('DEFAULT_ESCALATION_CONFIG values are respected', () => {
+      const syntaxFailure = createSyntaxFailure('test');
+      expect(getRetryLimit(syntaxFailure)).toBe(DEFAULT_ESCALATION_CONFIG.syntaxRetryLimit);
+
+      const typeFailure = createTypeFailure('test');
+      expect(getRetryLimit(typeFailure)).toBe(DEFAULT_ESCALATION_CONFIG.typeRetryLimit);
+
+      const testFailure = createTestFailure([{ testName: 'test1', expected: 'a', actual: 'b' }]);
+      expect(getRetryLimit(testFailure)).toBe(DEFAULT_ESCALATION_CONFIG.testRetryLimit);
+
+      const complexityFailure = createComplexityFailure('O(n)', 'O(n^2)');
+      expect(getRetryLimit(complexityFailure)).toBe(DEFAULT_ESCALATION_CONFIG.testRetryLimit);
+
+      const securityFailure = createSecurityFailure('injection');
+      expect(getRetryLimit(securityFailure)).toBe(0);
+
+      const timeoutFailure = createTimeoutFailure('time', 1000);
+      expect(getRetryLimit(timeoutFailure)).toBe(0);
+
+      const semanticFailure = createSemanticFailure({ type: 'invariant', description: 'test' });
+      expect(getRetryLimit(semanticFailure)).toBe(0);
+
+      const coherenceFailure = createCoherenceFailure(['func1']);
+      expect(getRetryLimit(coherenceFailure)).toBe(0);
+    });
+  });
+
+  describe('Negative cases: escalation behavior with invalid/boundary inputs', () => {
+    it('handles coherence failure with empty function list', () => {
+      fc.assert(
+        fc.property(modelTierArbitrary, (tier) => {
+          const failure = createCoherenceFailure([]);
+          const attempts = createFunctionAttempts('test');
+          const decision = determineEscalation(failure, attempts, tier);
+
+          expect(decision.action.type).toBe('circuit_break');
+        })
+      );
+    });
+
+    it('handles attempts with zero attempts on all tiers', () => {
+      fc.assert(
+        fc.property(
+          modelTierArbitrary,
+          fc.constantFrom<'syntax' | 'type' | 'test' | 'timeout' | 'semantic' | 'security'>(
+            'syntax',
+            'type',
+            'test',
+            'timeout',
+            'semantic',
+            'security'
+          ),
+          (tier, failureType) => {
+            const attempts = createFunctionAttempts('test');
+            let failure;
+            switch (failureType) {
+              case 'syntax':
+                failure = createSyntaxFailure('test', true);
+                break;
+              case 'type':
+                failure = createTypeFailure('test');
+                break;
+              case 'test':
+                failure = createTestFailure([{ testName: 'test1', expected: 'a', actual: 'b' }]);
+                break;
+              case 'timeout':
+                failure = createTimeoutFailure('time', 1000);
+                break;
+              case 'semantic':
+                failure = createSemanticFailure({ type: 'invariant', description: 'test' });
+                break;
+              case 'security':
+                failure = createSecurityFailure('injection');
+                break;
+            }
+            const decision = determineEscalation(failure, attempts, tier);
+
+            expect(decision).toBeDefined();
+            expect(decision.action).toBeDefined();
+          }
+        )
+      );
+    });
+
+    it('escalation decisions are consistent with failure type', () => {
+      fc.assert(
+        fc.property(
+          modelTierArbitrary,
+          countArbitrary,
+          fc.constantFrom<
+            'syntax' | 'type' | 'test' | 'timeout' | 'semantic' | 'security' | 'coherence'
+          >('syntax', 'type', 'test', 'timeout', 'semantic', 'security', 'coherence'),
+          (tier, attemptCount, failureType) => {
+            let attempts = createFunctionAttempts('test');
+            for (let i = 0; i < attemptCount; i++) {
+              attempts = recordAttempt(attempts, tier);
+            }
+
+            let failure;
+            switch (failureType) {
+              case 'syntax':
+                failure = createSyntaxFailure('test', true);
+                break;
+              case 'type':
+                failure = createTypeFailure('test');
+                break;
+              case 'test':
+                failure = createTestFailure([{ testName: 'test1', expected: 'a', actual: 'b' }]);
+                break;
+              case 'timeout':
+                failure = createTimeoutFailure('time', 1000);
+                break;
+              case 'semantic':
+                failure = createSemanticFailure({ type: 'invariant', description: 'test' });
+                break;
+              case 'security':
+                failure = createSecurityFailure('injection');
+                break;
+              case 'coherence':
+                failure = createCoherenceFailure(['func1']);
+                break;
+            }
+            const decision = determineEscalation(failure, attempts, tier);
+
+            expect(decision).toBeDefined();
+            expect(decision.action).toBeDefined();
+            expect(decision.reason).toBeDefined();
+
+            if (failureType === 'coherence') {
+              expect(decision.action.type).toBe('circuit_break');
+            }
+          }
+        )
+      );
+    });
   });
 });
