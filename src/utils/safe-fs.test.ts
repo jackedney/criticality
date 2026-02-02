@@ -1,4 +1,5 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
+import * as fc from 'fast-check';
 import {
   validatePath,
   safeReadFile,
@@ -14,6 +15,7 @@ import {
 import { mkdtemp, rm } from 'node:fs/promises';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
+import * as path from 'node:path';
 
 describe('safe-fs', () => {
   let tempDir: string;
@@ -34,10 +36,10 @@ describe('safe-fs', () => {
     });
 
     it('should resolve relative paths to absolute', () => {
-      const path = './test.txt';
-      const result = validatePath(path);
+      const testPath = './test.txt';
+      const result = validatePath(testPath);
       expect(result).toBeDefined();
-      expect(result.startsWith('/')).toBe(true);
+      expect(path.isAbsolute(result)).toBe(true);
     });
 
     it('should reject empty paths', () => {
@@ -54,6 +56,33 @@ describe('safe-fs', () => {
     it('should reject non-string values', () => {
       expect(() => validatePath(null as unknown as string)).toThrow(PathValidationError);
       expect(() => validatePath(undefined as unknown as string)).toThrow(PathValidationError);
+    });
+
+    describe('Property-based tests', () => {
+      it('non-empty strings without null bytes do not throw', () => {
+        fc.assert(
+          fc.property(
+            fc.string({ minLength: 1 }).filter((s) => !s.includes('\0')),
+            (input) => {
+              expect(() => validatePath(input)).not.toThrow(PathValidationError);
+            }
+          )
+        );
+      });
+
+      it('strings with null bytes throw PathValidationError', () => {
+        fc.assert(
+          fc.property(
+            fc.string({ minLength: 1 }),
+            fc.integer({ min: 0, max: 100 }),
+            (base, pos) => {
+              const pathWithNull = base.substring(0, pos) + '\0' + base.substring(pos);
+              expect(() => validatePath(pathWithNull)).toThrow(PathValidationError);
+              expect(() => validatePath(pathWithNull)).toThrow('null bytes');
+            }
+          )
+        );
+      });
     });
   });
 
