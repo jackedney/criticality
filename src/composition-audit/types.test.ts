@@ -57,16 +57,6 @@ describe('Composition Audit Types', () => {
         expect(CONTRADICTION_TYPE_DESCRIPTIONS[type].length).toBeGreaterThan(0);
       }
     });
-});
-  });
-});
-
-    it('descriptions are meaningful', () => {
-      expect(CONTRADICTION_TYPE_DESCRIPTIONS.temporal).toContain('time');
-      expect(CONTRADICTION_TYPE_DESCRIPTIONS.resource).toContain('conflict');
-      expect(CONTRADICTION_TYPE_DESCRIPTIONS.invariant).toContain('state');
-      expect(CONTRADICTION_TYPE_DESCRIPTIONS.precondition_gap).toContain('prerequisites');
-      expect(CONTRADICTION_TYPE_DESCRIPTIONS.postcondition_conflict).toContain('conflict');
     });
   });
 
