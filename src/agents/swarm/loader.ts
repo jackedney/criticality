@@ -358,7 +358,12 @@ export async function loadSwarmConfig(
   if (configPath !== undefined) {
     try {
       config = await loadSwarmConfigFromFile(configPath);
-      source = mergeWithDefaults ? 'merged' : 'file';
+      if (mergeWithDefaults) {
+        config = mergeConfigurations(DEFAULT_SWARM_CONFIG, config);
+        source = 'merged';
+      } else {
+        source = 'file';
+      }
     } catch (err) {
       if (err instanceof SwarmConfigurationError) {
         throw err;
