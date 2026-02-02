@@ -25,6 +25,23 @@ import type {
 } from '../spec/types.js';
 import type { PurityLevel } from '../adapters/typescript/contracts.js';
 
+/** Keys that are prohibited due to prototype pollution concerns. */
+const PROHIBITED_KEYS = ['__proto__', 'constructor', 'prototype'];
+
+/**
+ * Validates that an interface name is safe from prototype pollution.
+ *
+ * @param interfaceName - The interface name to validate.
+ * @throws Error if interface name is a prohibited key.
+ */
+function validateInterfaceName(interfaceName: string): void {
+  if (PROHIBITED_KEYS.includes(interfaceName)) {
+    throw new Error(
+      `Invalid interface name '${interfaceName}': interface names ${PROHIBITED_KEYS.map((k) => `'${k}'`).join(', ')} are not allowed for security reasons`
+    );
+  }
+}
+
 /**
  * A micro-contract clause to be attached to a function.
  */
@@ -687,6 +704,8 @@ export function attachContracts(
 
   // Process each interface and its methods
   for (const [interfaceName, iface] of Object.entries(interfaces)) {
+    validateInterfaceName(interfaceName);
+
     for (const method of iface.methods) {
       const { contract, usedClaimIds: methodClaimIds } = generateMethodContract(
         method,
@@ -768,12 +787,14 @@ export function attachContractsForInterface(
   interfaceName: string,
   options: ContractAttachmentOptions = {}
 ): ContractAttachmentResult {
-  // eslint-disable-next-line security/detect-object-injection -- safe: interfaceName is validated to exist in spec.interfaces
+  validateInterfaceName(interfaceName);
+
+  // eslint-disable-next-line security/detect-object-injection -- safe: interfaceName is validated by validateInterfaceName()
   if (spec.interfaces?.[interfaceName] === undefined) {
     throw new Error(`Interface '${interfaceName}' not found in spec`);
   }
 
-  // eslint-disable-next-line security/detect-object-injection -- safe: interfaceName is validated above
+  // eslint-disable-next-line security/detect-object-injection -- safe: interfaceName is validated by validateInterfaceName()
   const iface = spec.interfaces[interfaceName];
 
   // Create a filtered spec with only the requested interface

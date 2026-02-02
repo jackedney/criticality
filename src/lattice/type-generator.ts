@@ -15,6 +15,27 @@ import {
   type WitnessTypeParameter,
 } from '../adapters/typescript/witness.js';
 
+/** Keys that are prohibited due to prototype pollution concerns. */
+const PROHIBITED_KEYS = ['__proto__', 'constructor', 'prototype'];
+
+/**
+ * Validates that a key is safe for use as an object property.
+ *
+ * This prevents prototype pollution attacks by rejecting keys that could
+ * compromise object prototype chain.
+ *
+ * @param key - The key to validate.
+ * @param keyPath - Path to key for error messages.
+ * @throws Error if key is prohibited.
+ */
+function validateKey(key: string, keyPath: string): void {
+  if (PROHIBITED_KEYS.includes(key)) {
+    throw new Error(
+      `Prohibited key '${key}' found at '${keyPath}': keys ${PROHIBITED_KEYS.map((k) => `'${k}'`).join(', ')} are not allowed for security reasons`
+    );
+  }
+}
+
 /**
  * Constraint types that can be mapped to branded types.
  */
@@ -223,34 +244,35 @@ function parseTypeIdentifiers(typeStr: string): string[] {
  * @returns The corresponding TypeScript type.
  */
 function mapSpecTypeToTypeScript(specType: string): string {
-  // Handle common type mappings
-  const typeMap: Record<string, string> = {
-    string: 'string',
-    number: 'number',
-    boolean: 'boolean',
-    integer: 'number',
-    float: 'number',
-    decimal: 'number',
-    date: 'Date',
-    datetime: 'Date',
-    timestamp: 'Date',
-    uuid: 'string',
-    email: 'string',
-    url: 'string',
-    json: 'unknown',
-    any: 'unknown',
-    void: 'void',
-    null: 'null',
-    undefined: 'undefined',
-  };
+  // Handle common type mappings using null-prototype object
+  const typeMap = Object.create(null) as Record<string, string>;
+  typeMap.string = 'string';
+  typeMap.number = 'number';
+  typeMap.boolean = 'boolean';
+  typeMap.integer = 'number';
+  typeMap.float = 'number';
+  typeMap.decimal = 'number';
+  typeMap.date = 'Date';
+  typeMap.datetime = 'Date';
+  typeMap.timestamp = 'Date';
+  typeMap.uuid = 'string';
+  typeMap.email = 'string';
+  typeMap.url = 'string';
+  typeMap.json = 'unknown';
+  typeMap.any = 'unknown';
+  typeMap.void = 'void';
+  typeMap.null = 'null';
+  typeMap.undefined = 'undefined';
 
   const lowerType = specType.toLowerCase();
 
-  // Check direct mapping
-  // eslint-disable-next-line security/detect-object-injection -- safe: lowerType derived from controlled specType string
-  if (typeMap[lowerType] !== undefined) {
-    // eslint-disable-next-line security/detect-object-injection -- safe: lowerType derived from controlled specType string
-    return typeMap[lowerType];
+  // Check direct mapping using Object.hasOwn() to prevent prototype pollution
+  if (Object.hasOwn(typeMap, lowerType)) {
+    // eslint-disable-next-line security/detect-object-injection -- safe: lowerType derived from controlled specType string, validated by Object.hasOwn()
+    const mapped = typeMap[lowerType];
+    if (mapped !== undefined) {
+      return mapped;
+    }
   }
 
   // Handle array types: Type[] or Array<Type>
@@ -626,6 +648,9 @@ function generateInterfaceDefinition(
   lines.push(`export interface ${modelName} {`);
 
   for (const field of model.fields) {
+    // Validate field name to prevent prototype pollution
+    validateKey(field.name, `${modelName}.${field.name}`);
+
     // Generate field JSDoc
     if (includeJsDoc) {
       const hasConstraints = field.constraints !== undefined && field.constraints.length > 0;
@@ -743,7 +768,8 @@ function generateWitnessBrandedTypes(
 ): BrandedTypeResult[] {
   const results: BrandedTypeResult[] = [];
 
-  for (const [_witnessKey, witness] of Object.entries(witnesses)) {
+  for (const [witnessKey, witness] of Object.entries(witnesses)) {
+    validateKey(witnessKey, `witnesses.${witnessKey}`);
     // Get base type
     const baseType = witness.base_type ?? 'unknown';
 
@@ -888,6 +914,7 @@ export function generateTypeDefinitions(
   // Generate enum definitions
   if (spec.enums !== undefined) {
     for (const [enumName, specEnum] of Object.entries(spec.enums)) {
+      validateKey(enumName, `enums.${enumName}`);
       const enumDef = generateEnumDefinition(enumName, specEnum, includeJsDoc);
       allEnums.push(enumDef);
     }
@@ -897,6 +924,7 @@ export function generateTypeDefinitions(
   if (spec.data_models !== undefined) {
     // First pass: collect all branded types from field constraints
     for (const [modelName, model] of Object.entries(spec.data_models)) {
+      validateKey(modelName, `data_models.${modelName}`);
       for (const field of model.fields) {
         const { brandedTypes, fieldType, warnings } = processFieldConstraints(
           modelName,
