@@ -37,6 +37,21 @@ const DEFAULT_OPTIONS: Required<ModuleGeneratorOptions> = {
 };
 
 /**
+ * Checks if a directory exists.
+ *
+ * @param dirPath - The path to check.
+ * @returns true if the path exists and is a directory, false otherwise.
+ */
+async function directoryExists(dirPath: string): Promise<boolean> {
+  try {
+    const stat = await safeStat(dirPath);
+    return stat.isDirectory();
+  } catch {
+    return false;
+  }
+}
+
+/**
  * Detects project conventions from an existing codebase.
  *
  * @param projectRoot - The root directory of the project.
@@ -50,46 +65,24 @@ export async function detectProjectConventions(projectRoot: string): Promise<Pro
   };
 
   try {
-    // Check if src directory exists
     const srcPath = path.join(projectRoot, 'src');
-    let srcExists = false;
-    try {
-      const srcStat = await safeStat(srcPath);
-      srcExists = srcStat.isDirectory();
-    } catch {
-      srcExists = false;
-    }
+    const srcExists = await directoryExists(srcPath);
 
     if (!srcExists) {
-      // Check for lib directory as alternative
       const libPath = path.join(projectRoot, 'lib');
-      let libExists = false;
-      try {
-        const libStat = await safeStat(libPath);
-        libExists = libStat.isDirectory();
-      } catch {
-        libExists = false;
-      }
+      const libExists = await directoryExists(libPath);
 
       if (libExists) {
         return { ...conventions, sourceDir: 'lib' };
       }
 
-      // No source directory found, return defaults
       return conventions;
     }
 
-    // Check for domain directory patterns
     const domainPatterns = ['domain', 'domains', 'modules', 'features'];
     for (const pattern of domainPatterns) {
       const domainPath = path.join(srcPath, pattern);
-      let domainExists = false;
-      try {
-        const domainStat = await safeStat(domainPath);
-        domainExists = domainStat.isDirectory();
-      } catch {
-        domainExists = false;
-      }
+      const domainExists = await directoryExists(domainPath);
 
       if (domainExists) {
         return { ...conventions, domainDir: pattern };
