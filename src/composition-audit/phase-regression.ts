@@ -256,14 +256,13 @@ function buildSuggestedResolutions(
 ): SuggestedResolution[] {
   const resolutions: SuggestedResolution[] = [];
 
-  let index = 1;
-  for (const resolutionText of contradiction.suggestedResolutions) {
+  for (const [index, resolutionText] of contradiction.suggestedResolutions.entries()) {
     const affectedIds = contradiction.involved
       .filter((e) => e.elementType === 'constraint')
       .map((e) => e.id);
 
     const resolution: SuggestedResolution = {
-      id: `resolution_${contradiction.id}_${String(index)}`,
+      id: `resolution_${contradiction.id}_${String(index + 1)}`,
       description: resolutionText,
       affectedPhase: targetPhase,
       requiresSpecChange: true,
@@ -274,7 +273,6 @@ function buildSuggestedResolutions(
     } else {
       resolutions.push(resolution);
     }
-    index++;
   }
 
   return resolutions;
