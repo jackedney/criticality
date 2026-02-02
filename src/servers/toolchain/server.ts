@@ -900,9 +900,9 @@ export function createToolchainServer(config: ToolchainServerConfig): Server {
    */
   async function collectFiles(dirPath: string, extensions: string[]): Promise<string[]> {
     const files: string[] = [];
-    const entries = (await safeReaddir(dirPath, {
+    const entries = await safeReaddir(dirPath, {
       withFileTypes: true,
-    })) as import('node:fs').Dirent[];
+    });
 
     for (const entry of entries) {
       const fullPath = path.join(dirPath, entry.name);

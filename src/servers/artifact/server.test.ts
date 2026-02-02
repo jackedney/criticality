@@ -72,7 +72,7 @@ describe('criticality-artifact-server', () => {
 
     // Copy schemas
     const schemasDir = path.join(process.cwd(), 'schemas');
-    const schemaFiles = (await safeReaddir(schemasDir)) as string[];
+    const schemaFiles = await safeReaddir(schemasDir);
     for (const file of schemaFiles) {
       await fs.copyFile(path.join(schemasDir, file), path.join(tempDir, 'schemas', file));
     }

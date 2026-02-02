@@ -53,9 +53,25 @@ export class PathValidationError extends Error {
  * - This prevents directory traversal attacks where malicious input could escape
  *   the intended directory structure
  *
+ * Note: This function does not enforce containment within a specific root directory.
+ * To enforce path containment, validate that the resolved path starts with an
+ * expected root directory after calling this function.
+ *
  * @param filePath - The path to validate.
  * @returns The resolved absolute path.
- * @throws {PathValidationError} If the path is invalid (empty, contains null bytes, or resolves to a non-absolute path).
+ * @throws {PathValidationError} If the path is invalid (empty, non-string, contains null bytes, or resolves to a non-absolute path).
+ *
+ * @example
+ * ```ts
+ * // Valid paths
+ * validatePath('/tmp/test.txt') // Returns '/tmp/test.txt'
+ * validatePath('./test.txt')    // Returns absolute path like '/current/dir/test.txt'
+ *
+ * // Invalid paths throw PathValidationError
+ * validatePath('')                      // Throws: Path cannot be empty
+ * validatePath('/tmp/test\0file.txt')  // Throws: Path cannot contain null bytes
+ * validatePath(null as unknown as string) // Throws: Path must be a string
+ * ```
  */
 export function validatePath(filePath: string): string {
   if (typeof filePath !== 'string') {
@@ -216,10 +232,16 @@ export async function safeMkdir(
  *
  * @param filePath - The path to the directory to read.
  * @param options - Optional encoding or directory read options.
- * @returns A promise that resolves to an array of file/directory names in the directory.
+ * @returns A promise that resolves to an array of file/directory names in the directory,
+ *          or Dirent[] if withFileTypes is true.
  * @throws {PathValidationError} If the path is invalid.
  * @throws {Error} If the directory cannot be read (e.g., not found, not a directory, permission denied).
  */
+export function safeReaddir(filePath: string): Promise<string[]>;
+export function safeReaddir(
+  filePath: string,
+  options?: { encoding?: BufferEncoding | null; withFileTypes?: true; recursive?: boolean }
+): Promise<import('node:fs').Dirent[]>;
 export async function safeReaddir(filePath: string, options?: unknown): Promise<unknown> {
   const validatedPath = validatePath(filePath);
 

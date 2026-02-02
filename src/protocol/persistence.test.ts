@@ -622,7 +622,7 @@ describe('Protocol State Persistence', () => {
         expect(content).toContain('Lattice');
 
         // No temp files should remain
-        const files = (await safeReaddir(testDir)) as string[];
+        const files = await safeReaddir(testDir);
         expect(files.filter((f: string) => f.includes('.tmp'))).toHaveLength(0);
       });
 

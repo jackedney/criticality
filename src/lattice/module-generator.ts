@@ -90,7 +90,7 @@ export async function detectProjectConventions(projectRoot: string): Promise<Pro
     }
 
     // Check for barrel file convention by looking for index.ts files
-    const files = (await safeReaddir(srcPath).catch(() => [])) as string[];
+    const files = await safeReaddir(srcPath).catch(() => []);
     const hasBarrelFiles = files.some((f) => f === 'index.ts' || f === 'index.js');
 
     // Check for .js extension in imports by reading a sample TypeScript file

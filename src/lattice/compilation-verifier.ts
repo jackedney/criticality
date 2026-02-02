@@ -553,9 +553,9 @@ async function findTypeScriptFilesRecursive(
   projectPath: string
 ): Promise<string[]> {
   const files: string[] = [];
-  const entries = (await safeReaddir(dirPath, {
+  const entries = await safeReaddir(dirPath, {
     withFileTypes: true,
-  })) as import('node:fs').Dirent[];
+  });
 
   for (const entry of entries) {
     const fullPath = path.join(dirPath, entry.name);

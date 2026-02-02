@@ -419,7 +419,7 @@ export async function listContradictionReports(projectId: string): Promise<strin
   const auditDir = getAuditDir(projectId);
 
   try {
-    const files = (await safeReaddir(auditDir)) as string[];
+    const files = await safeReaddir(auditDir);
 
     const reportIds: { id: string; mtime: number }[] = [];
 

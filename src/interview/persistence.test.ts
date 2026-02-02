@@ -892,7 +892,7 @@ describe('Interview Persistence', () => {
 
       // Verify no temp files remain
       const dir = getInterviewDir('atomic-test');
-      const files = (await safeReaddir(dir)) as string[];
+      const files = await safeReaddir(dir);
 
       // Should only have state.json, no .tmp files
       expect(files.every((f) => !f.endsWith('.tmp'))).toBe(true);

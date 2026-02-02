@@ -689,7 +689,7 @@ export async function getNextProposalVersion(projectId: string): Promise<number>
 
   try {
     const files = await safeReaddir(proposalsDir);
-    const versions = (files as string[])
+    const versions = files
       .filter((f: string) => /^v\d+\.toml$/.test(f))
       .map((f) => {
         const match = /^v(\d+)\.toml$/.exec(f);
@@ -826,7 +826,7 @@ export async function listProposals(projectId: string): Promise<readonly number[
 
   try {
     const files = await safeReaddir(proposalsDir);
-    return (files as string[])
+    return files
       .filter((f: string) => /^v\d+\.toml$/.test(f))
       .map((f) => {
         const match = /^v(\d+)\.toml$/.exec(f);
