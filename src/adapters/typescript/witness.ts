@@ -726,9 +726,9 @@ function analyzeBaseArbitrary(baseType: string, invariant?: string): BaseArbitra
     // Check for common number invariants that can be optimized
     if (invariant !== undefined) {
       // eslint-disable-next-line security/detect-unsafe-regex -- Short invariant strings from code analysis
-      const minMatch = /value[ \t]*>=?[ \t]*(-?\d+(?:\.\d+)?)/.exec(invariant);
+      const minMatch = /value\s*>=?\s*(-?\d+(?:\.\d+)?)/.exec(invariant);
       // eslint-disable-next-line security/detect-unsafe-regex -- Short invariant strings from code analysis
-      const maxMatch = /value[ \t]*<=?[ \t]*(-?\d+(?:\.\d+)?)/.exec(invariant);
+      const maxMatch = /value\s*<=?\s*(-?\d+(?:\.\d+)?)/.exec(invariant);
 
       // For non-negative numbers, use fc.float with min: 0
       const minValue = minMatch?.[1];
@@ -1177,23 +1177,20 @@ function canOptimizeAwayFilter(invariant: string, arbInfo: BaseArbitraryInfo): b
     return true;
   }
 
-  if (
-    arbInfo.arbitrary.includes('minLength: 1') &&
-    /value\.length[ \t]*>=[ \t]*1/.test(invariant)
-  ) {
+  if (arbInfo.arbitrary.includes('minLength: 1') && /value\.length\s*>=\s*1/.test(invariant)) {
     return true;
   }
 
   // For number constraints with min, check if the invariant is covered
   // eslint-disable-next-line security/detect-unsafe-regex -- Short arbitrary strings from internal generation
-  const minMatch = /min:[ \t]*(-?\d+(?:\.\d+)?)/.exec(arbInfo.arbitrary);
+  const minMatch = /min:\s*(-?\d+(?:\.\d+)?)/.exec(arbInfo.arbitrary);
   if (minMatch !== null) {
     const arbMin = Number(minMatch[1]);
     // eslint-disable-next-line security/detect-unsafe-regex -- Short invariant strings from code analysis
-    const invMinMatch = /value[ \t]*>=[ \t]*(-?\d+(?:\.\d+)?)/.exec(invariant);
+    const invMinMatch = /value\s*>=\s*(-?\d+(?:\.\d+)?)/.exec(invariant);
     if (invMinMatch !== null && Number(invMinMatch[1]) === arbMin) {
       // The min constraint in the arbitrary matches the invariant
-      // We still need the filter for the type guard, but it will rarely reject
+      // We still need to filter for the type guard, but it will rarely reject
       return false; // Keep filter for type safety, but it's optimized
     }
   }
