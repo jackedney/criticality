@@ -26,6 +26,9 @@ import {
   rename,
   appendFile,
   symlink,
+  mkdtemp,
+  copyFile,
+  rm,
 } from 'node:fs/promises';
 import { existsSync, readFileSync, readdirSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
 import * as path from 'node:path';
@@ -405,6 +408,52 @@ export async function safeAppendFileWithOptions(
   const validatedPath = validatePath(filePath);
   // eslint-disable-next-line security/detect-non-literal-fs-filename -- path is validated by validatePath
   return appendFile(validatedPath, data, options);
+}
+
+/**
+ * Safely creates a temporary directory after validating the path prefix.
+ *
+ * @param prefix - The prefix for the temporary directory name.
+ * @returns A promise that resolves to the path of the created temporary directory.
+ * @throws {PathValidationError} If the prefix is invalid.
+ * @throws {Error} If the temporary directory cannot be created (e.g., permission denied).
+ */
+export async function safeMkdirTemp(prefix: string): Promise<string> {
+  const validatedPrefix = validatePath(prefix);
+  return mkdtemp(validatedPrefix);
+}
+
+/**
+ * Safely copies a file after validating both paths.
+ *
+ * @param src - The source file path.
+ * @param dest - The destination file path.
+ * @param mode - Optional copy mode (Node.js constants like fs.constants.COPYFILE_EXCL).
+ * @returns A promise that resolves when the file is copied.
+ * @throws {PathValidationError} If either path is invalid.
+ * @throws {Error} If the file cannot be copied (e.g., source not found, permission denied).
+ */
+export async function safeCopyFile(src: string, dest: string, mode?: number): Promise<void> {
+  const validatedSrc = validatePath(src);
+  const validatedDest = validatePath(dest);
+  return copyFile(validatedSrc, validatedDest, mode);
+}
+
+/**
+ * Safely removes a file or directory after validating the path.
+ *
+ * @param filePath - The path to the file or directory to remove.
+ * @param options - Options for removal.
+ * @returns A promise that resolves when the path is removed.
+ * @throws {PathValidationError} If the path is invalid.
+ * @throws {Error} If the path cannot be removed (e.g., not found, permission denied).
+ */
+export async function safeRm(
+  filePath: string,
+  options?: { force?: boolean; maxRetries?: number; recursive?: boolean; retryDelay?: number }
+): Promise<void> {
+  const validatedPath = validatePath(filePath);
+  return rm(validatedPath, options);
 }
 
 /**

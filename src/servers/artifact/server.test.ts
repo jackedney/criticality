@@ -5,7 +5,6 @@
  */
 
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
-import fs from 'node:fs/promises';
 import path from 'node:path';
 import os from 'node:os';
 import TOML from '@iarna/toml';
@@ -20,7 +19,15 @@ import {
   WitnessNotFoundError,
   ALLOWED_ARTIFACT_FILES,
 } from './types.js';
-import { safeMkdir, safeReaddir, safeWriteFile, safeReadFile } from '../../utils/safe-fs.js';
+import {
+  safeMkdir,
+  safeReaddir,
+  safeWriteFile,
+  safeReadFile,
+  safeMkdirTemp,
+  safeCopyFile,
+  safeRm,
+} from '../../utils/safe-fs.js';
 
 // Type for tool call result (simplified for test purposes)
 interface ToolCallResult {
@@ -65,7 +72,7 @@ describe('criticality-artifact-server', () => {
 
   beforeEach(async () => {
     // Create a temporary directory for test artifacts
-    tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'artifact-server-test-'));
+    tempDir = await safeMkdirTemp(path.join(os.tmpdir(), 'artifact-server-test-'));
 
     // Create schemas directory
     await safeMkdir(path.join(tempDir, 'schemas'));
@@ -74,7 +81,7 @@ describe('criticality-artifact-server', () => {
     const schemasDir = path.join(process.cwd(), 'schemas');
     const schemaFiles = await safeReaddir(schemasDir);
     for (const file of schemaFiles) {
-      await fs.copyFile(path.join(schemasDir, file), path.join(tempDir, 'schemas', file));
+      await safeCopyFile(path.join(schemasDir, file), path.join(tempDir, 'schemas', file));
     }
 
     // Create examples directory
@@ -175,7 +182,7 @@ describe('criticality-artifact-server', () => {
     // Close the client connection
     await client.close();
     // Clean up temp directory
-    await fs.rm(tempDir, { recursive: true, force: true });
+    await safeRm(tempDir, { recursive: true, force: true });
   });
 
   describe('read_spec_section', () => {
@@ -428,14 +435,14 @@ describe('tool listing', () => {
   let client: Client;
 
   beforeEach(async () => {
-    tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'artifact-server-list-test-'));
+    tempDir = await safeMkdirTemp(path.join(os.tmpdir(), 'artifact-server-list-test-'));
     const pair = await createConnectedPair(tempDir);
     client = pair.client;
   });
 
   afterEach(async () => {
     await client.close();
-    await fs.rm(tempDir, { recursive: true, force: true });
+    await safeRm(tempDir, { recursive: true, force: true });
   });
 
   it('lists all four tools', async () => {
