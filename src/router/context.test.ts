@@ -145,22 +145,22 @@ describe('Model Limits', () => {
 
     it('matches partial model names', () => {
       // Should match claude variants (claude has different limits than default)
-      expect(getModelLimits('claude')).toEqual(MODEL_CONTEXT_LIMITS['claude-sonnet-4-5']);
+      expect(getModelLimits('claude')).toEqual(MODEL_CONTEXT_LIMITS.get('claude-sonnet-4-5'));
       // kimi also has different limits
-      expect(getModelLimits('kimi')).toEqual(MODEL_CONTEXT_LIMITS['kimi-k2']);
+      expect(getModelLimits('kimi')).toEqual(MODEL_CONTEXT_LIMITS.get('kimi-k2'));
     });
   });
 
   describe('MODEL_CONTEXT_LIMITS', () => {
     it('contains all expected models', () => {
-      expect(MODEL_CONTEXT_LIMITS).toHaveProperty('minimax-m2');
-      expect(MODEL_CONTEXT_LIMITS).toHaveProperty('kimi-k2');
-      expect(MODEL_CONTEXT_LIMITS).toHaveProperty('claude-sonnet-4-5');
-      expect(MODEL_CONTEXT_LIMITS).toHaveProperty('claude-opus-4-5');
+      expect(MODEL_CONTEXT_LIMITS.has('minimax-m2')).toBe(true);
+      expect(MODEL_CONTEXT_LIMITS.has('kimi-k2')).toBe(true);
+      expect(MODEL_CONTEXT_LIMITS.has('claude-sonnet-4-5')).toBe(true);
+      expect(MODEL_CONTEXT_LIMITS.has('claude-opus-4-5')).toBe(true);
     });
 
     it('all limits are positive', () => {
-      for (const [, limits] of Object.entries(MODEL_CONTEXT_LIMITS)) {
+      for (const limits of MODEL_CONTEXT_LIMITS.values()) {
         expect(limits.maxInputTokens).toBeGreaterThan(0);
         expect(limits.maxOutputTokens).toBeGreaterThan(0);
       }

@@ -117,6 +117,7 @@ describe('ModelLogger', () => {
       const logDir = path.join(tempDir, 'nested', 'log', 'dir');
       const logPath = path.join(logDir, 'test.log');
       createModelLogger({ logFilePath: logPath, createDirectory: true });
+      // eslint-disable-next-line security/detect-non-literal-fs-filename -- test file: path constructed from temp directory
       expect(fs.existsSync(logDir)).toBe(true);
     });
   });
@@ -130,106 +131,128 @@ describe('ModelLogger', () => {
       ...overrides,
     });
 
-    it('returns undefined when log level is none', () => {
+    it('returns undefined when log level is none', async () => {
       const logger = createModelLogger({ logLevel: 'none' });
-      const entry = logger.logRequest(createTestRequest());
+      const entry = await logger.logRequest(createTestRequest());
       expect(entry).toBeUndefined();
       expect(logger.getEntries()).toHaveLength(0);
     });
 
-    it('logs request timestamp with summary level', () => {
+    it('logs request timestamp with summary level', async () => {
       const fixedDate = new Date('2026-01-24T12:00:00.000Z');
       const logger = createModelLogger({
         logLevel: 'summary',
         now: () => fixedDate,
       });
 
-      const entry = logger.logRequest(createTestRequest());
+      const entry = await logger.logRequest(createTestRequest());
 
       expect(entry).toBeDefined();
-      expect(entry?.type).toBe('request');
-      expect(entry?.timestamp).toBe('2026-01-24T12:00:00.000Z');
+      if (entry !== undefined) {
+        expect(entry.type).toBe('request');
+        expect(entry.timestamp).toBe('2026-01-24T12:00:00.000Z');
+      }
     });
 
-    it('logs model alias with summary level', () => {
+    it('logs model alias with summary level', async () => {
       const logger = createModelLogger({ logLevel: 'summary' });
-      const entry = logger.logRequest(createTestRequest({ modelAlias: 'architect' }));
+      const entry = await logger.logRequest(createTestRequest({ modelAlias: 'architect' }));
 
-      expect(entry?.modelAlias).toBe('architect');
+      expect(entry).toBeDefined();
+      if (entry !== undefined) {
+        expect(entry.modelAlias).toBe('architect');
+      }
     });
 
-    it('logs prompt hash with summary level', () => {
+    it('logs prompt hash with summary level', async () => {
       const logger = createModelLogger({ logLevel: 'summary' });
       const prompt = 'Test prompt for hashing';
-      const entry = logger.logRequest(createTestRequest({ prompt }));
+      const entry = await logger.logRequest(createTestRequest({ prompt }));
 
       const expectedHash = computePromptHash(prompt);
-      expect(entry?.promptHash).toBe(expectedHash);
+      expect(entry).toBeDefined();
+      if (entry !== undefined) {
+        expect(entry.promptHash).toBe(expectedHash);
+      }
     });
 
-    it('logs requestId when provided', () => {
+    it('logs requestId when provided', async () => {
       const logger = createModelLogger({ logLevel: 'summary' });
-      const entry = logger.logRequest(createTestRequest({ requestId: 'req-123' }));
-
-      expect(entry?.requestId).toBe('req-123');
-    });
-
-    it('does not include full prompt in summary level', () => {
-      const logger = createModelLogger({ logLevel: 'summary' });
-      const entry = logger.logRequest(createTestRequest({ prompt: 'Secret prompt' }));
+      const entry = await logger.logRequest(createTestRequest({ requestId: 'req-123' }));
 
       expect(entry).toBeDefined();
-      expect(entry?.prompt).toBeUndefined();
+      if (entry !== undefined) {
+        expect(entry.requestId).toBe('req-123');
+      }
     });
 
-    it('includes full prompt in full level', () => {
+    it('does not include full prompt in summary level', async () => {
+      const logger = createModelLogger({ logLevel: 'summary' });
+      const entry = await logger.logRequest(createTestRequest({ prompt: 'Secret prompt' }));
+
+      expect(entry).toBeDefined();
+      if (entry !== undefined) {
+        expect(entry.prompt).toBeUndefined();
+      }
+    });
+
+    it('includes full prompt in full level', async () => {
       const logger = createModelLogger({ logLevel: 'full' });
       const prompt = 'Full prompt content';
-      const entry = logger.logRequest(createTestRequest({ prompt }));
+      const entry = await logger.logRequest(createTestRequest({ prompt }));
 
       expect(entry).toBeDefined();
-      expect(entry?.prompt).toBe(prompt);
+      if (entry !== undefined) {
+        expect(entry.prompt).toBe(prompt);
+      }
     });
 
-    it('includes system prompt in full level', () => {
+    it('includes system prompt in full level', async () => {
       const logger = createModelLogger({ logLevel: 'full' });
-      const entry = logger.logRequest(
+      const entry = await logger.logRequest(
         createTestRequest({
           parameters: { systemPrompt: 'You are a helpful assistant' },
         })
       );
 
       expect(entry).toBeDefined();
-      expect(entry?.systemPrompt).toBe('You are a helpful assistant');
+      if (entry !== undefined) {
+        expect(entry.systemPrompt).toBe('You are a helpful assistant');
+      }
     });
 
-    it('includes maxTokens in full level', () => {
+    it('includes maxTokens in full level', async () => {
       const logger = createModelLogger({ logLevel: 'full' });
-      const entry = logger.logRequest(
+      const entry = await logger.logRequest(
         createTestRequest({
           parameters: { maxTokens: 1000 },
         })
       );
 
       expect(entry).toBeDefined();
-      expect(entry?.maxTokens).toBe(1000);
+      if (entry !== undefined) {
+        expect(entry.maxTokens).toBe(1000);
+      }
     });
 
-    it('stores entries in memory', () => {
+    it('stores entries in memory', async () => {
       const logger = createModelLogger({ logLevel: 'summary' });
-      logger.logRequest(createTestRequest());
-      logger.logRequest(createTestRequest());
+      await logger.logRequest(createTestRequest());
+      await logger.logRequest(createTestRequest());
 
       expect(logger.getEntries()).toHaveLength(2);
     });
 
     // Test all model aliases
-    it('accepts all valid model aliases', () => {
+    it('accepts all valid model aliases', async () => {
       const logger = createModelLogger({ logLevel: 'summary' });
 
       for (const alias of MODEL_ALIASES) {
-        const entry = logger.logRequest(createTestRequest({ modelAlias: alias }));
-        expect(entry?.modelAlias).toBe(alias);
+        const entry = await logger.logRequest(createTestRequest({ modelAlias: alias }));
+        expect(entry).toBeDefined();
+        if (entry !== undefined) {
+          expect(entry.modelAlias).toBe(alias);
+        }
       }
     });
   });
@@ -252,87 +275,106 @@ describe('ModelLogger', () => {
       ...overrides,
     });
 
-    it('returns undefined when log level is none', () => {
+    it('returns undefined when log level is none', async () => {
       const logger = createModelLogger({ logLevel: 'none' });
-      const entry = logger.logResponse(createTestResponse(), 'worker');
+      const entry = await logger.logResponse(createTestResponse(), 'worker');
       expect(entry).toBeUndefined();
     });
 
-    it('logs response timestamp with summary level', () => {
+    it('logs response timestamp with summary level', async () => {
       const fixedDate = new Date('2026-01-24T12:30:00.000Z');
       const logger = createModelLogger({
         logLevel: 'summary',
         now: () => fixedDate,
       });
 
-      const entry = logger.logResponse(createTestResponse(), 'worker');
+      const entry = await logger.logResponse(createTestResponse(), 'worker');
 
-      expect(entry?.type).toBe('response');
-      expect(entry?.timestamp).toBe('2026-01-24T12:30:00.000Z');
+      expect(entry).toBeDefined();
+      if (entry !== undefined) {
+        expect(entry.type).toBe('response');
+        expect(entry.timestamp).toBe('2026-01-24T12:30:00.000Z');
+      }
     });
 
-    it('logs token count with summary level', () => {
+    it('logs token count with summary level', async () => {
       const logger = createModelLogger({ logLevel: 'summary' });
-      const entry = logger.logResponse(createTestResponse(), 'worker');
+      const entry = await logger.logResponse(createTestResponse(), 'worker');
 
-      expect(entry?.tokenCount).toBe(15);
-      expect(entry?.promptTokens).toBe(10);
-      expect(entry?.completionTokens).toBe(5);
+      expect(entry).toBeDefined();
+      if (entry !== undefined) {
+        expect(entry.tokenCount).toBe(15);
+        expect(entry.promptTokens).toBe(10);
+        expect(entry.completionTokens).toBe(5);
+      }
     });
 
-    it('logs latency with summary level', () => {
+    it('logs latency with summary level', async () => {
       const logger = createModelLogger({ logLevel: 'summary' });
-      const entry = logger.logResponse(
+      const entry = await logger.logResponse(
         createTestResponse({ metadata: { modelId: 'test', provider: 'test', latencyMs: 500 } }),
         'worker'
       );
 
-      expect(entry?.latencyMs).toBe(500);
+      expect(entry).toBeDefined();
+      if (entry !== undefined) {
+        expect(entry.latencyMs).toBe(500);
+      }
     });
 
-    it('logs model metadata', () => {
+    it('logs model metadata', async () => {
       const logger = createModelLogger({ logLevel: 'summary' });
-      const entry = logger.logResponse(createTestResponse(), 'auditor');
-
-      expect(entry?.modelAlias).toBe('auditor');
-      expect(entry?.modelId).toBe('claude-3-opus');
-      expect(entry?.provider).toBe('claude-code');
-    });
-
-    it('logs requestId when provided', () => {
-      const logger = createModelLogger({ logLevel: 'summary' });
-      const entry = logger.logResponse(createTestResponse(), 'worker', 'req-456');
-
-      expect(entry?.requestId).toBe('req-456');
-    });
-
-    it('does not include content in summary level', () => {
-      const logger = createModelLogger({ logLevel: 'summary' });
-      const entry = logger.logResponse(createTestResponse(), 'worker');
+      const entry = await logger.logResponse(createTestResponse(), 'auditor');
 
       expect(entry).toBeDefined();
-      expect(entry?.content).toBeUndefined();
+      if (entry !== undefined) {
+        expect(entry.modelAlias).toBe('auditor');
+        expect(entry.modelId).toBe('claude-3-opus');
+        expect(entry.provider).toBe('claude-code');
+      }
     });
 
-    it('includes content in full level', () => {
+    it('logs requestId when provided', async () => {
+      const logger = createModelLogger({ logLevel: 'summary' });
+      const entry = await logger.logResponse(createTestResponse(), 'worker', 'req-456');
+
+      expect(entry).toBeDefined();
+      if (entry !== undefined) {
+        expect(entry.requestId).toBe('req-456');
+      }
+    });
+
+    it('does not include content in summary level', async () => {
+      const logger = createModelLogger({ logLevel: 'summary' });
+      const entry = await logger.logResponse(createTestResponse(), 'worker');
+
+      expect(entry).toBeDefined();
+      if (entry !== undefined) {
+        expect(entry.content).toBeUndefined();
+      }
+    });
+
+    it('includes content in full level', async () => {
       const logger = createModelLogger({ logLevel: 'full' });
       const content = 'The complete answer with all details...';
-      const entry = logger.logResponse(createTestResponse({ content }), 'worker');
+      const entry = await logger.logResponse(createTestResponse({ content }), 'worker');
 
       expect(entry).toBeDefined();
-      expect(entry?.content).toBe(content);
+      if (entry !== undefined) {
+        expect(entry.content).toBe(content);
+      }
     });
   });
 
   describe('logError', () => {
-    it('returns undefined when log level is none', () => {
+    it('returns undefined when log level is none', async () => {
       const logger = createModelLogger({ logLevel: 'none' });
       const error = createModelError('Test error', true);
-      const entry = logger.logError(error, 'worker');
+      const entry = await logger.logError(error, 'worker');
       expect(entry).toBeUndefined();
     });
 
-    it('logs error details', () => {
+    it('logs error details', async () => {
       const fixedDate = new Date('2026-01-24T13:00:00.000Z');
       const logger = createModelLogger({
         logLevel: 'summary',
@@ -340,28 +382,34 @@ describe('ModelLogger', () => {
       });
 
       const error = createRateLimitError('Rate limit exceeded', { retryAfterMs: 5000 });
-      const entry = logger.logError(error, 'architect', 'req-789');
+      const entry = await logger.logError(error, 'architect', 'req-789');
 
-      expect(entry?.type).toBe('error');
-      expect(entry?.timestamp).toBe('2026-01-24T13:00:00.000Z');
-      expect(entry?.modelAlias).toBe('architect');
-      expect(entry?.errorKind).toBe('RateLimitError');
-      expect(entry?.errorMessage).toBe('Rate limit exceeded');
-      expect(entry?.retryable).toBe(true);
-      expect(entry?.requestId).toBe('req-789');
+      expect(entry).toBeDefined();
+      if (entry !== undefined) {
+        expect(entry.type).toBe('error');
+        expect(entry.timestamp).toBe('2026-01-24T13:00:00.000Z');
+        expect(entry.modelAlias).toBe('architect');
+        expect(entry.errorKind).toBe('RateLimitError');
+        expect(entry.errorMessage).toBe('Rate limit exceeded');
+        expect(entry.retryable).toBe(true);
+        expect(entry.requestId).toBe('req-789');
+      }
     });
 
-    it('logs non-retryable errors correctly', () => {
+    it('logs non-retryable errors correctly', async () => {
       const logger = createModelLogger({ logLevel: 'summary' });
       const error = createModelError('Permanent error', false);
-      const entry = logger.logError(error, 'worker');
+      const entry = await logger.logError(error, 'worker');
 
-      expect(entry?.retryable).toBe(false);
+      expect(entry).toBeDefined();
+      if (entry !== undefined) {
+        expect(entry.retryable).toBe(false);
+      }
     });
   });
 
   describe('File logging', () => {
-    it('writes entries to log file', () => {
+    it('writes entries to log file', async () => {
       const logPath = path.join(tempDir, 'test.log');
       const logger = createModelLogger({
         logLevel: 'summary',
@@ -372,49 +420,54 @@ describe('ModelLogger', () => {
         modelAlias: 'worker',
         prompt: 'Test prompt',
       };
-      logger.logRequest(request);
+      await logger.logRequest(request);
 
+      // eslint-disable-next-line security/detect-non-literal-fs-filename -- test file: path constructed from temp directory
       expect(fs.existsSync(logPath)).toBe(true);
+      // eslint-disable-next-line security/detect-non-literal-fs-filename -- test file: path constructed from temp directory
       const content = fs.readFileSync(logPath, 'utf8');
       expect(content).toContain('"type":"request"');
     });
 
-    it('appends multiple entries to log file', () => {
+    it('appends multiple entries to log file', async () => {
       const logPath = path.join(tempDir, 'test.log');
       const logger = createModelLogger({
         logLevel: 'summary',
         logFilePath: logPath,
       });
 
-      logger.logRequest({ modelAlias: 'worker', prompt: 'Prompt 1' });
-      logger.logRequest({ modelAlias: 'architect', prompt: 'Prompt 2' });
+      await logger.logRequest({ modelAlias: 'worker', prompt: 'Prompt 1' });
+      await logger.logRequest({ modelAlias: 'architect', prompt: 'Prompt 2' });
 
+      // eslint-disable-next-line security/detect-non-literal-fs-filename -- test file: path constructed from temp directory
       const content = fs.readFileSync(logPath, 'utf8');
       const lines = content.trim().split('\n');
       expect(lines).toHaveLength(2);
     });
 
-    it('creates nested directories for log file', () => {
+    it('creates nested directories for log file', async () => {
       const logPath = path.join(tempDir, 'deep', 'nested', 'model.log');
       const logger = createModelLogger({
         logLevel: 'summary',
         logFilePath: logPath,
       });
 
-      logger.logRequest({ modelAlias: 'worker', prompt: 'Test' });
+      await logger.logRequest({ modelAlias: 'worker', prompt: 'Test' });
 
+      // eslint-disable-next-line security/detect-non-literal-fs-filename -- test file: path constructed from temp directory
       expect(fs.existsSync(logPath)).toBe(true);
     });
 
-    it('does not write when log level is none', () => {
+    it('does not write when log level is none', async () => {
       const logPath = path.join(tempDir, 'none.log');
       const logger = createModelLogger({
         logLevel: 'none',
         logFilePath: logPath,
       });
 
-      logger.logRequest({ modelAlias: 'worker', prompt: 'Test' });
+      await logger.logRequest({ modelAlias: 'worker', prompt: 'Test' });
 
+      // eslint-disable-next-line security/detect-non-literal-fs-filename -- test file: path constructed from temp directory
       expect(fs.existsSync(logPath)).toBe(false);
     });
   });
@@ -425,24 +478,31 @@ describe('ModelLogger', () => {
       expect(entries).toEqual([]);
     });
 
-    it('parses log entries from file', () => {
+    it('parses log entries from file', async () => {
       const logPath = path.join(tempDir, 'read.log');
       const logger = createModelLogger({
         logLevel: 'summary',
         logFilePath: logPath,
       });
 
-      logger.logRequest({ modelAlias: 'worker', prompt: 'Test 1' });
-      logger.logRequest({ modelAlias: 'architect', prompt: 'Test 2' });
+      await logger.logRequest({ modelAlias: 'worker', prompt: 'Test 1' });
+      await logger.logRequest({ modelAlias: 'architect', prompt: 'Test 2' });
 
       const entries = readLogFile(logPath);
       expect(entries).toHaveLength(2);
-      expect(entries[0]?.type).toBe('request');
-      expect(entries[1]?.type).toBe('request');
+      const entry0 = entries[0];
+      const entry1 = entries[1];
+      if (entry0 !== undefined) {
+        expect(entry0.type).toBe('request');
+      }
+      if (entry1 !== undefined) {
+        expect(entry1.type).toBe('request');
+      }
     });
 
     it('skips malformed lines', () => {
       const logPath = path.join(tempDir, 'malformed.log');
+      // eslint-disable-next-line security/detect-non-literal-fs-filename -- test file: path constructed from temp directory
       fs.writeFileSync(logPath, '{"type":"request"}\nnot json\n{"type":"response"}\n');
 
       const entries = readLogFile(logPath);
@@ -451,6 +511,7 @@ describe('ModelLogger', () => {
 
     it('handles empty lines', () => {
       const logPath = path.join(tempDir, 'empty-lines.log');
+      // eslint-disable-next-line security/detect-non-literal-fs-filename -- test file: path constructed from temp directory
       fs.writeFileSync(logPath, '{"type":"request"}\n\n\n{"type":"response"}\n');
 
       const entries = readLogFile(logPath);
@@ -464,7 +525,7 @@ describe('ModelLogger', () => {
       expect(stats).toEqual({ requests: 0, responses: 0, errors: 0, total: 0 });
     });
 
-    it('counts entry types correctly', () => {
+    it('counts entry types correctly', async () => {
       const logPath = path.join(tempDir, 'stats.log');
       const logger = createModelLogger({
         logLevel: 'summary',
@@ -472,11 +533,11 @@ describe('ModelLogger', () => {
       });
 
       // Log 2 requests
-      logger.logRequest({ modelAlias: 'worker', prompt: 'Test 1' });
-      logger.logRequest({ modelAlias: 'worker', prompt: 'Test 2' });
+      await logger.logRequest({ modelAlias: 'worker', prompt: 'Test 1' });
+      await logger.logRequest({ modelAlias: 'worker', prompt: 'Test 2' });
 
       // Log 1 response
-      logger.logResponse(
+      await logger.logResponse(
         {
           content: 'Answer',
           usage: { promptTokens: 5, completionTokens: 3, totalTokens: 8 },
@@ -486,7 +547,7 @@ describe('ModelLogger', () => {
       );
 
       // Log 1 error
-      logger.logError(createModelError('Error', true), 'worker');
+      await logger.logError(createModelError('Error', true), 'worker');
 
       const stats = getLogStats(logPath);
       expect(stats).toEqual({ requests: 2, responses: 1, errors: 1, total: 4 });
@@ -494,9 +555,9 @@ describe('ModelLogger', () => {
   });
 
   describe('clearEntries', () => {
-    it('clears in-memory entries', () => {
+    it('clears in-memory entries', async () => {
       const logger = createModelLogger({ logLevel: 'summary' });
-      logger.logRequest({ modelAlias: 'worker', prompt: 'Test' });
+      await logger.logRequest({ modelAlias: 'worker', prompt: 'Test' });
       expect(logger.getEntries()).toHaveLength(1);
 
       logger.clearEntries();
@@ -505,7 +566,7 @@ describe('ModelLogger', () => {
   });
 
   describe('Acceptance criteria: summary level logs timestamp and token count', () => {
-    it('logs timestamp and token count with summary level', () => {
+    it('logs timestamp and token count with summary level', async () => {
       const fixedDate = new Date('2026-01-24T14:00:00.000Z');
       const logger = createModelLogger({
         logLevel: 'summary',
@@ -513,13 +574,13 @@ describe('ModelLogger', () => {
       });
 
       // Log a request
-      const requestEntry = logger.logRequest({
+      const requestEntry = await logger.logRequest({
         modelAlias: 'worker',
         prompt: 'What is 2+2?',
       });
 
       // Log a response
-      const responseEntry = logger.logResponse(
+      const responseEntry = await logger.logResponse(
         {
           content: '4',
           usage: { promptTokens: 10, completionTokens: 1, totalTokens: 11 },
@@ -529,19 +590,25 @@ describe('ModelLogger', () => {
       );
 
       // Verify request entry
-      expect(requestEntry?.timestamp).toBe('2026-01-24T14:00:00.000Z');
-      expect(requestEntry?.promptHash).toBeDefined();
-      expect(requestEntry?.modelAlias).toBe('worker');
+      expect(requestEntry).toBeDefined();
+      if (requestEntry !== undefined) {
+        expect(requestEntry.timestamp).toBe('2026-01-24T14:00:00.000Z');
+        expect(requestEntry.promptHash).toBeDefined();
+        expect(requestEntry.modelAlias).toBe('worker');
+      }
 
       // Verify response entry
-      expect(responseEntry?.timestamp).toBe('2026-01-24T14:00:00.000Z');
-      expect(responseEntry?.tokenCount).toBe(11);
-      expect(responseEntry?.latencyMs).toBe(250);
+      expect(responseEntry).toBeDefined();
+      if (responseEntry !== undefined) {
+        expect(responseEntry.timestamp).toBe('2026-01-24T14:00:00.000Z');
+        expect(responseEntry.tokenCount).toBe(11);
+        expect(responseEntry.latencyMs).toBe(250);
+      }
     });
   });
 
   describe('Acceptance criteria: log level none produces no output', () => {
-    it('produces no log entries when level is none', () => {
+    it('produces no log entries when level is none', async () => {
       const logPath = path.join(tempDir, 'none-test.log');
       const logger = createModelLogger({
         logLevel: 'none',
@@ -549,13 +616,13 @@ describe('ModelLogger', () => {
       });
 
       // Try to log request
-      const requestEntry = logger.logRequest({
+      const requestEntry = await logger.logRequest({
         modelAlias: 'worker',
         prompt: 'Test prompt',
       });
 
       // Try to log response
-      const responseEntry = logger.logResponse(
+      const responseEntry = await logger.logResponse(
         {
           content: 'Response',
           usage: { promptTokens: 5, completionTokens: 3, totalTokens: 8 },
@@ -565,7 +632,7 @@ describe('ModelLogger', () => {
       );
 
       // Try to log error
-      const errorEntry = logger.logError(createModelError('Error', true), 'worker');
+      const errorEntry = await logger.logError(createModelError('Error', true), 'worker');
 
       // Verify no entries returned
       expect(requestEntry).toBeUndefined();
@@ -576,6 +643,7 @@ describe('ModelLogger', () => {
       expect(logger.getEntries()).toHaveLength(0);
 
       // Verify no file created
+      // eslint-disable-next-line security/detect-non-literal-fs-filename -- test file: path constructed from temp directory
       expect(fs.existsSync(logPath)).toBe(false);
     });
   });
@@ -593,36 +661,38 @@ describe('ModelLogger', () => {
     // Arbitrary for log level
     const logLevelArbitrary = fc.constantFrom<ModelLogLevel>('none', 'summary', 'full');
 
-    it('request entries always include timestamp, modelAlias, and promptHash', () => {
-      fc.assert(
-        fc.property(
+    it('request entries always include timestamp, modelAlias, and promptHash', async () => {
+      await fc.assert(
+        fc.asyncProperty(
           logLevelArbitrary.filter((l) => l !== 'none'),
           modelAliasArbitrary,
           fc.string({ minLength: 1 }),
-          (logLevel, modelAlias, prompt) => {
+          async (logLevel, modelAlias, prompt) => {
             const logger = createModelLogger({ logLevel });
-            const entry = logger.logRequest({ modelAlias, prompt });
+            const entry = await logger.logRequest({ modelAlias, prompt });
 
             expect(entry).toBeDefined();
-            expect(entry?.timestamp).toMatch(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}.\d{3}Z$/);
-            expect(entry?.modelAlias).toBe(modelAlias);
-            expect(entry?.promptHash).toMatch(/^[0-9a-f]{16}$/);
+            if (entry !== undefined) {
+              expect(entry.timestamp).toMatch(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}.\d{3}Z$/);
+              expect(entry.modelAlias).toBe(modelAlias);
+              expect(entry.promptHash).toMatch(/^[0-9a-f]{16}$/);
+            }
           }
         )
       );
     });
 
-    it('response entries always include timestamp, tokenCount, and latencyMs', () => {
-      fc.assert(
-        fc.property(
+    it('response entries always include timestamp, tokenCount, and latencyMs', async () => {
+      await fc.assert(
+        fc.asyncProperty(
           logLevelArbitrary.filter((l) => l !== 'none'),
           modelAliasArbitrary,
           fc.nat({ max: 100000 }),
           fc.nat({ max: 100000 }),
           fc.nat({ max: 60000 }),
-          (logLevel, modelAlias, promptTokens, completionTokens, latencyMs) => {
+          async (logLevel, modelAlias, promptTokens, completionTokens, latencyMs) => {
             const logger = createModelLogger({ logLevel });
-            const entry = logger.logResponse(
+            const entry = await logger.logResponse(
               {
                 content: 'Response',
                 usage: {
@@ -636,9 +706,11 @@ describe('ModelLogger', () => {
             );
 
             expect(entry).toBeDefined();
-            expect(entry?.timestamp).toMatch(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}.\d{3}Z$/);
-            expect(entry?.tokenCount).toBe(promptTokens + completionTokens);
-            expect(entry?.latencyMs).toBe(latencyMs);
+            if (entry !== undefined) {
+              expect(entry.timestamp).toMatch(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}.\d{3}Z$/);
+              expect(entry.tokenCount).toBe(promptTokens + completionTokens);
+              expect(entry.latencyMs).toBe(latencyMs);
+            }
           }
         )
       );

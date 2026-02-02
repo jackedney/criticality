@@ -354,8 +354,10 @@ export async function safeAppendFile(
   const validatedPath = validatePath(filePath);
 
   if (typeof options === 'string') {
+    // eslint-disable-next-line security/detect-non-literal-fs-filename -- path is validated by validatePath
     return fs.appendFile(validatedPath, data, options);
   }
+  // eslint-disable-next-line security/detect-non-literal-fs-filename -- path is validated by validatePath
   return fs.appendFile(validatedPath, data, options);
 }
 
