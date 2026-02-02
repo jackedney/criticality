@@ -694,18 +694,15 @@ export function formatAuditResult(result: CompositionAuditResult): string {
     );
     lines.push('');
 
-    for (let i = 0; i < result.contradictions.length; i++) {
-      const contradiction = result.contradictions[i];
-      if (contradiction === undefined) {
-        continue;
-      }
-
+    let index = 1;
+    for (const contradiction of result.contradictions) {
       lines.push(
-        `────────────────── Contradiction ${String(i + 1)} of ${String(result.contradictions.length)} ──────────────────`
+        `────────────────── Contradiction ${String(index)} of ${String(result.contradictions.length)} ──────────────────`
       );
       lines.push('');
       lines.push(formatContradiction(contradiction));
       lines.push('');
+      index++;
     }
 
     if (result.hasCriticalContradictions) {

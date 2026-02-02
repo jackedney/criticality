@@ -58,10 +58,15 @@ describe('Composition Audit Types', () => {
     });
 
     it('descriptions are meaningful', () => {
+      // eslint-disable-next-line security/detect-object-injection -- type lookup from controlled constant
       expect(CONTRADICTION_TYPE_DESCRIPTIONS.temporal).toContain('time');
+      // eslint-disable-next-line security/detect-object-injection -- type lookup from controlled constant
       expect(CONTRADICTION_TYPE_DESCRIPTIONS.resource).toContain('conflict');
-      expect(CONTRADICTION_TYPE_DESCRIPTIONS.invariant.toLowerCase()).toContain('state');
+      // eslint-disable-next-line security/detect-object-injection -- type lookup from controlled constant
+      expect(CONTRADICTION_TYPE_DESCRIPTIONS.invariant).toContain('state');
+      // eslint-disable-next-line security/detect-object-injection -- type lookup from controlled constant
       expect(CONTRADICTION_TYPE_DESCRIPTIONS.precondition_gap).toContain('prerequisites');
+      // eslint-disable-next-line security/detect-object-injection -- type lookup from controlled constant
       expect(CONTRADICTION_TYPE_DESCRIPTIONS.postcondition_conflict).toContain('conflict');
     });
   });

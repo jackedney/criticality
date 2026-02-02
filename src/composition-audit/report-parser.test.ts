@@ -27,6 +27,7 @@ function createMockRouter(responses: string[]): {
 } {
   let callIndex = 0;
   const promptMock = vi.fn().mockImplementation((): Promise<ModelRouterResult> => {
+    // eslint-disable-next-line security/detect-object-injection -- test code with controlled mock array
     const content = responses[callIndex] ?? '';
     callIndex++;
     const response: ModelRouterResponse = {

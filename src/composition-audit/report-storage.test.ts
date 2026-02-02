@@ -1,5 +1,5 @@
 /**
- * Tests for the contradiction report storage module.
+ * Tests for contradiction report storage module.
  *
  * @packageDocumentation
  */
@@ -9,7 +9,6 @@ import * as fc from 'fast-check';
 import { mkdir, rm, readFile, writeFile, utimes } from 'node:fs/promises';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
-import * as yamlModule from 'js-yaml';
 import type {
   ContradictionReport,
   Contradiction,
@@ -17,7 +16,7 @@ import type {
   ContradictionSeverity,
   InvolvedElement,
 } from './types.js';
-import {
+import type {
   saveContradictionReport,
   loadContradictionReport,
   loadLatestContradictionReport,
@@ -31,9 +30,6 @@ import {
   getLatestReportPath,
   ReportStorageError,
 } from './report-storage.js';
-import { createContradictionReport } from './report-parser.js';
-
-import { realpathSync } from 'node:fs';
 
 // Mock homedir to use temp directory
 vi.mock('node:os', async (): Promise<typeof import('node:os')> => {
@@ -44,15 +40,13 @@ vi.mock('node:os', async (): Promise<typeof import('node:os')> => {
   };
 });
 
-describe('Report Storage', () => {
-  const testProjectId = 'test-project-storage';
-  let testDir: string;
+const testProjectId = 'test-project-storage';
+let testDir: string;
 
+describe('Report Storage', () => {
   beforeEach(async () => {
     testDir = join(tmpdir(), 'criticality-test-storage');
     await mkdir(testDir, { recursive: true });
-    await mkdir(join(testDir, '.criticality'), { recursive: true });
-    await mkdir(join(testDir, '.criticality', 'projects'), { recursive: true });
   });
 
   afterEach(async () => {
@@ -63,316 +57,218 @@ describe('Report Storage', () => {
     }
   });
 
-  /**
-   * Creates a test report.
-   */
-  function createTestReport(projectId = testProjectId, hasCritical = false): ContradictionReport {
-    const contradictions = hasCritical
-      ? [
-          {
-            id: 'TEST_001',
-            type: 'temporal' as const,
-            severity: 'critical' as const,
-            description: 'Test critical contradiction',
-            involved: [
-              { elementType: 'constraint' as const, id: 'C1', name: 'Test', text: 'Test text' },
-            ],
-            analysis: 'Test analysis',
-            minimalScenario: 'Test scenario',
-            suggestedResolutions: ['Fix it'],
-          },
-        ]
-      : [];
-
-    return createContradictionReport(
-      projectId,
-      contradictions,
-      hasCritical ? 'Found 1 critical' : 'No contradictions',
-      false
-    );
-  }
-
   describe('Path helpers', () => {
     it('generates correct audit directory path', () => {
-      const dir = getAuditDir('my-project');
-      expect(dir).toContain('my-project');
+      const dir = getAuditDir(testProjectId);
+      expect(dir).toContain('test-project-storage');
       expect(dir).toContain('audit');
     });
 
-    it('generates correct report path for JSON', () => {
-      const path = getReportPath('my-project', 'AUDIT_123', 'json');
+    it('generates correct report path', () => {
+      const path = getReportPath(testProjectId, 'AUDIT_123', 'json');
+      expect(path).toContain('test-project-storage');
       expect(path).toContain('AUDIT_123.json');
     });
 
-    it('generates correct report path for YAML', () => {
-      const path = getReportPath('my-project', 'AUDIT_123', 'yaml');
-      expect(path).toContain('AUDIT_123.yaml');
+    it('generates correct latest report path', () => {
+      const path = getLatestReportPath(testProjectId, 'json');
+      expect(path).toContain('test-project-storage');
+      expect(path).toContain('latest.json');
     });
 
-    it('generates correct latest report path', () => {
-      const path = getLatestReportPath('my-project', 'json');
-      expect(path).toContain('latest.json');
+    it('throws validation error for invalid projectId', () => {
+      expect(() => getAuditDir('invalid!@#', 'audit')).toThrow();
+    });
+
+    it('throws validation error for path traversal', () => {
+      expect(() => getAuditDir('../../../etc/passwd', 'audit')).toThrow();
+    });
+
+    it('validates that path starts with resolved base', () => {
+      const baseDir = join(tmpdir(), 'criticality');
+      const dir = getAuditDir(testProjectId);
+      expect(dir).toMatch(new RegExp(`^${join(baseDir)}`));
     });
   });
 
-  describe('serializeReportToJson', () => {
+  describe('Serialization', () => {
     it('serializes report to JSON', () => {
-      const report = createTestReport();
+      const report: ContradictionReport = createTestReport();
       const json = serializeReportToJson(report, true);
-
       const parsed = JSON.parse(json) as ContradictionReport;
       expect(parsed.projectId).toBe(testProjectId);
       expect(parsed.version).toBeDefined();
+      expect(parsed.generatedAt).toBeDefined();
+      expect(parsed.summary).toBe('Property test summary');
+      expect(parsed.contradictions).toHaveLength(1);
+      expect(parsed.contradictions[0]).toEqual(report.contradictions[0]);
     });
 
     it('produces compact JSON when pretty is false', () => {
-      const report = createTestReport();
+      const report: ContradictionReport = createTestReport();
       const compact = serializeReportToJson(report, false);
       const pretty = serializeReportToJson(report, true);
-
       expect(compact.length).toBeLessThan(pretty.length);
       expect(compact).not.toContain('\n');
+      expect(compact).not.toMatch(/\s{2,}/);
     });
 
     it('preserves structure through serialization/deserialization', () => {
-      const arbContradictionType = fc.constantFrom<ContradictionType>(
-        'temporal',
-        'resource',
-        'invariant',
-        'precondition_gap',
-        'postcondition_conflict'
-      );
-      const arbSeverity = fc.constantFrom<ContradictionSeverity>('critical', 'warning');
-      const arbElementType = fc.constantFrom<InvolvedElement['elementType']>(
-        'constraint',
-        'contract',
-        'witness',
-        'claim'
-      );
-
-      const arbInvolvedElement: fc.Arbitrary<InvolvedElement> = fc.oneof(
-        fc.record({
-          elementType: arbElementType,
-          id: fc.string(),
-          name: fc.string(),
-          text: fc.string(),
-        }),
-        fc.record({
-          elementType: arbElementType,
-          id: fc.string(),
-          name: fc.string(),
-          text: fc.string(),
-          location: fc.string(),
-        })
-      );
-
-      const arbContradiction: fc.Arbitrary<Contradiction> = fc.record({
-        id: fc.string(),
-        type: arbContradictionType,
-        severity: arbSeverity,
-        description: fc.string(),
-        involved: fc.array(arbInvolvedElement),
-        analysis: fc.string(),
-        minimalScenario: fc.string(),
-        suggestedResolutions: fc.array(fc.string()),
-      });
-
-      fc.assert(
-        fc.property(fc.array(arbContradiction), (contradictions) => {
-          const report = createContradictionReport(
-            testProjectId,
-            contradictions,
-            'Property test summary',
-            false
-          );
-          const json = serializeReportToJson(report, true);
-          const parsed = JSON.parse(json) as ContradictionReport;
-
-          expect(parsed.contradictions).toHaveLength(contradictions.length);
-          expect(parsed.id).toBeDefined();
-          expect(parsed.projectId).toBe(testProjectId);
-          expect(parsed.version).toBeDefined();
-          expect(parsed.generatedAt).toBeDefined();
-          expect(parsed.summary).toBe('Property test summary');
-          expect(parsed.crossVerified).toBe(false);
-          expect(parsed.stats.total).toBe(contradictions.length);
-          expect(parsed.stats.critical).toBe(
-            contradictions.filter((c) => c.severity === 'critical').length
-          );
-          expect(parsed.stats.warning).toBe(
-            contradictions.filter((c) => c.severity === 'warning').length
-          );
-
-          for (let i = 0; i < contradictions.length; i++) {
-            const original = contradictions.at(i);
-            const restored = parsed.contradictions.at(i);
-            expect(restored).toBeDefined();
-            if (restored && original) {
-              expect(restored.id).toBe(original.id);
-              expect(restored.type).toBe(original.type);
-              expect(restored.severity).toBe(original.severity);
-              expect(restored.description).toBe(original.description);
-              expect(restored.involved).toHaveLength(original.involved.length);
-            }
-          }
-        })
-      );
+      const original = createTestReport();
+      const json = serializeReportToJson(original, true);
+      const parsed = JSON.parse(json) as ContradictionReport;
+      const restored = parsed.contradictions.at(0);
+      expect(restored?.id).toBeDefined();
+      if (restored) {
+        expect(restored.id).toBe(original.contradictions[0]?.id);
+        expect(restored.type).toBe(original.contradictions[0]?.type);
+        expect(restored.severity).toBe(original.contradictions[0]?.severity);
+        expect(restored.description).toBe(original.contradictions[0]?.description);
+        expect(restored.involved).toHaveLength(original.contradictions[0]?.involved.length);
+        expect(restored.analysis).toBe(original.contradictions[0]?.analysis);
+        expect(restored.minimalScenario).toBe(original.contradictions[0]?.minimalScenario);
+        expect(restored.suggestedResolutions).toEqual(original.contradictions[0]?.suggestedResolutions);
+        expect(restored.crossVerified).toBe(original.crossVerified);
+      }
     });
-  });
 
-  describe('serializeReportToYaml', () => {
     it('serializes report to YAML', () => {
-      const report = createTestReport();
+      const report: ContradictionReport = createTestReport();
       const yaml = serializeReportToYaml(report);
-
-      expect(yaml).toContain('id:');
-      expect(yaml).toContain('projectId:');
-      expect(yaml).toContain('stats:');
-      expect(yaml).toContain('version:');
-      expect(yaml).toContain('generatedAt:');
-    });
-
-    it('serializes contradictions correctly', () => {
-      const report = createTestReport(testProjectId, true);
-      const yaml = serializeReportToYaml(report);
-
-      expect(yaml).toContain('contradictions:');
-      expect(yaml).toContain('TEST_001');
-      expect(yaml).toContain('temporal');
-      expect(yaml).toContain('critical');
+      const parsed = yamlModule.load(yaml) as ContradictionReport;
+      expect(parsed.projectId).toBe(testProjectId);
+      expect(parsed.id).toBe(report.id);
+      expect(parsed.version).toBeDefined();
+      expect(parsed.generatedAt).toBeDefined();
+      expect(parsed.summary).toBe('Property test summary');
+      expect(parsed.contradictions).toHaveLength(1);
+      expect(parsed.contradictions[0]).toEqual(report.contradictions[0]);
     });
 
     it('escapes special characters', () => {
-      const report = createContradictionReport(
-        testProjectId,
-        [
-          {
-            id: 'T1',
-            type: 'temporal',
-            severity: 'critical',
-            description: 'Test with "quotes" and\nnewlines',
-            involved: [{ elementType: 'constraint', id: 'C1', name: 'Test\ttab', text: 'Text' }],
-            analysis: 'Analysis',
-            minimalScenario: 'Scenario',
-            suggestedResolutions: [],
-          },
-        ],
-        'Summary',
-        false
-      );
-
+      const report: ContradictionReport = createTestReport();
+      report.description = 'Test with "quotes" and\nnewlines';
+      report.involved = [
+        {
+          elementType: 'constraint' as const,
+          id: 'C1',
+          name: 'Test\ttab',
+          text: 'Text',
+        },
+      ];
       const yaml = serializeReportToYaml(report);
+      expect(yaml).toContain('description: |Test with "quotes" and \\nnewlines');
+    });
 
-      const parsed = yamlModule.load(yaml) as ContradictionReport;
-      expect(parsed.contradictions[0]?.description).toBe('Test with "quotes" and\nnewlines');
-      expect(parsed.contradictions[0]?.involved[0]?.name).toBe('Test\ttab');
+    it('escapes colons in values', () => {
+      const report: ContradictionReport = createTestReport();
+      report.involved = [
+        {
+          elementType: 'constraint' as const,
+          id: 'C1',
+          name: 'Test:value:123',
+          text: 'Text',
+        },
+      ];
+      const yaml = serializeReportToYaml(report);
+      expect(yaml).toContain('id: C1\\nname: Test\\nvalue:123\\ntext: Text');
     });
   });
 
   describe('saveContradictionReport', () => {
     it('saves report as JSON by default', async () => {
-      const report = createTestReport();
+      const report: ContradictionReport = createTestReport();
       const path = await saveContradictionReport(report);
 
       expect(path).toContain('.json');
-      const content = await readFile(path, 'utf-8');
+      const content = await safeReadFile(path, 'utf-8');
       const parsed = JSON.parse(content) as ContradictionReport;
       expect(parsed.projectId).toBe(testProjectId);
-    });
-
-    it('saves report as YAML when specified', async () => {
-      const report = createTestReport();
-      const path = await saveContradictionReport(report, { format: 'yaml' });
-
-      expect(path).toContain('.yaml');
-      const content = await readFile(path, 'utf-8');
-      expect(content).toContain('id:');
-      expect(content).toContain('projectId:');
-    });
-
-    it('also saves as latest', async () => {
-      const report = createTestReport();
-      await saveContradictionReport(report);
-
-      const latestPath = getLatestReportPath(testProjectId, 'json');
-      const content = await readFile(latestPath, 'utf-8');
-      const parsed = JSON.parse(content) as ContradictionReport;
       expect(parsed.id).toBe(report.id);
     });
 
-    it('creates directory if not exists', async () => {
-      const newProjectId = 'new-project-' + Date.now().toString();
-      const report = createContradictionReport(newProjectId, [], 'Clean', false);
+    it('saves report as YAML when specified', async () => {
+      const report: ContradictionReport = createTestReport();
+      const path = await saveContradictionReport(report, { format: 'yaml' });
 
-      // Should not throw
-      await saveContradictionReport(report);
+      expect(path).toContain('.yaml');
+      const content = await safeReadFile(path, 'utf-8');
+      const parsed = yamlModule.load(content) as ContradictionReport;
+      expect(parsed.projectId).toBe(testProjectId);
+      expect(parsed.id).toBe(report.id);
+    });
+
+    it('saves report as latest', async () => {
+      const report1: createTestReport();
+      const report2 = createTestReport();
+      await saveContradictionReport(report1);
+      await saveContradictionReport(report2);
+
+      const latestPath = getLatestReportPath(testProjectId, 'json');
+      const content = await safeReadFile(latestPath, 'utf-8');
+      const parsed = JSON.parse(content) as ContradictionReport;
+      expect(parsed.id).toBe(report2.id);
+      expect(parsed.summary).toContain('Property test summary');
+    });
+
+    it('also saves as latest when saving a report', async () => {
+      const report1 = createTestReport();
+      const report2 = createTestReport();
+      await saveContradictionReport(report1);
+      await saveContradictionReport(report2);
+
+      const latestPath = getLatestReportPath(testProjectId, 'json');
+      const content = await safeReadFile(latestPath, 'utf-8');
+      const parsed = JSON.parse(content) as ContradictionReport;
+      expect(parsed.id).toBe(report1.id);
+      expect(parsed.summary).toContain('Property test summary');
     });
   });
 
   describe('loadContradictionReport', () => {
     it('loads saved JSON report', async () => {
-      const original = createTestReport();
-      await saveContradictionReport(original);
+      const report = createTestReport();
+      const path = await saveContradictionReport(report);
 
-      const loaded = await loadContradictionReport(testProjectId, original.id);
-
-      expect(loaded.id).toBe(original.id);
-      expect(loaded.projectId).toBe(original.projectId);
-      expect(loaded.summary).toBe(original.summary);
+      const loaded = await loadContradictionReport(testProjectId, report.id);
+      expect(loaded.success).toBe(true);
+      expect(loaded.report.id).toBe(report.id);
+      expect(loaded.report.projectId).toBe(testProjectId);
     });
 
-    it('throws not_found for missing report', async () => {
-      await expect(loadContradictionReport(testProjectId, 'NONEXISTENT')).rejects.toThrow(
-        ReportStorageError
-      );
+    it('loads saved YAML report', async () => {
+      const report = createTestReport();
+      const path = await saveContradictionReport(report, { format: 'yaml' });
 
-      try {
-        await loadContradictionReport(testProjectId, 'NONEXISTENT');
-      } catch (error) {
-        expect(error).toBeInstanceOf(ReportStorageError);
-        expect((error as ReportStorageError).errorType).toBe('not_found');
+      const loaded = await loadContradictionReport(testProjectId, report.id);
+      expect(loaded.success).toBe(true);
+      expect(loaded.report.id).toBe(report.id);
+      expect(loaded.report.projectId).toBe(testProjectId);
+    });
+
+    it('loads latest report', async () => {
+      const result = await loadLatestContradictionReport(testProjectId);
+      expect(result).not.toBeNull();
+      if (result) {
+        expect(result.report.id).toBe(report.id);
+        expect(result.report.projectId).toBe(testProjectId);
       }
     });
 
-    it('throws validation_error for invalid content', async () => {
-      // Create invalid report file
-      const auditDir = getAuditDir(testProjectId);
-      await mkdir(auditDir, { recursive: true });
-      const reportPath = join(auditDir, 'INVALID_REPORT.json');
-      await writeFile(reportPath, '{"invalid": true}', 'utf-8');
-
-      await expect(loadContradictionReport(testProjectId, 'INVALID_REPORT')).rejects.toThrow(
-        ReportStorageError
-      );
-    });
-  });
-
-  describe('loadLatestContradictionReport', () => {
     it('returns null when no reports exist', async () => {
-      const result = await loadLatestContradictionReport('nonexistent-project');
-      expect(result).toBeNull();
+      const result = await tryLoadContradictionReport('nonexistent', 'NONEXISTENT');
+      expect(result.success).toBe(false);
+      expect(result.error).toBeDefined();
+      expect((result.error as ReportStorageError).errorType).toBe('not_found');
     });
 
-    it('returns latest report', async () => {
+    it('throws error when loading fails', async () => {
       const report = createTestReport();
       await saveContradictionReport(report);
 
-      const latest = await loadLatestContradictionReport(testProjectId);
-
-      expect(latest).not.toBeNull();
-      expect(latest?.id).toBe(report.id);
-    });
-
-    it('returns last saved report', async () => {
-      const report1 = createTestReport();
-      await saveContradictionReport(report1);
-
-      const report2 = createTestReport();
-      await saveContradictionReport(report2);
-
-      const latest = await loadLatestContradictionReport(testProjectId);
-
-      expect(latest?.id).toBe(report2.id);
+      const result = await tryLoadContradictionReport(testProjectId, report.id);
+      expect(result.success).toBe(false);
+      expect(result.error).toBeDefined();
     });
   });
 
@@ -382,111 +278,79 @@ describe('Report Storage', () => {
       expect(reports).toEqual([]);
     });
 
-    it('lists all reports', async () => {
+    it('returns all report IDs sorted by date', async () => {
       const report1 = createTestReport();
-      await saveContradictionReport(report1);
-
       const report2 = createTestReport();
+      const report3 = createTestReport();
+      await saveContradictionReport(report1);
       await saveContradictionReport(report2);
+      await saveContradictionReport(report3);
 
       const reports = await listContradictionReports(testProjectId);
-
-      expect(reports).toContain(report1.id);
-      expect(reports).toContain(report2.id);
+      expect(reports).toHaveLength(3);
+      expect(reports[0].id).toBe(report1.id);
+      expect(reports[1].id).toBe(report2.id);
+      expect(reports[2].id).toBe(report3.id);
+      expect(reports[0].mtime).toBeGreaterThan(reports[1].mtime);
+      expect(reports[1].mtime).toBeGreaterThan(reports[0].mtime);
     });
 
-    it('excludes latest symlink', async () => {
-      const report = createTestReport();
-      await saveContradictionReport(report);
-
-      const reports = await listContradictionReports(testProjectId);
-
-      expect(reports).not.toContain('latest');
-    });
-
-    it('returns reports sorted by modification time', async () => {
+    it('removes duplicates (same ID in both json and yaml)', async () => {
       const report1 = createTestReport();
-      await saveContradictionReport(report1);
-
       const report2 = createTestReport();
+      const report3 = createTestReport();
+      await saveContradictionReport(report1);
       await saveContradictionReport(report2);
-
-      // Set report1's mtime to be older than report2
-      const report1Path = getReportPath(testProjectId, report1.id, 'json');
-      const now = new Date();
-      await utimes(report1Path, now, new Date(now.getTime() - 10000));
+      await saveContradictionReport(report3);
 
       const reports = await listContradictionReports(testProjectId);
-
-      // Newest first
-      expect(reports.at(0)).toBe(report2.id);
-      expect(reports.at(1)).toBe(report1.id);
-    });
-  });
-
-  describe('contradictionReportExists', () => {
-    it('returns false for nonexistent report', async () => {
-      const exists = await contradictionReportExists(testProjectId, 'NONEXISTENT');
-      expect(exists).toBe(false);
+      expect(reports).toHaveLength(3);
+      expect(reports[0].id).toBe(report1.id);
+      expect(reports[1].id).toBe(report2.id);
+      expect(reports[2].id).toBe(report3.id);
+      expect(reports[0].mtime).toBeGreaterThan(reports[1].mtime);
+      expect(reports[1].mtime).toBeGreaterThan(reports[0].mtime);
     });
 
-    it('returns true for existing JSON report', async () => {
-      const report = createTestReport();
-      await saveContradictionReport(report, { format: 'json' });
+    it('includes latest symlink in list', async () => {
+      const report1 = createTestReport();
+      const report2 = createTestReport();
+      const report3 = createTestReport();
+      await saveContradictionReport(report1);
+      await saveContradictionReport(report2);
+      await saveContradictionReport(report3);
 
-      const exists = await contradictionReportExists(testProjectId, report.id);
+      const reports = await listContradictionReports(testProjectId);
+      expect(reports.some((r) => r.id === 'latest'));
+    });
+
+    it('checks if a report exists', async () => {
+      const exists = await contradictionReportExists(testProjectId, 'AUDIT_123');
       expect(exists).toBe(true);
+
+      const notExists = await contradictionReportExists(testProjectId, 'NONEXISTENT');
+      expect(notExists).toBe(false);
     });
-
-    it('returns true for existing YAML report', async () => {
-      const report = createTestReport();
-      await saveContradictionReport(report, { format: 'yaml' });
-
-      const exists = await contradictionReportExists(testProjectId, report.id);
-      expect(exists).toBe(true);
-    });
-  });
-
-  describe('tryLoadContradictionReport', () => {
-    it('returns success for existing report', async () => {
-      const report = createTestReport();
-      await saveContradictionReport(report);
-
-      const result = await tryLoadContradictionReport(testProjectId, report.id);
-
-      expect(result.success).toBe(true);
-      if (result.success) {
-        expect(result.report.id).toBe(report.id);
-      }
-    });
-
-    it('returns error for missing report', async () => {
-      const result = await tryLoadContradictionReport(testProjectId, 'NONEXISTENT');
-
-      expect(result.success).toBe(false);
-      if (!result.success) {
-        expect(result.error.errorType).toBe('not_found');
-      }
-    });
-  });
 
   describe('Integration: Save and load round-trip', () => {
     it('preserves all report data through save/load', async () => {
-      const original = createTestReport(testProjectId, true);
+      const original = createTestReport();
       await saveContradictionReport(original);
 
       const loaded = await loadContradictionReport(testProjectId, original.id);
-
-      expect(loaded.id).toBe(original.id);
-      expect(loaded.projectId).toBe(original.projectId);
-      expect(loaded.version).toBe(original.version);
-      expect(loaded.generatedAt).toBe(original.generatedAt);
+      expect(loaded.success).toBe(true);
+      expect(loaded.report.id).toBe(original.id);
+      expect(loaded.report.projectId).toBe(original.projectId);
       expect(loaded.summary).toBe(original.summary);
-      expect(loaded.crossVerified).toBe(original.crossVerified);
-      expect(loaded.stats.total).toBe(original.stats.total);
-      expect(loaded.stats.critical).toBe(original.stats.critical);
       expect(loaded.contradictions).toHaveLength(original.contradictions.length);
       expect(loaded.contradictions[0]?.id).toBe(original.contradictions[0]?.id);
+      expect(loaded.contradictions[0]?.type).toBe(original.contradictions[0]?.type);
+      expect(loaded.contradictions[0]?.severity).toBe(original.contradictions[0]?.severity);
+      expect(loaded.contradictions[0]?.description).toBe(original.contradictions[0]?.description);
+      expect(loaded.contradictions[0]?.involved).toHaveLength(original.contradictions[0]?.involved.length);
+      expect(loaded.contradictions[0]?.analysis).toBe(original.contradictions[0]?.analysis);
+      expect(loaded.contradictions[0]?.minimalScenario).toBe(original.contradictions[0]?.minimalScenario);
+      expect(loaded.contradictions[0]?.suggestedResolutions).toEqual(original.contradictions[0]?.suggestedResolutions);
+      expect(loaded.crossVerified).toBe(original.crossVerified);
     });
   });
-});

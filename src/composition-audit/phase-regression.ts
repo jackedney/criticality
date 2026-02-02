@@ -256,18 +256,14 @@ function buildSuggestedResolutions(
 ): SuggestedResolution[] {
   const resolutions: SuggestedResolution[] = [];
 
-  for (let i = 0; i < contradiction.suggestedResolutions.length; i++) {
-    const resolutionText = contradiction.suggestedResolutions[i];
-    if (resolutionText === undefined) {
-      continue;
-    }
-
+  let index = 1;
+  for (const resolutionText of contradiction.suggestedResolutions) {
     const affectedIds = contradiction.involved
       .filter((e) => e.elementType === 'constraint')
       .map((e) => e.id);
 
     const resolution: SuggestedResolution = {
-      id: `resolution_${contradiction.id}_${String(i + 1)}`,
+      id: `resolution_${contradiction.id}_${String(index)}`,
       description: resolutionText,
       affectedPhase: targetPhase,
       requiresSpecChange: true,
@@ -278,6 +274,7 @@ function buildSuggestedResolutions(
     } else {
       resolutions.push(resolution);
     }
+    index++;
   }
 
   return resolutions;
@@ -669,18 +666,15 @@ function buildComplexContradictionQuery(
   lines.push('Human guidance is required to determine the resolution strategy.');
   lines.push('');
 
-  for (let i = 0; i < contradictions.length; i++) {
-    const contradiction = contradictions[i];
-    if (contradiction === undefined) {
-      continue;
-    }
-
-    lines.push(`Contradiction ${String(i + 1)}: [${contradiction.type.toUpperCase()}]`);
+  let index = 1;
+  for (const contradiction of contradictions) {
+    lines.push(`Contradiction ${String(index)}: [${contradiction.type.toUpperCase()}]`);
     lines.push(`  ${contradiction.description}`);
     lines.push(
       `  Involved: ${contradiction.involved.map((e) => `${e.elementType}:${e.name}`).join(', ')}`
     );
     lines.push('');
+    index++;
   }
 
   lines.push(`Affected phases: ${analysis.affectedPhases.join(', ')}`);
@@ -790,13 +784,11 @@ export function formatContradictionForUser(
   // Suggested resolutions
   if (resolutions.length > 0) {
     lines.push('Suggested resolutions:');
-    for (let i = 0; i < resolutions.length; i++) {
-      const resolution = resolutions[i];
-      if (resolution === undefined) {
-        continue;
-      }
-      lines.push(`  ${String(i + 1)}. ${resolution.description}`);
+    let index = 1;
+    for (const resolution of resolutions) {
+      lines.push(`  ${String(index)}. ${resolution.description}`);
       lines.push(`     (affects: ${resolution.affectedPhase} phase)`);
+      index++;
     }
   }
 

@@ -1,13 +1,21 @@
 /**
  * Contradiction report storage module.
  *
- * Provides persistence for contradiction reports to the project directory,
+ * Provides persistence for contradiction reports to project directory,
  * supporting both JSON and YAML formats.
  *
  * @packageDocumentation
  */
 
-import { writeFile, readFile, mkdir, readdir, stat, rename, unlink } from 'node:fs/promises';
+import {
+  safeWriteFile,
+  safeReadFile,
+  safeMkdir,
+  safeReaddir,
+  safeStat,
+  safeRename,
+  safeUnlink,
+} from '../utils/safe-fs.js';
 import { join, dirname, resolve } from 'node:path';
 import { homedir } from 'node:os';
 import { randomUUID } from 'node:crypto';
@@ -30,9 +38,9 @@ export type ReportStorageErrorType =
 export class ReportStorageError extends Error {
   /** The type of storage error. */
   public readonly errorType: ReportStorageErrorType;
-  /** Additional details about the error. */
+  /** Additional details about error. */
   public readonly details: string | undefined;
-  /** The underlying cause of the error if available. */
+  /** The underlying cause of error if available. */
   public readonly cause: Error | undefined;
 
   /**
@@ -146,7 +154,7 @@ export function getLatestReportPath(projectId: string, format: 'json' | 'yaml' =
  */
 export async function ensureAuditDir(projectId: string): Promise<void> {
   const dir = getAuditDir(projectId);
-  await mkdir(dir, { recursive: true });
+  await safeMkdir(dir, { recursive: true });
 }
 
 /**
@@ -188,7 +196,7 @@ export function serializeReportToYaml(report: ContradictionReport): string {
  *
  * @param report - The report to save.
  * @param options - Storage options.
- * @returns The path where the report was saved.
+ * @returns The path where report was saved.
  * @throws ReportStorageError if the file cannot be written.
  */
 export async function saveContradictionReport(
@@ -216,25 +224,25 @@ export async function saveContradictionReport(
 
   try {
     // Write to temporary file first
-    await writeFile(tempPath, content, 'utf-8');
+    await safeWriteFile(tempPath, content, 'utf-8');
 
     // Atomic rename to target path
-    await rename(tempPath, filePath);
+    await safeRename(tempPath, filePath);
 
-    // Also save as latest (copy the content)
-    await writeFile(latestTempPath, content, 'utf-8');
-    await rename(latestTempPath, latestPath);
+    // Also save as latest (copy of content)
+    await safeWriteFile(latestTempPath, content, 'utf-8');
+    await safeRename(latestTempPath, latestPath);
 
     return filePath;
   } catch (error) {
     // Clean up temp files if they exist
     try {
-      await unlink(tempPath);
+      await safeUnlink(tempPath);
     } catch {
       // Ignore cleanup errors
     }
     try {
-      await unlink(latestTempPath);
+      await safeUnlink(latestTempPath);
     } catch {
       // Ignore cleanup errors
     }
@@ -246,6 +254,19 @@ export async function saveContradictionReport(
       { cause: fileError, details: 'Check that the directory exists and is writable' }
     );
   }
+}
+
+/**
+ * Type guard to check if an error has a specific error code.
+ *
+ * @param error - The error to check.
+ * @param code - The error code to look for.
+ * @returns True if error has the specified code.
+ */
+function hasErrorCode(error: unknown, code: string): error is Error & { code: string } {
+  return (
+    error instanceof Error && 'code' in error && (error as Error & { code?: string }).code === code
+  );
 }
 
 /**
@@ -268,7 +289,7 @@ export async function loadContradictionReport(
   let filePath: string;
 
   try {
-    content = await readFile(jsonPath, 'utf-8');
+    content = (await safeReadFile(jsonPath, 'utf-8')) as string;
     filePath = jsonPath;
   } catch (error) {
     const fileError = error instanceof Error ? error : new Error(String(error));
@@ -280,11 +301,11 @@ export async function loadContradictionReport(
       );
     }
     try {
-      content = await readFile(yamlPath, 'utf-8');
+      content = (await safeReadFile(yamlPath, 'utf-8')) as string;
       filePath = yamlPath;
     } catch (yamlError) {
       const yamlFileError = yamlError instanceof Error ? yamlError : new Error(String(yamlError));
-      if (hasErrorCode(yamlError, 'ENOENT')) {
+      if (!hasErrorCode(yamlError, 'ENOENT')) {
         throw new ReportStorageError(
           `Contradiction report "${reportId}" not found for project "${projectId}"`,
           'not_found',
@@ -299,7 +320,7 @@ export async function loadContradictionReport(
     }
   }
 
-  return parseReportContent(content, filePath);
+  return parseReportContent(content as string, filePath);
 }
 
 /**
@@ -318,7 +339,7 @@ export async function loadLatestContradictionReport(
   let filePath: string;
 
   try {
-    content = await readFile(jsonPath, 'utf-8');
+    content = (await safeReadFile(jsonPath, 'utf-8')) as string;
     filePath = jsonPath;
   } catch (err) {
     if (!hasErrorCode(err, 'ENOENT')) {
@@ -329,7 +350,7 @@ export async function loadLatestContradictionReport(
       });
     }
     try {
-      content = await readFile(yamlPath, 'utf-8');
+      content = (await safeReadFile(yamlPath, 'utf-8')) as string;
       filePath = yamlPath;
     } catch (yamlErr) {
       if (!hasErrorCode(yamlErr, 'ENOENT')) {
@@ -343,7 +364,7 @@ export async function loadLatestContradictionReport(
     }
   }
 
-  return parseReportContent(content, filePath);
+  return parseReportContent(content as string, filePath);
 }
 
 /**
@@ -387,19 +408,6 @@ function parseReportContent(content: string, filePath: string): ContradictionRep
 }
 
 /**
- * Type guard to check if an error has a specific error code.
- *
- * @param error - The error to check.
- * @param code - The error code to look for.
- * @returns True if the error has the specified code.
- */
-function hasErrorCode(error: unknown, code: string): error is Error & { code: string } {
-  return (
-    error instanceof Error && 'code' in error && (error as Error & { code?: string }).code === code
-  );
-}
-
-/**
  * Lists all contradiction reports for a project.
  *
  * @param projectId - The project identifier.
@@ -409,7 +417,8 @@ export async function listContradictionReports(projectId: string): Promise<strin
   const auditDir = getAuditDir(projectId);
 
   try {
-    const files = await readdir(auditDir);
+    const files = await safeReaddir(auditDir);
+
     const reportIds: { id: string; mtime: number }[] = [];
 
     for (const file of files) {
@@ -428,7 +437,7 @@ export async function listContradictionReports(projectId: string): Promise<strin
       const fullPath = join(auditDir, file);
 
       try {
-        const stats = await stat(fullPath);
+        const stats = await safeStat(fullPath);
         reportIds.push({ id: reportId, mtime: stats.mtimeMs });
       } catch {
         // Skip files we can't stat
@@ -471,7 +480,7 @@ export async function listContradictionReports(projectId: string): Promise<strin
  *
  * @param projectId - The project identifier.
  * @param reportId - The report identifier.
- * @returns True if the report exists.
+ * @returns True if report exists.
  */
 export async function contradictionReportExists(
   projectId: string,
@@ -481,14 +490,14 @@ export async function contradictionReportExists(
   const yamlPath = getReportPath(projectId, reportId, 'yaml');
 
   try {
-    await stat(jsonPath);
+    await safeStat(jsonPath);
     return true;
   } catch (err) {
     if (!hasErrorCode(err, 'ENOENT')) {
       throw err;
     }
     try {
-      await stat(yamlPath);
+      await safeStat(yamlPath);
       return true;
     } catch (yamlErr) {
       if (!hasErrorCode(yamlErr, 'ENOENT')) {
