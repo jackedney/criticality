@@ -368,3 +368,26 @@ export async function safeAppendFileWithOptions(
   // eslint-disable-next-line security/detect-non-literal-fs-filename -- path is validated by validatePath
   return fs.appendFile(validatedPath, data, options);
 }
+
+/**
+ * Safely creates a symbolic link after validating both paths.
+ *
+ * @param target - The path to which the symbolic link should point.
+ * @param path - The path where the symbolic link will be created.
+ * @param type - The type of symbolic link (platform-specific).
+ * @returns A promise that resolves when the symbolic link is created.
+ * @throws {PathValidationError} If either path is invalid.
+ * @throws {Error} If the symbolic link cannot be created (e.g., permission denied, directory does not exist).
+ */
+export async function safeSymlink(
+  target: string,
+  path: string,
+  type?: string | null
+): Promise<void> {
+  const validatedTarget = validatePath(target);
+  const validatedPath = validatePath(path);
+  return (
+    // eslint-disable-next-line security/detect-non-literal-fs-filename -- paths are validated by validatePath
+    fs.symlink(validatedTarget, validatedPath, type)
+  );
+}

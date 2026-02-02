@@ -17,6 +17,7 @@ import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
 import * as os from 'node:os';
 import { Project } from 'ts-morph';
+import { safeMkdir, safeWriteFile, safeReadFile } from '../utils/safe-fs.js';
 import {
   createRalphLoop,
   generateImplementationPrompt,
@@ -385,8 +386,8 @@ describe('RalphLoop', () => {
   it('should return success with no TODO functions', async () => {
     // Create project with no TODOs
     const srcDir = path.join(tempDir, 'src');
-    await fs.mkdir(srcDir, { recursive: true });
-    await fs.writeFile(
+    await safeMkdir(srcDir, { recursive: true });
+    await safeWriteFile(
       path.join(srcDir, 'index.ts'),
       `export function add(a: number, b: number): number {
   return a + b;
@@ -395,7 +396,7 @@ describe('RalphLoop', () => {
     );
 
     // Create tsconfig
-    await fs.writeFile(
+    await safeWriteFile(
       path.join(tempDir, 'tsconfig.json'),
       JSON.stringify({
         compilerOptions: {
@@ -428,8 +429,8 @@ describe('RalphLoop', () => {
   it('should implement TODO function successfully', async () => {
     // Create project with TODO function
     const srcDir = path.join(tempDir, 'src');
-    await fs.mkdir(srcDir, { recursive: true });
-    await fs.writeFile(
+    await safeMkdir(srcDir, { recursive: true });
+    await safeWriteFile(
       path.join(srcDir, 'math.ts'),
       `/**
  * @ensures result === a + b
@@ -441,7 +442,7 @@ export function add(a: number, b: number): number {
     );
 
     // Create tsconfig
-    await fs.writeFile(
+    await safeWriteFile(
       path.join(tempDir, 'tsconfig.json'),
       JSON.stringify({
         compilerOptions: {
@@ -456,7 +457,7 @@ export function add(a: number, b: number): number {
     );
 
     // Create eslint config
-    await fs.writeFile(path.join(tempDir, 'eslint.config.js'), 'export default [];\n');
+    await safeWriteFile(path.join(tempDir, 'eslint.config.js'), 'export default [];\n');
 
     const mockRouter = createMockModelRouter('return a + b;');
     mockRunTypeCheck.mockResolvedValue(createSuccessTypeCheck());
@@ -492,8 +493,8 @@ export function add(a: number, b: number): number {
   it('should reject implementation on compilation failure', async () => {
     // Create project with TODO function
     const srcDir = path.join(tempDir, 'src');
-    await fs.mkdir(srcDir, { recursive: true });
-    await fs.writeFile(
+    await safeMkdir(srcDir, { recursive: true });
+    await safeWriteFile(
       path.join(srcDir, 'math.ts'),
       `export function add(a: number, b: number): number {
   throw new Error('TODO');
@@ -502,7 +503,7 @@ export function add(a: number, b: number): number {
     );
 
     // Create tsconfig
-    await fs.writeFile(
+    await safeWriteFile(
       path.join(tempDir, 'tsconfig.json'),
       JSON.stringify({
         compilerOptions: {
@@ -536,15 +537,15 @@ export function add(a: number, b: number): number {
     expect(result.attempts[0]?.rejectionReason).toContain('Compilation failed');
 
     // Verify the original file is restored (rollback)
-    const content = await fs.readFile(path.join(srcDir, 'math.ts'), 'utf-8');
+    const content = (await safeReadFile(path.join(srcDir, 'math.ts'), 'utf-8')) as string;
     expect(content).toContain("throw new Error('TODO')");
   });
 
   it('should reject implementation on test failure', async () => {
     // Create project with TODO function
     const srcDir = path.join(tempDir, 'src');
-    await fs.mkdir(srcDir, { recursive: true });
-    await fs.writeFile(
+    await safeMkdir(srcDir, { recursive: true });
+    await safeWriteFile(
       path.join(srcDir, 'math.ts'),
       `export function add(a: number, b: number): number {
   throw new Error('TODO');
@@ -553,7 +554,7 @@ export function add(a: number, b: number): number {
     );
 
     // Create test file
-    await fs.writeFile(
+    await safeWriteFile(
       path.join(srcDir, 'math.test.ts'),
       `import { add } from './math.js';
 import { describe, it, expect } from 'vitest';
@@ -567,7 +568,7 @@ describe('add', () => {
     );
 
     // Create tsconfig
-    await fs.writeFile(
+    await safeWriteFile(
       path.join(tempDir, 'tsconfig.json'),
       JSON.stringify({
         compilerOptions: {
@@ -582,7 +583,7 @@ describe('add', () => {
     );
 
     // Create eslint config
-    await fs.writeFile(path.join(tempDir, 'eslint.config.js'), 'export default [];\n');
+    await safeWriteFile(path.join(tempDir, 'eslint.config.js'), 'export default [];\n');
 
     // Return wrong implementation
     const mockRouter = createMockModelRouter('return a - b;'); // Wrong!
@@ -606,8 +607,8 @@ describe('add', () => {
   it('should reject implementation with syntax error before injection (syntax validation)', async () => {
     // Create project with TODO function
     const srcDir = path.join(tempDir, 'src');
-    await fs.mkdir(srcDir, { recursive: true });
-    await fs.writeFile(
+    await safeMkdir(srcDir, { recursive: true });
+    await safeWriteFile(
       path.join(srcDir, 'sort.ts'),
       `export function sortArray(arr: number[]): number[] {
   throw new Error('TODO');
@@ -616,7 +617,7 @@ describe('add', () => {
     );
 
     // Create tsconfig
-    await fs.writeFile(
+    await safeWriteFile(
       path.join(tempDir, 'tsconfig.json'),
       JSON.stringify({
         compilerOptions: {
@@ -649,15 +650,15 @@ describe('add', () => {
     expect(result.attempts[0]?.rejectionReason).toContain('Failed to inject');
 
     // Verify the original file is NOT modified (syntax error caught before write)
-    const content = await fs.readFile(path.join(srcDir, 'sort.ts'), 'utf-8');
+    const content = (await safeReadFile(path.join(srcDir, 'sort.ts'), 'utf-8')) as string;
     expect(content).toContain("throw new Error('TODO')");
   });
 
   it('should accept valid implementation like "return arr.sort()"', async () => {
     // Create project with TODO function
     const srcDir = path.join(tempDir, 'src');
-    await fs.mkdir(srcDir, { recursive: true });
-    await fs.writeFile(
+    await safeMkdir(srcDir, { recursive: true });
+    await safeWriteFile(
       path.join(srcDir, 'sort.ts'),
       `export function sortArray(arr: number[]): number[] {
   throw new Error('TODO');
@@ -666,7 +667,7 @@ describe('add', () => {
     );
 
     // Create tsconfig
-    await fs.writeFile(
+    await safeWriteFile(
       path.join(tempDir, 'tsconfig.json'),
       JSON.stringify({
         compilerOptions: {
@@ -681,7 +682,7 @@ describe('add', () => {
     );
 
     // Create eslint config
-    await fs.writeFile(path.join(tempDir, 'eslint.config.js'), 'export default [];\n');
+    await safeWriteFile(path.join(tempDir, 'eslint.config.js'), 'export default [];\n');
 
     // Return valid implementation - example from acceptance criteria
     const mockRouter = createMockModelRouter('return arr.sort();');
@@ -701,7 +702,7 @@ describe('add', () => {
     expect(result.attempts[0]?.accepted).toBe(true);
 
     // Verify the implementation was injected
-    const content = await fs.readFile(path.join(srcDir, 'sort.ts'), 'utf-8');
+    const content = (await safeReadFile(path.join(srcDir, 'sort.ts'), 'utf-8')) as string;
     expect(content).toContain('return arr.sort();');
     expect(content).not.toContain("throw new Error('TODO')");
   });
@@ -709,8 +710,8 @@ describe('add', () => {
   it('should handle model errors gracefully', async () => {
     // Create project with TODO function
     const srcDir = path.join(tempDir, 'src');
-    await fs.mkdir(srcDir, { recursive: true });
-    await fs.writeFile(
+    await safeMkdir(srcDir, { recursive: true });
+    await safeWriteFile(
       path.join(srcDir, 'math.ts'),
       `export function add(a: number, b: number): number {
   throw new Error('TODO');
@@ -719,7 +720,7 @@ describe('add', () => {
     );
 
     // Create tsconfig
-    await fs.writeFile(
+    await safeWriteFile(
       path.join(tempDir, 'tsconfig.json'),
       JSON.stringify({
         compilerOptions: {
@@ -734,7 +735,7 @@ describe('add', () => {
     );
 
     // Create eslint config
-    await fs.writeFile(path.join(tempDir, 'eslint.config.js'), 'export default [];\n');
+    await safeWriteFile(path.join(tempDir, 'eslint.config.js'), 'export default [];\n');
 
     const mockRouter = createMockModelRouter(new Error('API rate limit exceeded'));
 

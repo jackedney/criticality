@@ -110,9 +110,9 @@ describe('Attempt Tracking', () => {
 
       expect(attempts.functionId).toBe('myFunction');
       expect(attempts.totalAttempts).toBe(0);
-      expect(attempts.attemptsByTier.worker).toBe(0);
-      expect(attempts.attemptsByTier.fallback).toBe(0);
-      expect(attempts.attemptsByTier.architect).toBe(0);
+      expect(attempts.attemptsByTier.get('worker')).toBe(0);
+      expect(attempts.attemptsByTier.get('fallback')).toBe(0);
+      expect(attempts.attemptsByTier.get('architect')).toBe(0);
       expect(attempts.lastFailure).toBeUndefined();
       expect(attempts.syntaxHintProvided).toBe(false);
     });
@@ -123,8 +123,8 @@ describe('Attempt Tracking', () => {
       const initial = createFunctionAttempts('test');
       const updated = recordAttempt(initial, 'worker');
 
-      expect(updated.attemptsByTier.worker).toBe(1);
-      expect(updated.attemptsByTier.fallback).toBe(0);
+      expect(updated.attemptsByTier.get('worker')).toBe(1);
+      expect(updated.attemptsByTier.get('fallback')).toBe(0);
       expect(updated.totalAttempts).toBe(1);
     });
 
@@ -150,8 +150,8 @@ describe('Attempt Tracking', () => {
       attempts = recordAttempt(attempts, 'worker');
       attempts = recordAttempt(attempts, 'fallback');
 
-      expect(attempts.attemptsByTier.worker).toBe(2);
-      expect(attempts.attemptsByTier.fallback).toBe(1);
+      expect(attempts.attemptsByTier.get('worker')).toBe(2);
+      expect(attempts.attemptsByTier.get('fallback')).toBe(1);
       expect(attempts.totalAttempts).toBe(3);
     });
   });

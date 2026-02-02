@@ -53,6 +53,7 @@ import {
   recordAttempt,
   MODEL_TIER_TO_ALIAS,
 } from './escalation.js';
+import { safeReadFile, safeWriteFile } from '../utils/safe-fs.js';
 
 /**
  * Local context for a single function implementation.
@@ -505,6 +506,7 @@ export class RalphLoop {
 
     // Request implementation from the appropriate model tier
     const request: ModelRouterRequest = {
+      // eslint-disable-next-line security/detect-object-injection -- tier is ModelTier enum with known literal keys
       modelAlias: MODEL_TIER_TO_ALIAS[tier],
       prompt,
       parameters: {
@@ -517,7 +519,7 @@ export class RalphLoop {
     let generatedBody = '';
     let compilationResult: TypeCheckResult;
     // Track original content for rollback - will be set before injection
-    let originalContent: string | undefined;
+    let originalContent = '';
     let injectionOccurred = false;
 
     try {
@@ -544,7 +546,7 @@ export class RalphLoop {
       }
 
       // Save original file content for potential rollback
-      originalContent = await fs.readFile(todoFunction.filePath, 'utf-8');
+      originalContent = (await safeReadFile(todoFunction.filePath, 'utf-8')) as string;
 
       // Inject implementation via AST
       try {
@@ -564,7 +566,7 @@ export class RalphLoop {
 
       if (!compilationResult.success) {
         // Rollback: restore original file
-        await fs.writeFile(todoFunction.filePath, originalContent, 'utf-8');
+        await safeWriteFile(todoFunction.filePath, originalContent, 'utf-8');
         // Refresh to pick up the restored file
         void project.getSourceFile(todoFunction.filePath)?.refreshFromFileSystem();
 
@@ -597,7 +599,7 @@ export class RalphLoop {
 
         if (failure !== undefined) {
           // Rollback: restore original file
-          await fs.writeFile(todoFunction.filePath, originalContent, 'utf-8');
+          await safeWriteFile(todoFunction.filePath, originalContent, 'utf-8');
           void project.getSourceFile(todoFunction.filePath)?.refreshFromFileSystem();
 
           const vulnSummary = securityScanResult.vulnerabilities
@@ -624,7 +626,7 @@ export class RalphLoop {
 
       if (testResult !== undefined && !testResult.success) {
         // Rollback: restore original file
-        await fs.writeFile(todoFunction.filePath, originalContent, 'utf-8');
+        await safeWriteFile(todoFunction.filePath, originalContent, 'utf-8');
         void project.getSourceFile(todoFunction.filePath)?.refreshFromFileSystem();
 
         const failedTests = testResult.tests
@@ -682,9 +684,9 @@ export class RalphLoop {
       };
     } catch (error) {
       // Rollback: restore original file if injection occurred
-      if (injectionOccurred && originalContent !== undefined) {
+      if (injectionOccurred) {
         try {
-          await fs.writeFile(todoFunction.filePath, originalContent, 'utf-8');
+          await safeWriteFile(todoFunction.filePath, originalContent, 'utf-8');
           void project.getSourceFile(todoFunction.filePath)?.refreshFromFileSystem();
         } catch {
           // Rollback failed - log but continue with error reporting

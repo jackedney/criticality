@@ -289,12 +289,15 @@ function parseESLintResult(result: ESLintLintResult, filePath: string): Vulnerab
       continue;
     }
 
+    // eslint-disable-next-line security/detect-object-injection -- ruleId is validated by startsWith('security/') check
     const vulnerabilityType = RULE_TO_VULNERABILITY[ruleId];
     if (vulnerabilityType === undefined) {
       continue;
     }
 
+    // eslint-disable-next-line security/detect-object-injection -- ruleId is validated by startsWith('security/') check
     const cweKey = RULE_TO_CWE[ruleId];
+    // eslint-disable-next-line security/detect-object-injection -- cweKey is validated above and CWE_MAPPINGS has known literal keys
     const cweInfo = cweKey !== undefined ? CWE_MAPPINGS[cweKey] : undefined;
     const severity = determineSeverity(ruleId, vulnerabilityType);
 

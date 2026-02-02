@@ -69,7 +69,8 @@ export class TypedMap<K, V> {
    */
   static fromEntries<K, V>(entries: Iterable<[K, V]>): TypedMap<K, V> {
     const typedMap = new TypedMap<K, V>();
-    for (const [key, value] of entries) {
+    const entriesArray = Array.from(entries);
+    for (const [key, value] of entriesArray) {
       typedMap.map.set(key, value);
     }
     return typedMap;
@@ -273,7 +274,8 @@ export class TypedMap<K, V> {
    */
   toObject(): Record<string, V> {
     const obj: Record<string, V> = {};
-    for (const [key, value] of this.map.entries()) {
+    const entriesArray = Array.from(this.map.entries());
+    for (const [key, value] of entriesArray) {
       obj[String(key)] = value;
     }
     return obj;

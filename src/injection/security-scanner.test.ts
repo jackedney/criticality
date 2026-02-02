@@ -17,6 +17,7 @@ import {
   CWE_MAPPINGS,
   type VulnerabilitySeverity,
 } from './security-scanner.js';
+import { safeSymlink, safeWriteFile } from '../utils/safe-fs.js';
 
 describe('security-scanner', () => {
   describe('OWASP_TOP_10', () => {
@@ -287,10 +288,10 @@ describe('security-scanner', () => {
       tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'security-scan-test-'));
       const nodeModulesPath = path.join(projectRoot, 'node_modules');
       const type = process.platform === 'win32' ? 'junction' : 'dir';
-      await fs.symlink(nodeModulesPath, path.join(tempDir, 'node_modules'), type);
+      await safeSymlink(nodeModulesPath, path.join(tempDir, 'node_modules'), type);
 
       // Create package.json to mark directory as ESM
-      await fs.writeFile(
+      await safeWriteFile(
         path.join(tempDir, 'package.json'),
         JSON.stringify({ type: 'module' }, null, 2)
       );
@@ -304,14 +305,14 @@ describe('security-scanner', () => {
       const vulnerableFile = path.join(tempDir, 'vulnerable.js');
       const eslintConfig = path.join(tempDir, 'eslint.config.js');
 
-      await fs.writeFile(
+      await safeWriteFile(
         vulnerableFile,
         `export function evaluate(input) {
   return eval(input);
 }`
       );
 
-      await fs.writeFile(
+      await safeWriteFile(
         eslintConfig,
         `import securityPlugin from 'eslint-plugin-security';
 
@@ -354,14 +355,14 @@ export default [
       const cleanFile = path.join(tempDir, 'clean.js');
       const eslintConfig = path.join(tempDir, 'eslint.config.js');
 
-      await fs.writeFile(
+      await safeWriteFile(
         cleanFile,
         `export function add(a, b) {
   return a + b;
 }`
       );
 
-      await fs.writeFile(
+      await safeWriteFile(
         eslintConfig,
         `import securityPlugin from 'eslint-plugin-security';
 
@@ -397,7 +398,7 @@ export default [
       const vulnerableFile = path.join(tempDir, 'vulnerable.js');
       const eslintConfig = path.join(tempDir, 'eslint.config.js');
 
-      await fs.writeFile(
+      await safeWriteFile(
         vulnerableFile,
         `import { exec } from 'child_process';
 
@@ -406,7 +407,7 @@ export function executeCommand(command) {
 }`
       );
 
-      await fs.writeFile(
+      await safeWriteFile(
         eslintConfig,
         `import securityPlugin from 'eslint-plugin-security';
 
