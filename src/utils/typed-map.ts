@@ -276,6 +276,7 @@ export class TypedMap<K, V> {
     const obj: Record<string, V> = {};
     const entriesArray = Array.from(this.map.entries());
     for (const [key, value] of entriesArray) {
+      // eslint-disable-next-line security/detect-object-injection -- safe: key originates from internal Map keys
       obj[String(key)] = value;
     }
     return obj;
