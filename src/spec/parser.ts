@@ -864,6 +864,22 @@ export function parseSpec(tomlContent: string): Spec {
     parsed = TOML.parse(tomlContent) as Record<string, unknown>;
   } catch (error) {
     const tomlError = error as Error;
+
+    // Check if error is about a prohibited key (e.g., constructor)
+    const tomlErrorMessage = tomlError.message;
+    const prohibitedKeyMatch = tomlErrorMessage.match(/Can't redefine existing key/);
+    if (prohibitedKeyMatch) {
+      // Try to extract which section/key from the toml content
+      const sectionMatch = tomlContent.match(/\[(\w+)\.(\w+)\]/);
+      if (sectionMatch && sectionMatch[2] && PROHIBITED_KEYS.includes(sectionMatch[2])) {
+        const section = sectionMatch[1] ?? 'unknown';
+        const key = sectionMatch[2];
+        throw new SpecParseError(
+          `Prohibited key '${key}' found at '${section}': keys ${PROHIBITED_KEYS.map((k) => `'${k}'`).join(', ')} are not allowed for security reasons`
+        );
+      }
+    }
+
     throw new SpecParseError(`Invalid TOML syntax: ${tomlError.message}`, tomlError);
   }
 

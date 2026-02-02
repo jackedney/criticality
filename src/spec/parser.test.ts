@@ -692,7 +692,9 @@ fields = []
           parseSpec(toml);
         } catch (error) {
           const errorMsg = (error as SpecParseError).message;
-          expect(errorMsg).toContain('Invalid TOML syntax');
+          expect(errorMsg).toContain("Prohibited key 'constructor'");
+          expect(errorMsg).toContain('data_models');
+          expect(errorMsg).toContain('security reasons');
         }
       });
 
@@ -759,7 +761,9 @@ invariants = []
           parseSpec(toml);
         } catch (error) {
           const errorMsg = (error as SpecParseError).message;
-          expect(errorMsg).toContain('Invalid TOML syntax');
+          expect(errorMsg).toContain("Prohibited key 'constructor'");
+          expect(errorMsg).toContain('witnesses');
+          expect(errorMsg).toContain('security reasons');
         }
       });
 
