@@ -3,7 +3,7 @@ import { rm } from 'node:fs/promises';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { randomUUID } from 'node:crypto';
-import { safeReadFile, safeWriteFile, safeMkdir } from '../utils/safe-fs.js';
+import { safeReadFile, safeWriteFile, safeMkdir, safeReaddir } from '../utils/safe-fs.js';
 import {
   Ledger,
   serialize,
@@ -447,8 +447,7 @@ describe('Ledger Persistence', () => {
         expect(content).toContain('Important data');
 
         // No temp files should remain
-        const { readdir } = await import('node:fs/promises');
-        const files = await readdir(testDir);
+        const files = (await safeReaddir(testDir)) as string[];
         expect(files.filter((f: string) => f.includes('.tmp'))).toHaveLength(0);
       });
 

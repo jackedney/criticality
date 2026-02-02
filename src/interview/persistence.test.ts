@@ -6,7 +6,7 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { mkdtemp, rm } from 'node:fs/promises';
 import { join } from 'node:path';
 import { tmpdir, homedir } from 'node:os';
-import { safeReadFile, safeWriteFile, safeMkdir } from '../utils/safe-fs.js';
+import { safeReadFile, safeWriteFile, safeMkdir, safeReaddir } from '../utils/safe-fs.js';
 import {
   serializeInterviewState,
   deserializeInterviewState,
@@ -891,9 +891,8 @@ describe('Interview Persistence', () => {
       expect(loaded).toEqual(state);
 
       // Verify no temp files remain
-      const { readdir } = await import('node:fs/promises');
       const dir = getInterviewDir('atomic-test');
-      const files = await readdir(dir);
+      const files = (await safeReaddir(dir)) as string[];
 
       // Should only have state.json, no .tmp files
       expect(files.every((f) => !f.endsWith('.tmp'))).toBe(true);
