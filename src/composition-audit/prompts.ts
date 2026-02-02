@@ -231,27 +231,35 @@ function formatClaims(claims: Record<string, SpecClaim>): string {
     lines.push(`\n[${claimId}] (${claim.type}${claim.testable === false ? ', non-testable' : ''})`);
     lines.push(`  Text: ${claim.text}`);
 
+    // eslint-disable-next-line security/detect-object-injection -- type lookup from controlled SpecClaim object
     if (claim.subject !== undefined) {
       lines.push(`  Subject: ${claim.subject}`);
     }
+    // eslint-disable-next-line security/detect-object-injection -- type lookup from controlled SpecClaim object
     if (claim.predicate !== undefined) {
       lines.push(`  Predicate: ${claim.predicate}`);
     }
+    // eslint-disable-next-line security/detect-object-injection -- type lookup from controlled SpecClaim object
     if (claim.trigger !== undefined) {
       lines.push(`  Trigger: ${claim.trigger}`);
     }
+    // eslint-disable-next-line security/detect-object-injection -- type lookup from controlled SpecClaim object
     if (claim.outcome !== undefined) {
       lines.push(`  Outcome: ${claim.outcome}`);
     }
+    // eslint-disable-next-line security/detect-object-injection -- type lookup from controlled SpecClaim object
     if (claim.action !== undefined) {
       lines.push(`  Action: ${claim.action}`);
     }
+    // eslint-disable-next-line security/detect-object-injection -- type lookup from controlled SpecClaim object
     if (claim.forbidden_outcome !== undefined) {
       lines.push(`  Forbidden: ${claim.forbidden_outcome}`);
     }
+    // eslint-disable-next-line security/detect-object-injection -- type lookup from controlled SpecClaim object
     if (claim.operation !== undefined) {
       lines.push(`  Operation: ${claim.operation}`);
     }
+    // eslint-disable-next-line security/detect-object-injection -- type lookup from controlled SpecClaim object
     if (claim.complexity !== undefined) {
       lines.push(`  Complexity: ${claim.complexity}`);
     }

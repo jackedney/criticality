@@ -221,6 +221,7 @@ function tryParseYaml(content: string): unknown {
           if (inArrayOfObjects && currentObject !== null) {
             currentArray.push(currentObject);
           }
+          // eslint-disable-next-line security/detect-object-injection -- controlled YAML parsing with safe parsed object
           result[currentKey] = currentArray;
         }
 
@@ -275,10 +276,12 @@ function tryParseYaml(content: string): unknown {
           if (objKey !== undefined && objValue !== undefined) {
             currentObject[objKey] = parseYamlValue(objValue);
           }
-        } else {
+        // eslint-disable-next-line security/detect-object-injection -- controlled YAML parsing with safe parsed value
+      } else {
           // Simple array item
           currentArray.push(parseYamlValue(itemContent));
         }
+      }
         continue;
       }
 
@@ -374,6 +377,7 @@ function tryParseYaml(content: string): unknown {
     // Finalize last array
     if (currentKey !== null && currentArray !== null) {
       if (inArrayOfObjects && currentObject !== null) {
+        // eslint-disable-next-line security/detect-object-injection -- controlled YAML parsing with safe parsed object
         currentArray.push(currentObject);
       }
       result[currentKey] = currentArray;

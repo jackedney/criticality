@@ -49,6 +49,7 @@ describe('Composition Audit Types', () => {
   });
 
   describe('CONTRADICTION_TYPE_DESCRIPTIONS', () => {
+    // eslint-disable-next-line security/detect-object-injection -- type lookup from controlled constant
     it('has descriptions for all contradiction types', () => {
       for (const type of CONTRADICTION_TYPES) {
         expect(CONTRADICTION_TYPE_DESCRIPTIONS[type]).toBeDefined();
@@ -56,17 +57,15 @@ describe('Composition Audit Types', () => {
         expect(CONTRADICTION_TYPE_DESCRIPTIONS[type].length).toBeGreaterThan(0);
       }
     });
+});
+  });
+});
 
     it('descriptions are meaningful', () => {
-      // eslint-disable-next-line security/detect-object-injection -- type lookup from controlled constant
       expect(CONTRADICTION_TYPE_DESCRIPTIONS.temporal).toContain('time');
-      // eslint-disable-next-line security/detect-object-injection -- type lookup from controlled constant
       expect(CONTRADICTION_TYPE_DESCRIPTIONS.resource).toContain('conflict');
-      // eslint-disable-next-line security/detect-object-injection -- type lookup from controlled constant
       expect(CONTRADICTION_TYPE_DESCRIPTIONS.invariant).toContain('state');
-      // eslint-disable-next-line security/detect-object-injection -- type lookup from controlled constant
       expect(CONTRADICTION_TYPE_DESCRIPTIONS.precondition_gap).toContain('prerequisites');
-      // eslint-disable-next-line security/detect-object-injection -- type lookup from controlled constant
       expect(CONTRADICTION_TYPE_DESCRIPTIONS.postcondition_conflict).toContain('conflict');
     });
   });
