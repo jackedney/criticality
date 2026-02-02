@@ -16,8 +16,8 @@ async function main(): Promise<void> {
   let projectRoot = process.cwd();
   let debug = false;
 
+  /* eslint-disable security/detect-object-injection -- args[i] and args[i+1] are safe: bounded array access for CLI argument parsing */
   for (let i = 0; i < args.length; i++) {
-    // eslint-disable-next-line security/detect-object-injection -- args[i] is safe: bounded array access for CLI argument parsing
     const arg = args[i];
     const nextArg = args[i + 1];
     if (arg === '--project-root' && nextArg !== undefined) {
@@ -27,6 +27,7 @@ async function main(): Promise<void> {
       debug = true;
     }
   }
+  /* eslint-enable security/detect-object-injection */
 
   const logger = createServerLogger({ serverName: 'toolchain-server', debug });
 
