@@ -43,6 +43,40 @@ export async function ensureYamlLoaded(): Promise<void> {
 }
 
 /**
+ * Dangerous keys that could lead to prototype pollution attacks.
+ */
+const DANGEROUS_KEYS = new Set(['__proto__', 'constructor', 'prototype']);
+
+/**
+ * Safely assigns a value to an object, rejecting dangerous keys.
+ *
+ * @param obj - The object to assign to.
+ * @param key - The key to assign.
+ * @param value - The value to assign.
+ * @throws ContradictionReportParseError if key is dangerous or invalid.
+ */
+function safeAssign(obj: Record<string, unknown>, key: string, value: unknown): void {
+  if (typeof key !== 'string' || key === '') {
+    throw new ContradictionReportParseError(
+      'Invalid key in YAML: key must be a non-empty string',
+      'validation_error',
+      { details: `Key: ${key}` }
+    );
+  }
+
+  if (DANGEROUS_KEYS.has(key)) {
+    throw new ContradictionReportParseError(
+      'Rejected dangerous key in YAML input',
+      'validation_error',
+      { details: `Blocked key: ${key}` }
+    );
+  }
+
+  // eslint-disable-next-line security/detect-object-injection -- safe: key validated against DANGEROUS_KEYS
+  obj[key] = value;
+}
+
+/**
  * Current version of the contradiction report format.
  */
 export const REPORT_VERSION = '1.0.0';
@@ -182,7 +216,7 @@ function tryParseYaml(content: string): unknown {
   // This handles the basic structure LLMs typically output
   try {
     const lines = yamlContent.split('\n');
-    const result: Record<string, unknown> = {};
+    const result: Record<string, unknown> = Object.create(null) as Record<string, unknown>;
     let currentKey: string | null = null;
     let currentArray: unknown[] | null = null;
     let currentObject: Record<string, unknown> | null = null;
@@ -219,8 +253,7 @@ function tryParseYaml(content: string): unknown {
           if (nestedObject !== null) {
             nestedArray.push(nestedObject);
           }
-          // eslint-disable-next-line security/detect-object-injection -- safe: nestedArrayKey comes from regex match on controlled YAML parsing
-          currentObject[nestedArrayKey] = nestedArray;
+          safeAssign(currentObject, nestedArrayKey, nestedArray);
           nestedArrayKey = null;
           nestedArray = null;
           nestedObject = null;
@@ -232,8 +265,7 @@ function tryParseYaml(content: string): unknown {
           if (inArrayOfObjects && currentObject !== null) {
             currentArray.push(currentObject);
           }
-          // eslint-disable-next-line security/detect-object-injection -- safe: currentKey comes from regex match on controlled YAML parsing
-          result[currentKey] = currentArray;
+          safeAssign(result, currentKey, currentArray);
         }
 
         currentKey = key;
@@ -243,8 +275,7 @@ function tryParseYaml(content: string): unknown {
 
         if (value !== undefined && value !== '') {
           // Inline value
-          // eslint-disable-next-line security/detect-object-injection -- safe: key comes from regex match on controlled YAML parsing
-          result[key] = parseYamlValue(value);
+          safeAssign(result, key, parseYamlValue(value));
           currentKey = null;
         }
         continue;
@@ -262,8 +293,7 @@ function tryParseYaml(content: string): unknown {
           if (nestedObject !== null) {
             nestedArray.push(nestedObject);
           }
-          // eslint-disable-next-line security/detect-object-injection -- safe: nestedArrayKey comes from regex match on controlled YAML parsing
-          currentObject[nestedArrayKey] = nestedArray;
+          safeAssign(currentObject, nestedArrayKey, nestedArray);
           nestedArrayKey = null;
           nestedArray = null;
           nestedObject = null;
@@ -284,11 +314,10 @@ function tryParseYaml(content: string): unknown {
         const objKeyMatch = /^([a-zA-Z_][a-zA-Z0-9_]*):\s*(.*)$/.exec(itemContent);
         if (objKeyMatch !== null) {
           inArrayOfObjects = true;
-          currentObject = {};
+          currentObject = Object.create(null) as Record<string, unknown>;
           const [, objKey, objValue] = objKeyMatch;
           if (objKey !== undefined && objValue !== undefined) {
-            // eslint-disable-next-line security/detect-object-injection -- safe: objKey comes from regex match on controlled YAML parsing
-            currentObject[objKey] = parseYamlValue(objValue);
+            safeAssign(currentObject, objKey, parseYamlValue(objValue));
           }
         } else {
           // Simple array item
@@ -315,11 +344,10 @@ function tryParseYaml(content: string): unknown {
         // Check if this is an object in nested array (starts with key:)
         const objKeyMatch = /^([a-zA-Z_][a-zA-Z0-9_]*):\s*(.*)$/.exec(itemContent);
         if (objKeyMatch !== null) {
-          nestedObject = {};
+          nestedObject = Object.create(null) as Record<string, unknown>;
           const [, objKey, objValue] = objKeyMatch;
           if (objKey !== undefined && objValue !== undefined) {
-            // eslint-disable-next-line security/detect-object-injection -- safe: objKey comes from regex match on controlled YAML parsing
-            nestedObject[objKey] = parseYamlValue(objValue);
+            safeAssign(nestedObject, objKey, parseYamlValue(objValue));
           }
         } else {
           // Simple array item
@@ -334,8 +362,7 @@ function tryParseYaml(content: string): unknown {
         if (nestedObjKeyMatch !== null) {
           const [, nestedObjKey, nestedObjValue] = nestedObjKeyMatch;
           if (nestedObjKey !== undefined && nestedObjValue !== undefined) {
-            // eslint-disable-next-line security/detect-object-injection -- safe: nestedObjKey comes from regex match on controlled YAML parsing
-            nestedObject[nestedObjKey] = parseYamlValue(nestedObjValue);
+            safeAssign(nestedObject, nestedObjKey, parseYamlValue(nestedObjValue));
           }
         }
         continue;
@@ -349,8 +376,7 @@ function tryParseYaml(content: string): unknown {
             nestedArray.push(nestedObject);
             nestedObject = null;
           }
-          // eslint-disable-next-line security/detect-object-injection -- safe: nestedArrayKey comes from regex match on controlled YAML parsing
-          currentObject[nestedArrayKey] = nestedArray;
+          safeAssign(currentObject, nestedArrayKey, nestedArray);
           nestedArrayKey = null;
           nestedArray = null;
           inNestedArray = false;
@@ -361,8 +387,7 @@ function tryParseYaml(content: string): unknown {
           const [, nestedKey, nestedValue] = nestedKeyMatch;
           if (nestedKey !== undefined) {
             if (nestedValue !== undefined && nestedValue !== '') {
-              // eslint-disable-next-line security/detect-object-injection -- safe: nestedKey comes from regex match on controlled YAML parsing
-              currentObject[nestedKey] = parseYamlValue(nestedValue);
+              safeAssign(currentObject, nestedKey, parseYamlValue(nestedValue));
             } else {
               // This might be the start of a nested array
               nestedArrayKey = nestedKey;
@@ -385,8 +410,7 @@ function tryParseYaml(content: string): unknown {
       if (nestedObject !== null) {
         nestedArray.push(nestedObject);
       }
-      // eslint-disable-next-line security/detect-object-injection -- safe: nestedArrayKey comes from regex match on controlled YAML parsing
-      currentObject[nestedArrayKey] = nestedArray;
+      safeAssign(currentObject, nestedArrayKey, nestedArray);
     }
 
     // Finalize last array
@@ -394,12 +418,16 @@ function tryParseYaml(content: string): unknown {
       if (inArrayOfObjects && currentObject !== null) {
         currentArray.push(currentObject);
       }
-      // eslint-disable-next-line security/detect-object-injection -- safe: currentKey comes from regex match on controlled YAML parsing
-      result[currentKey] = currentArray;
+      safeAssign(result, currentKey, currentArray);
     }
 
     return Object.keys(result).length > 0 ? result : null;
-  } catch {
+  } catch (error) {
+    // Re-throw ContradictionReportParseError (e.g., from safeAssign)
+    if (error instanceof ContradictionReportParseError) {
+      throw error;
+    }
+    // Catch other parsing errors
     return null;
   }
 }
@@ -738,7 +766,19 @@ export async function parseContradictionOutput(
 
   // Try YAML if JSON fails and YAML is enabled
   if (parsed === null && opts.tryYaml) {
-    parsed = tryParseYaml(content);
+    try {
+      parsed = tryParseYaml(content);
+    } catch (error) {
+      // Re-throw ContradictionReportParseError (e.g., from safeAssign)
+      if (error instanceof ContradictionReportParseError) {
+        return {
+          success: false,
+          error,
+        };
+      }
+      // Other parsing errors return null
+      parsed = null;
+    }
   }
 
   // If both fail, return parse error

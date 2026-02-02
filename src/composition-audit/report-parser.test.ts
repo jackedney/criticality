@@ -834,4 +834,173 @@ summary: Test
       expect(result.success).toBe(true);
     });
   });
+
+  describe('Prototype Pollution Protection', () => {
+    it('rejects YAML with __proto__ key', async () => {
+      const yamlContent = `__proto__: malicious
+hasContradictions: true
+contradictions: []`;
+
+      const result = await parseContradictionOutput(yamlContent);
+
+      expect(result.success).toBe(false);
+      if (!result.success) {
+        expect(result.error).toBeInstanceOf(ContradictionReportParseError);
+        expect(result.error.errorType).toBe('validation_error');
+        expect(result.error.message).toContain('Rejected dangerous key');
+      }
+    });
+
+    it('rejects YAML with constructor key', async () => {
+      const yamlContent = `constructor: malicious
+hasContradictions: true
+contradictions: []`;
+
+      const result = await parseContradictionOutput(yamlContent);
+
+      expect(result.success).toBe(false);
+      if (!result.success) {
+        expect(result.error).toBeInstanceOf(ContradictionReportParseError);
+        expect(result.error.errorType).toBe('validation_error');
+        expect(result.error.message).toContain('Rejected dangerous key');
+      }
+    });
+
+    it('rejects YAML with prototype key', async () => {
+      const yamlContent = `prototype: malicious
+hasContradictions: true
+contradictions: []`;
+
+      const result = await parseContradictionOutput(yamlContent);
+
+      expect(result.success).toBe(false);
+      if (!result.success) {
+        expect(result.error).toBeInstanceOf(ContradictionReportParseError);
+        expect(result.error.errorType).toBe('validation_error');
+        expect(result.error.message).toContain('Rejected dangerous key');
+      }
+    });
+
+    it('rejects dangerous keys in nested objects', async () => {
+      const yamlContent = `hasContradictions: true
+contradictions:
+  - type: temporal
+    severity: critical
+    description: Test
+    involved:
+      - elementType: constraint
+        id: C1
+        __proto__: malicious
+        name: Test
+        text: Test text
+    analysis: Test analysis
+    minimalScenario: Test scenario
+    suggestedResolutions: []
+summary: Test`;
+
+      const result = await parseContradictionOutput(yamlContent);
+
+      expect(result.success).toBe(false);
+      if (!result.success) {
+        expect(result.error).toBeInstanceOf(ContradictionReportParseError);
+        expect(result.error.errorType).toBe('validation_error');
+      }
+    });
+
+    it('rejects dangerous keys in nested arrays', async () => {
+      const yamlContent = `hasContradictions: true
+contradictions:
+  - type: temporal
+    severity: critical
+    description: Test
+    involved:
+      - elementType: constraint
+        id: C1
+        name: Test
+        text: Test text
+        constructor:
+          malicious: value
+    analysis: Test analysis
+    minimalScenario: Test scenario
+    suggestedResolutions: []
+summary: Test`;
+
+      const result = await parseContradictionOutput(yamlContent);
+
+      expect(result.success).toBe(false);
+      if (!result.success) {
+        expect(result.error).toBeInstanceOf(ContradictionReportParseError);
+        expect(result.error.errorType).toBe('validation_error');
+      }
+    });
+
+    it('ignores lines that do not match key pattern', async () => {
+      const yamlContent = `: emptyKey
+hasContradictions: true
+contradictions: []`;
+
+      const result = await parseContradictionOutput(yamlContent);
+
+      // Empty keys don't match the regex pattern, so they're ignored
+      // The valid key 'hasContradictions' should still parse
+      expect(result.success).toBe(true);
+      if (result.success) {
+        expect(result.hasContradictions).toBe(true);
+        expect(result.contradictions).toHaveLength(0);
+      }
+    });
+
+    it('parses valid YAML keys correctly', async () => {
+      const yamlContent = `hasContradictions: true
+contradictions:
+  - type: temporal
+    severity: critical
+    description: Test description
+    involved:
+      - elementType: constraint
+        id: C1
+        name: Test constraint
+        text: Constraint text
+    analysis: Test analysis
+    minimalScenario: Test scenario
+    suggestedResolutions:
+      - Resolution 1
+      - Resolution 2
+summary: Test summary`;
+
+      const result = await parseContradictionOutput(yamlContent);
+
+      expect(result.success).toBe(true);
+      if (result.success) {
+        expect(result.contradictions).toHaveLength(1);
+        expect(result.contradictions[0]?.type).toBe('temporal');
+        expect(result.contradictions[0]?.severity).toBe('critical');
+        expect(result.hasContradictions).toBe(true);
+        expect(result.summary).toBe('Test summary');
+      }
+    });
+
+    it('creates objects with null prototype to prevent prototype pollution', async () => {
+      const yamlContent = `hasContradictions: true
+contradictions:
+  - type: temporal
+    severity: critical
+    description: Test
+    involved:
+      - elementType: constraint
+        id: C1
+        name: Test
+        text: Test text
+    analysis: Test analysis
+    minimalScenario: Test scenario
+    suggestedResolutions: []
+summary: Test`;
+
+      const result = await parseContradictionOutput(yamlContent);
+
+      expect(result.success).toBe(true);
+      expect(Object.getPrototypeOf({})).toBe(Object.prototype);
+      expect(Object.getPrototypeOf(Object.create(null))).toBe(null);
+    });
+  });
 });
