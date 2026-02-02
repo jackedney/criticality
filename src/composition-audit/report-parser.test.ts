@@ -754,14 +754,12 @@ summary: Found 1 critical temporal contradiction`;
   });
 
   describe('js-yaml fallback', () => {
-    const originalParseWithJsYaml = process.env.PARSE_WITH_JSYAML;
-
     afterEach(() => {
-      process.env.PARSE_WITH_JSYAML = originalParseWithJsYaml;
+      vi.unstubAllEnvs();
     });
 
     it('uses default YAML parser when PARSE_WITH_JSYAML is not set', async () => {
-      delete process.env.PARSE_WITH_JSYAML;
+      vi.stubEnv('PARSE_WITH_JSYAML', undefined);
       vi.resetModules();
       const freshParser = await import('./report-parser.js');
       const yamlContent = `hasContradictions: true
@@ -785,7 +783,7 @@ summary: Test`;
     });
 
     it('uses js-yaml parser when PARSE_WITH_JSYAML is set to true', async () => {
-      process.env.PARSE_WITH_JSYAML = 'true';
+      vi.stubEnv('PARSE_WITH_JSYAML', 'true');
       vi.resetModules();
       const freshParser = await import('./report-parser.js');
       await freshParser.ensureYamlLoaded();
@@ -810,7 +808,7 @@ summary: Test`;
     });
 
     it('parses YAML from markdown code block with js-yaml', async () => {
-      process.env.PARSE_WITH_JSYAML = 'true';
+      vi.stubEnv('PARSE_WITH_JSYAML', 'true');
       vi.resetModules();
       const freshParser = await import('./report-parser.js');
       await freshParser.ensureYamlLoaded();
