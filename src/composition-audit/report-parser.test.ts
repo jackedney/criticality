@@ -72,7 +72,7 @@ function createFailingRouter(): {
 
 describe('Report Parser', () => {
   describe('parseContradictionOutput', () => {
-    it('parses valid JSON output', () => {
+    it('parses valid JSON output', async () => {
       const content = JSON.stringify({
         hasContradictions: true,
         contradictions: [
@@ -91,7 +91,7 @@ describe('Report Parser', () => {
         summary: 'Found 1 critical contradiction',
       });
 
-      const result = parseContradictionOutput(content);
+      const result = await parseContradictionOutput(content);
 
       expect(result.success).toBe(true);
       if (result.success) {
@@ -103,7 +103,7 @@ describe('Report Parser', () => {
       }
     });
 
-    it('parses JSON from markdown code block', () => {
+    it('parses JSON from markdown code block', async () => {
       const content = `Here is my analysis:
 
 \`\`\`json
@@ -116,7 +116,7 @@ describe('Report Parser', () => {
 
 The composition appears consistent.`;
 
-      const result = parseContradictionOutput(content);
+      const result = await parseContradictionOutput(content);
 
       expect(result.success).toBe(true);
       if (result.success) {
@@ -125,14 +125,14 @@ The composition appears consistent.`;
       }
     });
 
-    it('extracts JSON from mixed content', () => {
+    it('extracts JSON from mixed content', async () => {
       const content = `I've analyzed the spec and found:
 
 {"hasContradictions": true, "contradictions": [{"type": "invariant", "severity": "warning", "description": "Test", "involved": [{"elementType": "claim", "id": "C1", "name": "Test", "text": "Test"}], "analysis": "Test", "minimalScenario": "Test", "suggestedResolutions": []}], "summary": "Found issue"}
 
 This needs attention.`;
 
-      const result = parseContradictionOutput(content);
+      const result = await parseContradictionOutput(content);
 
       expect(result.success).toBe(true);
       if (result.success) {
@@ -141,7 +141,7 @@ This needs attention.`;
       }
     });
 
-    it('handles snake_case field names', () => {
+    it('handles snake_case field names', async () => {
       const content = JSON.stringify({
         has_contradictions: true,
         contradictions: [
@@ -160,7 +160,7 @@ This needs attention.`;
         summary: 'Found warning',
       });
 
-      const result = parseContradictionOutput(content);
+      const result = await parseContradictionOutput(content);
 
       expect(result.success).toBe(true);
       if (result.success) {
@@ -170,7 +170,7 @@ This needs attention.`;
       }
     });
 
-    it('preserves provided contradiction IDs', () => {
+    it('preserves provided contradiction IDs', async () => {
       const content = JSON.stringify({
         hasContradictions: true,
         contradictions: [
@@ -188,7 +188,7 @@ This needs attention.`;
         summary: 'Test',
       });
 
-      const result = parseContradictionOutput(content);
+      const result = await parseContradictionOutput(content);
 
       expect(result.success).toBe(true);
       if (result.success) {
@@ -196,7 +196,7 @@ This needs attention.`;
       }
     });
 
-    it('generates ID for contradictions without ID', () => {
+    it('generates ID for contradictions without ID', async () => {
       const content = JSON.stringify({
         hasContradictions: true,
         contradictions: [
@@ -213,7 +213,7 @@ This needs attention.`;
         summary: 'Test',
       });
 
-      const result = parseContradictionOutput(content);
+      const result = await parseContradictionOutput(content);
 
       expect(result.success).toBe(true);
       if (result.success) {
@@ -222,7 +222,7 @@ This needs attention.`;
       }
     });
 
-    it('filters out invalid contradiction types', () => {
+    it('filters out invalid contradiction types', async () => {
       const content = JSON.stringify({
         hasContradictions: true,
         contradictions: [
@@ -248,7 +248,7 @@ This needs attention.`;
         summary: 'Test',
       });
 
-      const result = parseContradictionOutput(content);
+      const result = await parseContradictionOutput(content);
 
       expect(result.success).toBe(true);
       if (result.success) {
@@ -257,7 +257,7 @@ This needs attention.`;
       }
     });
 
-    it('filters out contradictions with missing required fields', () => {
+    it('filters out contradictions with missing required fields', async () => {
       const content = JSON.stringify({
         hasContradictions: true,
         contradictions: [
@@ -292,7 +292,7 @@ This needs attention.`;
         summary: 'Test',
       });
 
-      const result = parseContradictionOutput(content);
+      const result = await parseContradictionOutput(content);
 
       expect(result.success).toBe(true);
       if (result.success) {
@@ -300,7 +300,7 @@ This needs attention.`;
       }
     });
 
-    it('filters out contradictions with no involved elements', () => {
+    it('filters out contradictions with no involved elements', async () => {
       const content = JSON.stringify({
         hasContradictions: true,
         contradictions: [
@@ -326,7 +326,7 @@ This needs attention.`;
         summary: 'Test',
       });
 
-      const result = parseContradictionOutput(content);
+      const result = await parseContradictionOutput(content);
 
       expect(result.success).toBe(true);
       if (result.success) {
@@ -334,7 +334,7 @@ This needs attention.`;
       }
     });
 
-    it('handles optional location in involved elements', () => {
+    it('handles optional location in involved elements', async () => {
       const content = JSON.stringify({
         hasContradictions: true,
         contradictions: [
@@ -360,7 +360,7 @@ This needs attention.`;
         summary: 'Test',
       });
 
-      const result = parseContradictionOutput(content);
+      const result = await parseContradictionOutput(content);
 
       expect(result.success).toBe(true);
       if (result.success) {
@@ -369,10 +369,10 @@ This needs attention.`;
       }
     });
 
-    it('returns error for completely invalid content', () => {
+    it('returns error for completely invalid content', async () => {
       const content = 'This is not JSON or YAML at all, just plain text with no structure.';
 
-      const result = parseContradictionOutput(content);
+      const result = await parseContradictionOutput(content);
 
       expect(result.success).toBe(false);
       if (!result.success) {
@@ -381,10 +381,10 @@ This needs attention.`;
       }
     });
 
-    it('returns empty contradictions for empty JSON', () => {
+    it('returns empty contradictions for empty JSON', async () => {
       const content = '{}';
 
-      const result = parseContradictionOutput(content);
+      const result = await parseContradictionOutput(content);
 
       expect(result.success).toBe(true);
       if (result.success) {
@@ -393,7 +393,7 @@ This needs attention.`;
       }
     });
 
-    it('infers hasContradictions from array length', () => {
+    it('infers hasContradictions from array length', async () => {
       const content = JSON.stringify({
         // No hasContradictions flag
         contradictions: [
@@ -410,7 +410,7 @@ This needs attention.`;
         summary: 'Found issue',
       });
 
-      const result = parseContradictionOutput(content);
+      const result = await parseContradictionOutput(content);
 
       expect(result.success).toBe(true);
       if (result.success) {
@@ -692,7 +692,7 @@ This needs attention.`;
   });
 
   describe('Example from acceptance criteria: YAML report parsing', () => {
-    it('parses TEMPORAL_001 contradiction from YAML-like output', () => {
+    it('parses TEMPORAL_001 contradiction from YAML-like output', async () => {
       // LLMs sometimes output in YAML-like format
       const yamlContent = `hasContradictions: true
 contradictions:
@@ -715,7 +715,7 @@ contradictions:
       - Add session keep-alive
 summary: Found 1 critical temporal contradiction`;
 
-      const result = parseContradictionOutput(yamlContent);
+      const result = await parseContradictionOutput(yamlContent);
 
       expect(result.success).toBe(true);
       if (result.success) {
@@ -777,7 +777,7 @@ contradictions:
     suggestedResolutions: []
 summary: Test`;
 
-      const result = freshParser.parseContradictionOutput(yamlContent);
+      const result = await freshParser.parseContradictionOutput(yamlContent);
 
       expect(result.success).toBe(true);
     });
@@ -802,7 +802,7 @@ contradictions:
     suggestedResolutions: []
 summary: Test`;
 
-      const result = freshParser.parseContradictionOutput(yamlContent);
+      const result = await freshParser.parseContradictionOutput(yamlContent);
 
       expect(result.success).toBe(true);
     });
@@ -829,7 +829,7 @@ contradictions:
 summary: Test
 \`\`\``;
 
-      const result = freshParser.parseContradictionOutput(yamlContent);
+      const result = await freshParser.parseContradictionOutput(yamlContent);
 
       expect(result.success).toBe(true);
     });

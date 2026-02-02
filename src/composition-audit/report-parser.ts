@@ -719,14 +719,19 @@ This is retry attempt ${String(attemptNumber)} of the maximum allowed retries.`;
  * @param options - Parse options.
  * @returns The parse result with contradictions or error.
  */
-export function parseContradictionOutput(
+export async function parseContradictionOutput(
   content: string,
   options?: ContradictionParseOptions
-): ContradictionParseResult {
+): Promise<ContradictionParseResult> {
   const opts: Required<ContradictionParseOptions> = {
     ...getParseOptions(),
     ...options,
   };
+
+  // Ensure js-yaml module is loaded before attempting YAML parsing
+  if (USE_JS_YAML && opts.tryYaml) {
+    await ensureYamlLoaded();
+  }
 
   // Try JSON first
   let parsed = tryParseJson(content);
@@ -789,7 +794,7 @@ export async function parseContradictionOutputWithRetry(
   };
 
   // First attempt
-  let result = parseContradictionOutput(content, opts);
+  let result = await parseContradictionOutput(content, opts);
 
   if (result.success) {
     return result;
@@ -811,7 +816,7 @@ export async function parseContradictionOutputWithRetry(
     }
 
     currentContent = retryResult.response.content;
-    result = parseContradictionOutput(currentContent, opts);
+    result = await parseContradictionOutput(currentContent, opts);
 
     if (result.success) {
       opts.logger(`Parse succeeded on retry attempt ${String(attempt)}`);
