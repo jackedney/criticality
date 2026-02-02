@@ -208,7 +208,6 @@ function tryParseYaml(content: string): unknown {
           if (nestedObject !== null) {
             nestedArray.push(nestedObject);
           }
-          // eslint-disable-next-line security/detect-object-injection -- controlled YAML parsing with safe key values
           currentObject[nestedArrayKey] = nestedArray;
           nestedArrayKey = null;
           nestedArray = null;
@@ -221,7 +220,6 @@ function tryParseYaml(content: string): unknown {
           if (inArrayOfObjects && currentObject !== null) {
             currentArray.push(currentObject);
           }
-          // eslint-disable-next-line security/detect-object-injection -- controlled YAML parsing with safe parsed object
           result[currentKey] = currentArray;
         }
 
@@ -276,12 +274,10 @@ function tryParseYaml(content: string): unknown {
           if (objKey !== undefined && objValue !== undefined) {
             currentObject[objKey] = parseYamlValue(objValue);
           }
-        // eslint-disable-next-line security/detect-object-injection -- controlled YAML parsing with safe parsed value
-      } else {
+        } else {
           // Simple array item
           currentArray.push(parseYamlValue(itemContent));
         }
-      }
         continue;
       }
 
@@ -335,7 +331,6 @@ function tryParseYaml(content: string): unknown {
             nestedArray.push(nestedObject);
             nestedObject = null;
           }
-          // eslint-disable-next-line security/detect-object-injection -- controlled YAML parsing with safe key values
           currentObject[nestedArrayKey] = nestedArray;
           nestedArrayKey = null;
           nestedArray = null;
@@ -370,14 +365,12 @@ function tryParseYaml(content: string): unknown {
       if (nestedObject !== null) {
         nestedArray.push(nestedObject);
       }
-      // eslint-disable-next-line security/detect-object-injection -- controlled YAML parsing with safe key values
       currentObject[nestedArrayKey] = nestedArray;
     }
 
     // Finalize last array
     if (currentKey !== null && currentArray !== null) {
       if (inArrayOfObjects && currentObject !== null) {
-        // eslint-disable-next-line security/detect-object-injection -- controlled YAML parsing with safe parsed object
         currentArray.push(currentObject);
       }
       result[currentKey] = currentArray;

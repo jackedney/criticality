@@ -320,7 +320,7 @@ export async function loadContradictionReport(
     }
   }
 
-  return parseReportContent(content as string, filePath);
+  return parseReportContent(content, filePath);
 }
 
 /**
@@ -364,7 +364,7 @@ export async function loadLatestContradictionReport(
     }
   }
 
-  return parseReportContent(content as string, filePath);
+  return parseReportContent(content, filePath);
 }
 
 /**
@@ -417,7 +417,7 @@ export async function listContradictionReports(projectId: string): Promise<strin
   const auditDir = getAuditDir(projectId);
 
   try {
-    const files = await safeReaddir(auditDir);
+    const files = (await safeReaddir(auditDir)) as string[];
 
     const reportIds: { id: string; mtime: number }[] = [];
 
@@ -438,7 +438,7 @@ export async function listContradictionReports(projectId: string): Promise<strin
 
       try {
         const stats = await safeStat(fullPath);
-        reportIds.push({ id: reportId, mtime: stats.mtimeMs });
+        reportIds.push({ id: reportId, mtime: stats.mtimeMs as number });
       } catch {
         // Skip files we can't stat
         continue;

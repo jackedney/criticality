@@ -49,14 +49,12 @@ describe('Composition Audit Types', () => {
   });
 
   describe('CONTRADICTION_TYPE_DESCRIPTIONS', () => {
-    // eslint-disable-next-line security/detect-object-injection -- type lookup from controlled constant
     it('has descriptions for all contradiction types', () => {
       for (const type of CONTRADICTION_TYPES) {
         expect(CONTRADICTION_TYPE_DESCRIPTIONS[type]).toBeDefined();
         expect(typeof CONTRADICTION_TYPE_DESCRIPTIONS[type]).toBe('string');
         expect(CONTRADICTION_TYPE_DESCRIPTIONS[type].length).toBeGreaterThan(0);
       }
-    });
     });
   });
 
