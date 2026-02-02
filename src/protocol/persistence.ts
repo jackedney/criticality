@@ -7,7 +7,7 @@
  * @packageDocumentation
  */
 
-import { safeWriteFile, safeRename, safeUnlink, safeReadFile } from '../utils/safe-fs.js';
+import { safeWriteFile, safeRename, safeUnlink, safeReadFile, safeStat } from '../utils/safe-fs.js';
 import { join, dirname } from 'node:path';
 import { randomUUID } from 'node:crypto';
 import type {
@@ -647,7 +647,7 @@ export async function loadState(filePath: string): Promise<ProtocolStateSnapshot
  */
 export async function stateFileExists(filePath: string): Promise<boolean> {
   try {
-    await safeReadFile(filePath, 'utf-8');
+    await safeStat(filePath);
     return true;
   } catch {
     return false;
