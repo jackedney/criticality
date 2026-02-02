@@ -1184,11 +1184,11 @@ function canOptimizeAwayFilter(invariant: string, arbInfo: BaseArbitraryInfo): b
   // For number constraints with min, check if the invariant is covered
   // eslint-disable-next-line security/detect-unsafe-regex -- Short arbitrary strings from internal generation
   const minMatch = /min:\s*(-?\d+(?:\.\d+)?)/.exec(arbInfo.arbitrary);
-  if (minMatch !== null) {
+  if (minMatch !== null && minMatch[1] !== undefined) {
     const arbMin = Number(minMatch[1]);
     // eslint-disable-next-line security/detect-unsafe-regex -- Short invariant strings from code analysis
     const invMinMatch = /value\s*>=\s*(-?\d+(?:\.\d+)?)/.exec(invariant);
-    if (invMinMatch !== null && Number(invMinMatch[1]) === arbMin) {
+    if (invMinMatch !== null && invMinMatch[1] !== undefined && Number(invMinMatch[1]) === arbMin) {
       // The min constraint in the arbitrary matches the invariant
       // We still need to filter for the type guard, but it will rarely reject
       return false; // Keep filter for type safety, but it's optimized
