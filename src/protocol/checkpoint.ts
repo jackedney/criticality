@@ -8,7 +8,7 @@
  * @packageDocumentation
  */
 
-import { stat } from 'node:fs/promises';
+import { safeStat } from '../utils/safe-fs.js';
 import type { ProtocolStateSnapshot } from './persistence.js';
 import {
   loadState,
@@ -179,7 +179,7 @@ export async function detectExistingState(
   }
 
   try {
-    const stats = await stat(filePath);
+    const stats = await safeStat(filePath);
     return {
       found: true,
       filePath,
@@ -593,7 +593,7 @@ export async function resumeFromCheckpoint(
   let fileStats: { mtime: Date };
 
   try {
-    fileStats = await stat(filePath);
+    fileStats = await safeStat(filePath);
   } catch (error) {
     return {
       success: false,

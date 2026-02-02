@@ -3,9 +3,10 @@
  */
 
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
-import { mkdir, rm } from 'node:fs/promises';
+import { rm } from 'node:fs/promises';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
+import { safeMkdir } from '../utils/safe-fs.js';
 import {
   parseArgs,
   executeStatus,
@@ -106,7 +107,7 @@ describe('Protocol CLI', () => {
 
     beforeEach(async () => {
       testDir = join(tmpdir(), `cli-status-test-${String(Date.now())}`);
-      await mkdir(testDir, { recursive: true });
+      await safeMkdir(testDir, { recursive: true });
       statePath = join(testDir, 'state.json');
     });
 
@@ -225,7 +226,7 @@ describe('Protocol CLI', () => {
 
     beforeEach(async () => {
       testDir = join(tmpdir(), `cli-resolve-test-${String(Date.now())}`);
-      await mkdir(testDir, { recursive: true });
+      await safeMkdir(testDir, { recursive: true });
       statePath = join(testDir, 'state.json');
     });
 
@@ -308,7 +309,7 @@ describe('Protocol CLI', () => {
 
     beforeEach(async () => {
       testDir = join(tmpdir(), `cli-resume-test-${String(Date.now())}`);
-      await mkdir(testDir, { recursive: true });
+      await safeMkdir(testDir, { recursive: true });
       statePath = join(testDir, 'state.json');
     });
 
