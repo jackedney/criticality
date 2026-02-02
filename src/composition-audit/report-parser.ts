@@ -22,13 +22,24 @@ import { isValidContradictionType, ContradictionReportParseError } from './types
 import { generateContradictionId } from './prompts.js';
 
 let yaml: typeof import('js-yaml') | null = null;
+let yamlLoadPromise: Promise<void> | null = null;
 
 const USE_JS_YAML = process.env.PARSE_WITH_JSYAML === 'true';
 
 if (USE_JS_YAML) {
-  void (async (): Promise<void> => {
+  yamlLoadPromise = (async (): Promise<void> => {
     yaml ??= await import('js-yaml');
   })();
+}
+
+/**
+ * Ensures the js-yaml module is loaded when PARSE_WITH_JSYAML is enabled.
+ * Call this before using parseWithJsYaml to avoid race conditions.
+ */
+export async function ensureYamlLoaded(): Promise<void> {
+  if (yamlLoadPromise) {
+    await yamlLoadPromise;
+  }
 }
 
 /**

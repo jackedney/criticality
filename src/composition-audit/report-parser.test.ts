@@ -788,7 +788,7 @@ summary: Test`;
       process.env.PARSE_WITH_JSYAML = 'true';
       vi.resetModules();
       const freshParser = await import('./report-parser.js');
-      await new Promise((resolve) => setTimeout(resolve, 100));
+      await freshParser.ensureYamlLoaded();
       const yamlContent = `hasContradictions: true
 contradictions:
   - type: temporal
@@ -813,7 +813,7 @@ summary: Test`;
       process.env.PARSE_WITH_JSYAML = 'true';
       vi.resetModules();
       const freshParser = await import('./report-parser.js');
-      await new Promise((resolve) => setTimeout(resolve, 100));
+      await freshParser.ensureYamlLoaded();
       const yamlContent = `\`\`\`yaml
 hasContradictions: true
 contradictions:
