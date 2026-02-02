@@ -14,6 +14,7 @@ import {
   createContradictionStats,
   generateReportId,
   isValidContradictionReport,
+  tryParseYaml,
   REPORT_VERSION,
 } from './report-parser.js';
 import { ContradictionReportParseError } from './types.js';
@@ -980,7 +981,7 @@ summary: Test summary`;
       }
     });
 
-    it('creates objects with null prototype to prevent prototype pollution', async () => {
+    it('creates objects with null prototype to prevent prototype pollution', () => {
       const yamlContent = `hasContradictions: true
 contradictions:
   - type: temporal
@@ -996,11 +997,19 @@ contradictions:
     suggestedResolutions: []
 summary: Test`;
 
-      const result = await parseContradictionOutput(yamlContent);
+      const parsed = tryParseYaml(yamlContent);
 
-      expect(result.success).toBe(true);
-      expect(Object.getPrototypeOf({})).toBe(Object.prototype);
-      expect(Object.getPrototypeOf(Object.create(null))).toBe(null);
+      expect(parsed).not.toBeNull();
+      if (parsed && typeof parsed === 'object') {
+        const obj = parsed as Record<string, unknown>;
+        expect(Object.getPrototypeOf(obj)).toBe(null);
+
+        const contradictions = obj.contradictions;
+        expect(Array.isArray(contradictions)).toBe(true);
+        if (contradictions && Array.isArray(contradictions) && contradictions[0]) {
+          expect(Object.getPrototypeOf(contradictions[0])).toBe(null);
+        }
+      }
     });
   });
 });

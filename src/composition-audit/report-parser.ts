@@ -203,7 +203,7 @@ function parseWithJsYaml(content: string): unknown {
  * @param content - The raw content string.
  * @returns The parsed object or null if parsing fails.
  */
-function tryParseYaml(content: string): unknown {
+export function tryParseYaml(content: string): unknown {
   if (USE_JS_YAML) {
     return parseWithJsYaml(content);
   }
