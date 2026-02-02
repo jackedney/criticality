@@ -52,11 +52,10 @@ describe('Composition Audit Types', () => {
     it('has descriptions for all contradiction types', () => {
       for (const type of CONTRADICTION_TYPES) {
         // eslint-disable-next-line security/detect-object-injection -- safe: type is ContradictionType enum with known literal keys
-        expect(CONTRADICTION_TYPE_DESCRIPTIONS[type]).toBeDefined();
-        // eslint-disable-next-line security/detect-object-injection -- safe: type is ContradictionType enum with known literal keys
-        expect(typeof CONTRADICTION_TYPE_DESCRIPTIONS[type]).toBe('string');
-        // eslint-disable-next-line security/detect-object-injection -- safe: type is ContradictionType enum with known literal keys
-        expect(CONTRADICTION_TYPE_DESCRIPTIONS[type].length).toBeGreaterThan(0);
+        const desc = CONTRADICTION_TYPE_DESCRIPTIONS[type];
+        expect(desc).toBeDefined();
+        expect(typeof desc).toBe('string');
+        expect(desc.length).toBeGreaterThan(0);
       }
     });
   });
