@@ -6,7 +6,7 @@
 
 import { describe, expect, it, beforeEach } from 'vitest';
 import * as path from 'path';
-import * as fs from 'fs';
+import { mkdtempSync } from 'fs';
 import * as os from 'os';
 import {
   parseClaims,
@@ -159,7 +159,7 @@ describe('Claim Parser', () => {
       let tempDir: string;
 
       beforeEach(() => {
-        tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'claims-test-'));
+        tempDir = mkdtempSync(path.join(os.tmpdir(), 'claims-test-'));
       });
 
       it('should handle spec with empty claims section', () => {

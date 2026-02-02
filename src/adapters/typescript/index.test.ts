@@ -12,7 +12,7 @@
  */
 
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
-import * as fs from 'node:fs';
+import { mkdtempSync } from 'node:fs';
 import * as path from 'node:path';
 import * as os from 'node:os';
 import {
@@ -33,7 +33,7 @@ import {
  * Creates a temporary directory for test fixtures.
  */
 function createTempDir(): string {
-  return fs.mkdtempSync(path.join(os.tmpdir(), 'ts-adapter-test-'));
+  return mkdtempSync(path.join(os.tmpdir(), 'ts-adapter-test-'));
 }
 
 /**

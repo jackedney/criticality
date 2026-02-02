@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
-import * as fs from 'node:fs';
+import { mkdtempSync, rmSync } from 'node:fs';
 import * as path from 'node:path';
 import * as os from 'node:os';
 import { Project } from 'ts-morph';
@@ -20,11 +20,11 @@ describe('createProject', () => {
   let tempDir: string;
 
   beforeEach(() => {
-    tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'ast-test-'));
+    tempDir = mkdtempSync(path.join(os.tmpdir(), 'ast-test-'));
   });
 
   afterEach(() => {
-    fs.rmSync(tempDir, { recursive: true, force: true });
+    rmSync(tempDir, { recursive: true, force: true });
   });
 
   describe('with tsconfig.json path', () => {
@@ -155,12 +155,12 @@ describe('findTodoFunctions', () => {
   let project: Project;
 
   beforeEach(() => {
-    tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'todo-test-'));
+    tempDir = mkdtempSync(path.join(os.tmpdir(), 'todo-test-'));
     project = createProject();
   });
 
   afterEach(() => {
-    fs.rmSync(tempDir, { recursive: true, force: true });
+    rmSync(tempDir, { recursive: true, force: true });
   });
 
   function addSourceFile(filename: string, content: string): string {
@@ -556,12 +556,12 @@ describe('injectFunctionBody', () => {
   let project: Project;
 
   beforeEach(() => {
-    tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'inject-test-'));
+    tempDir = mkdtempSync(path.join(os.tmpdir(), 'inject-test-'));
     project = createProject();
   });
 
   afterEach(() => {
-    fs.rmSync(tempDir, { recursive: true, force: true });
+    rmSync(tempDir, { recursive: true, force: true });
   });
 
   function addSourceFile(filename: string, content: string): string {
@@ -1079,12 +1079,12 @@ describe('orderByDependency', () => {
   let project: Project;
 
   beforeEach(() => {
-    tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'topo-test-'));
+    tempDir = mkdtempSync(path.join(os.tmpdir(), 'topo-test-'));
     project = createProject();
   });
 
   afterEach(() => {
-    fs.rmSync(tempDir, { recursive: true, force: true });
+    rmSync(tempDir, { recursive: true, force: true });
   });
 
   function addSourceFile(filename: string, content: string): string {
@@ -1723,11 +1723,11 @@ describe('inspectAst', () => {
   let tempDir: string;
 
   beforeEach(() => {
-    tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'inspect-test-'));
+    tempDir = mkdtempSync(path.join(os.tmpdir(), 'inspect-test-'));
   });
 
   afterEach(() => {
-    fs.rmSync(tempDir, { recursive: true, force: true });
+    rmSync(tempDir, { recursive: true, force: true });
   });
 
   function createSourceFile(filename: string, content: string): string {

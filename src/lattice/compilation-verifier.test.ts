@@ -13,7 +13,7 @@
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import * as fs from 'node:fs/promises';
+import { mkdtemp, rm } from 'node:fs/promises';
 import * as path from 'node:path';
 import * as os from 'node:os';
 import { safeWriteFile, safeMkdir } from '../utils/safe-fs.js';
@@ -61,12 +61,12 @@ describe('CompilationVerifier', () => {
   let tempDir: string;
 
   beforeEach(async () => {
-    tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'compilation-verifier-test-'));
+    tempDir = await mkdtemp(path.join(os.tmpdir(), 'compilation-verifier-test-'));
     mockRunTypeCheck.mockReset();
   });
 
   afterEach(async () => {
-    await fs.rm(tempDir, { recursive: true, force: true });
+    await rm(tempDir, { recursive: true, force: true });
   });
 
   describe('categorizeError', () => {

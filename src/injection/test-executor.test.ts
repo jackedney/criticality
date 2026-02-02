@@ -12,7 +12,7 @@
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import * as fs from 'node:fs/promises';
+import { mkdtemp, rm } from 'node:fs/promises';
 import * as path from 'node:path';
 import * as os from 'node:os';
 import {
@@ -157,11 +157,11 @@ describe('findTestFile', () => {
   let tempDir: string;
 
   beforeEach(async () => {
-    tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'test-executor-'));
+    tempDir = await mkdtemp(path.join(os.tmpdir(), 'test-executor-'));
   });
 
   afterEach(async () => {
-    await fs.rm(tempDir, { recursive: true, force: true });
+    await rm(tempDir, { recursive: true, force: true });
   });
 
   it('should find .test.ts file in same directory', async () => {
@@ -443,13 +443,13 @@ describe('executeFunctionTest', () => {
   let tempDir: string;
 
   beforeEach(async () => {
-    tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'test-executor-'));
+    tempDir = await mkdtemp(path.join(os.tmpdir(), 'test-executor-'));
     mockRunTypeCheck.mockReset();
     mockRunTests.mockReset();
   });
 
   afterEach(async () => {
-    await fs.rm(tempDir, { recursive: true, force: true });
+    await rm(tempDir, { recursive: true, force: true });
   });
 
   it('should pass when compilation and tests pass', async () => {
@@ -624,13 +624,13 @@ describe('executeFunctionTestsBatch', () => {
   let tempDir: string;
 
   beforeEach(async () => {
-    tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'test-executor-'));
+    tempDir = await mkdtemp(path.join(os.tmpdir(), 'test-executor-'));
     mockRunTypeCheck.mockReset();
     mockRunTests.mockReset();
   });
 
   afterEach(async () => {
-    await fs.rm(tempDir, { recursive: true, force: true });
+    await rm(tempDir, { recursive: true, force: true });
   });
 
   it('should execute tests for multiple functions', async () => {
@@ -832,13 +832,13 @@ describe('deposit function acceptance criteria example', () => {
   let tempDir: string;
 
   beforeEach(async () => {
-    tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'test-executor-'));
+    tempDir = await mkdtemp(path.join(os.tmpdir(), 'test-executor-'));
     mockRunTypeCheck.mockReset();
     mockRunTests.mockReset();
   });
 
   afterEach(async () => {
-    await fs.rm(tempDir, { recursive: true, force: true });
+    await rm(tempDir, { recursive: true, force: true });
   });
 
   it('deposit function injected -> runs deposit.test.ts -> passes -> accepted', async () => {

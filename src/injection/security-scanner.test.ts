@@ -6,7 +6,7 @@
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import * as fc from 'fast-check';
-import * as fs from 'node:fs/promises';
+import { mkdtemp, rm } from 'node:fs/promises';
 import * as path from 'node:path';
 import * as os from 'node:os';
 import {
@@ -287,7 +287,7 @@ describe('security-scanner', () => {
     const projectRoot = process.cwd();
 
     beforeEach(async () => {
-      tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'security-scan-test-'));
+      tempDir = await mkdtemp(path.join(os.tmpdir(), 'security-scan-test-'));
       const nodeModulesPath = path.join(projectRoot, 'node_modules');
       const type = process.platform === 'win32' ? 'junction' : 'dir';
       await safeSymlink(nodeModulesPath, path.join(tempDir, 'node_modules'), type);
@@ -300,7 +300,7 @@ describe('security-scanner', () => {
     });
 
     afterEach(async () => {
-      await fs.rm(tempDir, { recursive: true, force: true });
+      await rm(tempDir, { recursive: true, force: true });
     });
 
     it('detects eval() usage in vulnerable code', async () => {

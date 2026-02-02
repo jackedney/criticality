@@ -4,7 +4,7 @@
 
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import fc from 'fast-check';
-import * as fs from 'node:fs/promises';
+import { mkdtemp, rm } from 'node:fs/promises';
 import * as path from 'node:path';
 import * as os from 'node:os';
 import { safeReadFile, safeWriteFile, safeMkdir, safeStat } from '../utils/safe-fs.js';
@@ -395,11 +395,11 @@ describe('writeModuleStructure', () => {
   let tempDir: string;
 
   beforeEach(async () => {
-    tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'lattice-test-'));
+    tempDir = await mkdtemp(path.join(os.tmpdir(), 'lattice-test-'));
   });
 
   afterEach(async () => {
-    await fs.rm(tempDir, { recursive: true, force: true });
+    await rm(tempDir, { recursive: true, force: true });
   });
 
   it('should write generated files to disk', async () => {
@@ -448,7 +448,7 @@ describe('generateAndWriteModuleStructure', () => {
   let specPath: string;
 
   beforeEach(async () => {
-    tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'lattice-full-test-'));
+    tempDir = await mkdtemp(path.join(os.tmpdir(), 'lattice-full-test-'));
     specPath = path.join(tempDir, 'spec.toml');
 
     // Write a test spec file
@@ -480,7 +480,7 @@ methods = [
   });
 
   afterEach(async () => {
-    await fs.rm(tempDir, { recursive: true, force: true });
+    await rm(tempDir, { recursive: true, force: true });
   });
 
   it('should generate and write module structure from spec file', async () => {
@@ -521,11 +521,11 @@ describe('detectProjectConventions', () => {
   let tempDir: string;
 
   beforeEach(async () => {
-    tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'conventions-test-'));
+    tempDir = await mkdtemp(path.join(os.tmpdir(), 'conventions-test-'));
   });
 
   afterEach(async () => {
-    await fs.rm(tempDir, { recursive: true, force: true });
+    await rm(tempDir, { recursive: true, force: true });
   });
 
   it('should detect src directory', async () => {

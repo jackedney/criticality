@@ -11,7 +11,7 @@
  */
 
 import * as path from 'node:path';
-import * as fs from 'node:fs/promises';
+import { access } from 'node:fs/promises';
 import {
   runTests,
   type TestRunOptions,
@@ -147,7 +147,7 @@ export async function findTestFile(sourceFilePath: string): Promise<string | und
 
   for (const candidate of candidates) {
     try {
-      await fs.access(candidate);
+      await access(candidate);
       return candidate;
     } catch {
       // File doesn't exist, try next candidate

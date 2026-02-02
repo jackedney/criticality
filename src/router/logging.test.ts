@@ -4,7 +4,7 @@
 
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import * as fc from 'fast-check';
-import * as fs from 'node:fs';
+import { mkdtempSync, rmSync, existsSync, readFileSync, writeFileSync } from 'node:fs';
 import * as path from 'node:path';
 import * as os from 'node:os';
 import {
@@ -23,11 +23,11 @@ describe('ModelLogger', () => {
   let tempDir: string;
 
   beforeEach(() => {
-    tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'model-logger-test-'));
+    tempDir = mkdtempSync(path.join(os.tmpdir(), 'model-logger-test-'));
   });
 
   afterEach(() => {
-    fs.rmSync(tempDir, { recursive: true, force: true });
+    rmSync(tempDir, { recursive: true, force: true });
   });
 
   describe('isValidModelLogLevel', () => {
@@ -118,7 +118,7 @@ describe('ModelLogger', () => {
       const logPath = path.join(logDir, 'test.log');
       createModelLogger({ logFilePath: logPath, createDirectory: true });
       // eslint-disable-next-line security/detect-non-literal-fs-filename -- test file: path constructed from temp directory
-      expect(fs.existsSync(logDir)).toBe(true);
+      expect(existsSync(logDir)).toBe(true);
     });
   });
 
@@ -423,9 +423,9 @@ describe('ModelLogger', () => {
       await logger.logRequest(request);
 
       // eslint-disable-next-line security/detect-non-literal-fs-filename -- test file: path constructed from temp directory
-      expect(fs.existsSync(logPath)).toBe(true);
+      expect(existsSync(logPath)).toBe(true);
       // eslint-disable-next-line security/detect-non-literal-fs-filename -- test file: path constructed from temp directory
-      const content = fs.readFileSync(logPath, 'utf8');
+      const content = readFileSync(logPath, 'utf8');
       expect(content).toContain('"type":"request"');
     });
 
@@ -440,7 +440,7 @@ describe('ModelLogger', () => {
       await logger.logRequest({ modelAlias: 'architect', prompt: 'Prompt 2' });
 
       // eslint-disable-next-line security/detect-non-literal-fs-filename -- test file: path constructed from temp directory
-      const content = fs.readFileSync(logPath, 'utf8');
+      const content = readFileSync(logPath, 'utf8');
       const lines = content.trim().split('\n');
       expect(lines).toHaveLength(2);
     });
@@ -455,7 +455,7 @@ describe('ModelLogger', () => {
       await logger.logRequest({ modelAlias: 'worker', prompt: 'Test' });
 
       // eslint-disable-next-line security/detect-non-literal-fs-filename -- test file: path constructed from temp directory
-      expect(fs.existsSync(logPath)).toBe(true);
+      expect(existsSync(logPath)).toBe(true);
     });
 
     it('does not write when log level is none', async () => {
@@ -468,7 +468,7 @@ describe('ModelLogger', () => {
       await logger.logRequest({ modelAlias: 'worker', prompt: 'Test' });
 
       // eslint-disable-next-line security/detect-non-literal-fs-filename -- test file: path constructed from temp directory
-      expect(fs.existsSync(logPath)).toBe(false);
+      expect(existsSync(logPath)).toBe(false);
     });
   });
 
@@ -503,7 +503,7 @@ describe('ModelLogger', () => {
     it('skips malformed lines', () => {
       const logPath = path.join(tempDir, 'malformed.log');
       // eslint-disable-next-line security/detect-non-literal-fs-filename -- test file: path constructed from temp directory
-      fs.writeFileSync(logPath, '{"type":"request"}\nnot json\n{"type":"response"}\n');
+      writeFileSync(logPath, '{"type":"request"}\nnot json\n{"type":"response"}\n');
 
       const entries = readLogFile(logPath);
       expect(entries).toHaveLength(2);
@@ -512,7 +512,7 @@ describe('ModelLogger', () => {
     it('handles empty lines', () => {
       const logPath = path.join(tempDir, 'empty-lines.log');
       // eslint-disable-next-line security/detect-non-literal-fs-filename -- test file: path constructed from temp directory
-      fs.writeFileSync(logPath, '{"type":"request"}\n\n\n{"type":"response"}\n');
+      writeFileSync(logPath, '{"type":"request"}\n\n\n{"type":"response"}\n');
 
       const entries = readLogFile(logPath);
       expect(entries).toHaveLength(2);
@@ -644,7 +644,7 @@ describe('ModelLogger', () => {
 
       // Verify no file created
       // eslint-disable-next-line security/detect-non-literal-fs-filename -- test file: path constructed from temp directory
-      expect(fs.existsSync(logPath)).toBe(false);
+      expect(existsSync(logPath)).toBe(false);
     });
   });
 
