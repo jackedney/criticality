@@ -7,6 +7,7 @@
  * @packageDocumentation
  */
 
+import { TypedMap } from '../utils/typed-map.js';
 import type { ModelAlias, ModelRouterRequest } from './types.js';
 
 /**
@@ -85,7 +86,7 @@ export interface ModelContextLimits {
 /**
  * Known model context limits from SPECIFICATION.md.
  */
-export const MODEL_CONTEXT_LIMITS: Readonly<Record<string, ModelContextLimits>> = {
+export const MODEL_CONTEXT_LIMITS: TypedMap<string, ModelContextLimits> = TypedMap.fromObject({
   'minimax-m2': { maxInputTokens: 16000, maxOutputTokens: 4000 },
   'minimax-m2.1': { maxInputTokens: 16000, maxOutputTokens: 4000 },
   'minimax-text-01': { maxInputTokens: 16000, maxOutputTokens: 4000 },
@@ -96,7 +97,7 @@ export const MODEL_CONTEXT_LIMITS: Readonly<Record<string, ModelContextLimits>> 
   'claude-sonnet-4-20250514': { maxInputTokens: 200000, maxOutputTokens: 16000 },
   'claude-opus-4-5': { maxInputTokens: 200000, maxOutputTokens: 32000 },
   'claude-opus-4-20250514': { maxInputTokens: 200000, maxOutputTokens: 32000 },
-} as const;
+});
 
 /**
  * Default limits for unknown models.
@@ -278,13 +279,13 @@ export function getModelLimits(modelId: string): ModelContextLimits {
   const normalizedId = modelId.toLowerCase();
 
   // Check for exact match first
-  const exactMatch = MODEL_CONTEXT_LIMITS[normalizedId];
+  const exactMatch = MODEL_CONTEXT_LIMITS.get(normalizedId);
   if (exactMatch !== undefined) {
     return exactMatch;
   }
 
   // Check for partial match (model family)
-  for (const [key, limits] of Object.entries(MODEL_CONTEXT_LIMITS)) {
+  for (const [key, limits] of MODEL_CONTEXT_LIMITS.entries()) {
     if (normalizedId.includes(key) || key.includes(normalizedId)) {
       return limits;
     }

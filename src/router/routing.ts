@@ -8,6 +8,7 @@
  * @packageDocumentation
  */
 
+import { TypedMap } from '../utils/typed-map.js';
 import type { ModelAlias, ModelRouterRequest } from './types.js';
 import { defaultTokenCounter, type TokenCounter } from './context.js';
 
@@ -140,13 +141,13 @@ export interface RoutingDecision {
 /**
  * Map from task type to base model alias.
  */
-export const TASK_TYPE_TO_BASE_MODEL: Readonly<Record<TaskType, ModelAlias>> = {
-  implement: 'worker',
-  audit: 'auditor',
-  transform: 'worker',
-  synthesize: 'architect',
-  structure: 'structurer',
-} as const;
+export const TASK_TYPE_TO_BASE_MODEL: TypedMap<TaskType, ModelAlias> = TypedMap.fromEntries([
+  ['implement', 'worker'],
+  ['audit', 'auditor'],
+  ['transform', 'worker'],
+  ['synthesize', 'architect'],
+  ['structure', 'structurer'],
+]);
 
 /**
  * Calculate signature complexity using the formula from SPECIFICATION.md.
@@ -198,7 +199,7 @@ export function calculateSignatureComplexity(params: SignatureComplexityParams):
  * @returns The base model alias for this task type.
  */
 export function getBaseModel(taskType: TaskType): ModelAlias {
-  return TASK_TYPE_TO_BASE_MODEL[taskType];
+  return TASK_TYPE_TO_BASE_MODEL.get(taskType) ?? 'worker';
 }
 
 /**
@@ -381,7 +382,7 @@ export function routeRequest(
  * @returns True if the task type uses worker model.
  */
 export function isWorkerTask(taskType: TaskType): boolean {
-  return TASK_TYPE_TO_BASE_MODEL[taskType] === 'worker';
+  return (TASK_TYPE_TO_BASE_MODEL.get(taskType) ?? 'worker') === 'worker';
 }
 
 /**
