@@ -242,7 +242,10 @@ export function safeReaddir(
   filePath: string,
   options?: { encoding?: BufferEncoding | null; withFileTypes?: true; recursive?: boolean }
 ): Promise<import('node:fs').Dirent[]>;
-export async function safeReaddir(filePath: string, options?: unknown): Promise<unknown> {
+export async function safeReaddir(
+  filePath: string,
+  options?: { encoding?: BufferEncoding | null; withFileTypes?: true; recursive?: boolean }
+): Promise<string[] | import('node:fs').Dirent[]> {
   const validatedPath = validatePath(filePath);
 
   return (
