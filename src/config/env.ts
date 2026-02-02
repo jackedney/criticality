@@ -278,6 +278,7 @@ export function readEnvOverrides(
   const errors: EnvCoercionError[] = [];
 
   for (const [envVar, mapping] of Object.entries(ENV_VAR_MAPPINGS)) {
+    // eslint-disable-next-line security/detect-object-injection -- safe: envVar comes from Object.entries iteration over controlled ENV_VAR_MAPPINGS
     const value = env[envVar];
 
     if (value === undefined || value === '') {

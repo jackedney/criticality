@@ -247,7 +247,9 @@ function mapSpecTypeToTypeScript(specType: string): string {
   const lowerType = specType.toLowerCase();
 
   // Check direct mapping
+  // eslint-disable-next-line security/detect-object-injection -- safe: lowerType derived from controlled specType string
   if (typeMap[lowerType] !== undefined) {
+    // eslint-disable-next-line security/detect-object-injection -- safe: lowerType derived from controlled specType string
     return typeMap[lowerType];
   }
 
@@ -1031,8 +1033,10 @@ export function generateDomainTypeDefinitions(
 
   if (spec.data_models !== undefined) {
     for (const modelName of domainModels) {
+      // eslint-disable-next-line security/detect-object-injection -- safe: modelName comes from domainModels parameter array
       const model = spec.data_models[modelName];
       if (model !== undefined) {
+        // eslint-disable-next-line security/detect-object-injection -- safe: modelName comes from domainModels parameter array
         filteredDataModels[modelName] = model;
       }
     }
@@ -1041,6 +1045,7 @@ export function generateDomainTypeDefinitions(
   // Collect all type references from domain models to determine which enums and witnesses to include
   const referencedTypes = new Set<string>();
   for (const modelName of Object.keys(filteredDataModels)) {
+    // eslint-disable-next-line security/detect-object-injection -- safe: modelName comes from Object.keys iteration over controlled source
     const model = filteredDataModels[modelName];
     if (model === undefined) {
       continue;
@@ -1060,6 +1065,7 @@ export function generateDomainTypeDefinitions(
   if (spec.enums !== undefined) {
     for (const [enumName, enumDef] of Object.entries(spec.enums)) {
       if (referencedTypes.has(enumName)) {
+        // eslint-disable-next-line security/detect-object-injection -- safe: enumName comes from Object.entries iteration over controlled source
         filteredEnums[enumName] = enumDef;
       }
     }
@@ -1070,6 +1076,7 @@ export function generateDomainTypeDefinitions(
   if (spec.witnesses !== undefined) {
     for (const [witnessKey, witnessDef] of Object.entries(spec.witnesses)) {
       if (referencedTypes.has(witnessDef.name)) {
+        // eslint-disable-next-line security/detect-object-injection -- safe: witnessKey comes from Object.entries iteration over controlled source
         filteredWitnesses[witnessKey] = witnessDef;
       }
     }

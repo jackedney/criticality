@@ -483,6 +483,7 @@ describe('ClaudeCodeClient', () => {
 
       await client.prompt(alias, 'Hello');
 
+      // eslint-disable-next-line security/detect-object-injection -- safe: alias comes from each loop over controlled test data
       const expectedModel = config.models[aliasToConfig[alias]];
       expect(mockExeca).toHaveBeenCalledWith(
         'claude',

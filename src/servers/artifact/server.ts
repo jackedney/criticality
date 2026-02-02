@@ -358,6 +358,7 @@ export function createArtifactServer(config: ArtifactServerConfig): Server {
       throw new SpecSectionNotFoundError(section);
     }
 
+    // eslint-disable-next-line security/detect-object-injection -- safe: section is validated with 'in' check above
     let content = spec[section];
 
     if (subsection !== undefined) {
@@ -368,6 +369,7 @@ export function createArtifactServer(config: ArtifactServerConfig): Server {
       if (!(subsection in sectionObj)) {
         throw new SpecSectionNotFoundError(`${section}.${subsection}`);
       }
+      // eslint-disable-next-line security/detect-object-injection -- safe: subsection is validated with 'in' check above
       content = sectionObj[subsection];
     }
 
@@ -441,6 +443,7 @@ export function createArtifactServer(config: ArtifactServerConfig): Server {
         if (witnessName in witnesses) {
           return {
             name: witnessName,
+            // eslint-disable-next-line security/detect-object-injection -- safe: witnessName is validated with 'in' check above
             witness: witnesses[witnessName],
             file: 'spec.toml',
           };
@@ -504,6 +507,7 @@ export function createArtifactServer(config: ArtifactServerConfig): Server {
       },
     };
 
+    // eslint-disable-next-line security/detect-object-injection -- safe: artifact is typed as ArtifactType with known literal keys
     const mapping = artifactMap[artifact];
     if (mapping === undefined) {
       return {

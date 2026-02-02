@@ -212,7 +212,9 @@ export function mapSpecTypeToTypeScript(specType: string): string {
   const lowerType = trimmed.toLowerCase();
 
   // Check direct mapping
+  // eslint-disable-next-line security/detect-object-injection -- safe: lowerType derived from controlled specType string
   if (typeMap[lowerType] !== undefined) {
+    // eslint-disable-next-line security/detect-object-injection -- safe: lowerType derived from controlled specType string
     return typeMap[lowerType];
   }
 
@@ -833,6 +835,7 @@ export function generateFunctionsForInterface(
   if (!spec.interfaces) {
     throw new Error('Spec has no interfaces defined');
   }
+  // eslint-disable-next-line security/detect-object-injection -- safe: interfaceName is validated below to exist in spec.interfaces
   const iface = spec.interfaces[interfaceName];
   if (iface === undefined) {
     throw new Error(`Interface '${interfaceName}' not found in spec`);

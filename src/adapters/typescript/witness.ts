@@ -119,6 +119,7 @@ function validateBaseType(baseType: string): void {
   let parentheses = 0;
 
   for (let i = 0; i < trimmed.length; i++) {
+    // eslint-disable-next-line security/detect-object-injection -- safe: i is bounded numeric loop counter
     const char = trimmed[i];
     const prevChar = i > 0 ? trimmed[i - 1] : '';
 
@@ -533,6 +534,7 @@ function splitByTopLevelOperator(str: string, operator: string): string[] {
   let current = '';
 
   for (let i = 0; i < str.length; i++) {
+    // eslint-disable-next-line security/detect-object-injection -- safe: i is bounded numeric loop counter
     const char = str[i] ?? '';
 
     // Track nesting depth - only parentheses, brackets, and braces

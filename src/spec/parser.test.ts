@@ -961,6 +961,7 @@ variants = [${variants.map((v) => `"${v}"`).join(', ')}]
             const specVariants = spec.enums?.Status?.variants ?? [];
             return (
               specVariants.length === variants.length &&
+              // eslint-disable-next-line security/detect-object-injection -- safe: i is numeric index from .every() callback
               variants.every((v, i) => specVariants[i] === v)
             );
           }

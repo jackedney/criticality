@@ -582,6 +582,7 @@ describe('Property-based tests for inferDomainBoundaries', () => {
     if (modelNames.length > 0) {
       spec.data_models = {};
       for (const name of modelNames) {
+        // eslint-disable-next-line security/detect-object-injection -- safe: name comes from controlled test data array
         spec.data_models[name] = {
           fields: [{ name: 'id', type: 'string' }],
         };
@@ -591,6 +592,7 @@ describe('Property-based tests for inferDomainBoundaries', () => {
     if (interfaceNames.length > 0) {
       spec.interfaces = {};
       for (const name of interfaceNames) {
+        // eslint-disable-next-line security/detect-object-injection -- safe: name comes from controlled test data array
         spec.interfaces[name] = {
           methods: [{ name: 'get', returns: 'void' }],
         };

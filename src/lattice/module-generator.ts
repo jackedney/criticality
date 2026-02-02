@@ -591,8 +591,10 @@ function generateDomainModule(
   const domainDataModels: Record<string, SpecDataModel> = {};
   if (spec.data_models !== undefined) {
     for (const modelName of domain.dataModels) {
+      // eslint-disable-next-line security/detect-object-injection -- safe: modelName comes from domain.dataModels which is internal config
       const model = spec.data_models[modelName];
       if (model !== undefined) {
+        // eslint-disable-next-line security/detect-object-injection -- safe: modelName comes from domain.dataModels which is internal config
         domainDataModels[modelName] = model;
       }
     }
@@ -612,8 +614,10 @@ function generateDomainModule(
   const domainInterfaces: Record<string, SpecInterface> = {};
   if (spec.interfaces !== undefined) {
     for (const interfaceName of domain.interfaces) {
+      // eslint-disable-next-line security/detect-object-injection -- safe: interfaceName comes from domain.interfaces which is internal config
       const iface = spec.interfaces[interfaceName];
       if (iface !== undefined) {
+        // eslint-disable-next-line security/detect-object-injection -- safe: interfaceName comes from domain.interfaces which is internal config
         domainInterfaces[interfaceName] = iface;
       }
     }

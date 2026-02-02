@@ -337,6 +337,7 @@ describe('Spec Generator', () => {
 
       const featureKey = featureKeys[0];
       if (featureKey !== undefined) {
+        // eslint-disable-next-line security/detect-object-injection -- safe: featureKey comes from Object.keys iteration over controlled source
         const specFeature = spec.features?.[featureKey];
         expect(specFeature?.name).toBe('User Authentication');
         expect(specFeature?.description).toBe('Allows users to log in with email and password');
@@ -368,6 +369,7 @@ describe('Spec Generator', () => {
       const featureKeys = Object.keys(spec.features ?? {});
       const featureKey = featureKeys[0];
       if (featureKey !== undefined) {
+        // eslint-disable-next-line security/detect-object-injection -- safe: featureKey comes from Object.keys iteration over controlled source
         const specFeature = spec.features?.[featureKey];
         expect(specFeature?.classification).toBe('foundational');
         expect(specFeature?.rationale).toBeUndefined();

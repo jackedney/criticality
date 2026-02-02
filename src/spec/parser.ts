@@ -339,6 +339,7 @@ function parseEnums(
       specEnum.description = validateString(def.description, `enums.${enumName}.description`);
     }
 
+    // eslint-disable-next-line security/detect-object-injection -- safe: enumName comes from Object.entries iteration over parsed TOML
     enums[enumName] = specEnum;
   }
 
@@ -427,6 +428,7 @@ function parseDataModels(
       );
     }
 
+    // eslint-disable-next-line security/detect-object-injection -- safe: modelName comes from Object.entries iteration over parsed TOML
     dataModels[modelName] = dataModel;
   }
 
@@ -509,6 +511,7 @@ function parseInterfaces(
       iface.description = validateString(def.description, `interfaces.${ifaceName}.description`);
     }
 
+    // eslint-disable-next-line security/detect-object-injection -- safe: ifaceName comes from Object.entries iteration over parsed TOML
     interfaces[ifaceName] = iface;
   }
 
@@ -637,6 +640,7 @@ function parseClaims(
   const claims: Record<string, SpecClaim> = {};
 
   for (const [claimName, claimDef] of Object.entries(raw)) {
+    // eslint-disable-next-line security/detect-object-injection -- safe: claimName comes from Object.entries iteration over parsed TOML
     claims[claimName] = parseClaim(claimDef as Record<string, unknown>, `claims.${claimName}`);
   }
 
@@ -795,6 +799,7 @@ function parseWitnesses(
       );
     }
 
+    // eslint-disable-next-line security/detect-object-injection -- safe: witnessName comes from Object.entries iteration over parsed TOML
     witnesses[witnessName] = witness;
   }
 

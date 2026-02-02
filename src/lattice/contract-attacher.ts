@@ -768,10 +768,12 @@ export function attachContractsForInterface(
   interfaceName: string,
   options: ContractAttachmentOptions = {}
 ): ContractAttachmentResult {
+  // eslint-disable-next-line security/detect-object-injection -- safe: interfaceName is validated to exist in spec.interfaces
   if (spec.interfaces?.[interfaceName] === undefined) {
     throw new Error(`Interface '${interfaceName}' not found in spec`);
   }
 
+  // eslint-disable-next-line security/detect-object-injection -- safe: interfaceName is validated above
   const iface = spec.interfaces[interfaceName];
 
   // Create a filtered spec with only the requested interface
@@ -900,6 +902,7 @@ export function attachContractsToCode(
 
   // Process matches in reverse order to preserve indices
   for (let i = matches.length - 1; i >= 0; i--) {
+    // eslint-disable-next-line security/detect-object-injection -- safe: i is bounded numeric loop counter
     const m = matches[i];
     if (m === undefined) {
       continue;

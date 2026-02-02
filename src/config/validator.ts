@@ -244,6 +244,7 @@ function validateModels(
   ];
 
   for (const field of modelFields) {
+    // eslint-disable-next-line security/detect-object-injection -- safe: field is keyof Config['models'] with known literal keys
     validateModelName(config.models[field], `models.${field}`, errors, allowUnrecognized);
   }
 }
@@ -259,6 +260,7 @@ function validatePaths(config: Config, errors: ValidationError[], pathChecker: P
   // Directory paths
   const directoryFields: (keyof Config['paths'])[] = ['specs', 'archive', 'logs', 'ledger'];
   for (const field of directoryFields) {
+    // eslint-disable-next-line security/detect-object-injection -- safe: field is keyof Config['paths'] with known literal keys
     validatePathExists(config.paths[field], `paths.${field}`, pathChecker, errors, true);
   }
 

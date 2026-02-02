@@ -133,6 +133,7 @@ function getCategoryPrefix(category: ExtractedRequirement['category']): string {
     constraint: 'const',
     preference: 'pref',
   };
+  // eslint-disable-next-line security/detect-object-injection -- safe: category is ExtractedRequirement['category'] enum with known literal keys
   return prefixes[category];
 }
 
@@ -443,6 +444,7 @@ function convertFeaturesToSpec(features: readonly Feature[]): Record<string, Spe
       specFeature.rationale = feature.classificationRationale;
     }
 
+    // eslint-disable-next-line security/detect-object-injection -- safe: uniqueId is computed from feature.id which comes from internal state
     specFeatures[uniqueId] = specFeature;
   });
 
@@ -521,6 +523,7 @@ export function generateSpec(state: InterviewState, options?: SpecGeneratorOptio
   const claims: Record<string, SpecClaim> = {};
   requirements.forEach((req, index) => {
     const { id, claim } = extractClaimFromRequirement(req, index);
+    // eslint-disable-next-line security/detect-object-injection -- safe: id is generated from extractClaimFromRequirement on internal data
     claims[id] = claim;
   });
   if (Object.keys(claims).length > 0) {

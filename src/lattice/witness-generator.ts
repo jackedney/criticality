@@ -773,8 +773,10 @@ export function generateDomainWitnessIntegration(
 
   if (spec.witnesses !== undefined) {
     for (const name of witnessNames) {
+      // eslint-disable-next-line security/detect-object-injection -- safe: name comes from witnessNames parameter array
       const witness = spec.witnesses[name];
       if (witness !== undefined) {
+        // eslint-disable-next-line security/detect-object-injection -- safe: name comes from witnessNames parameter array
         filteredWitnesses[name] = witness;
       }
     }

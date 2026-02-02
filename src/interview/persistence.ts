@@ -477,6 +477,7 @@ export function deserializeInterviewState(json: string): InterviewState {
     );
   }
   for (let i = 0; i < obj.completedPhases.length; i++) {
+    // eslint-disable-next-line security/detect-object-injection -- safe: i is bounded numeric loop counter
     validatePhase(obj.completedPhases[i], `completedPhases[${String(i)}]`);
   }
 
@@ -488,6 +489,7 @@ export function deserializeInterviewState(json: string): InterviewState {
     );
   }
   for (let i = 0; i < obj.extractedRequirements.length; i++) {
+    // eslint-disable-next-line security/detect-object-injection -- safe: i is bounded numeric loop counter
     validateExtractedRequirement(obj.extractedRequirements[i], i);
   }
 
@@ -499,6 +501,7 @@ export function deserializeInterviewState(json: string): InterviewState {
     );
   }
   for (let i = 0; i < obj.features.length; i++) {
+    // eslint-disable-next-line security/detect-object-injection -- safe: i is bounded numeric loop counter
     validateFeature(obj.features[i], i);
   }
 
@@ -510,6 +513,7 @@ export function deserializeInterviewState(json: string): InterviewState {
     );
   }
   for (let i = 0; i < obj.delegationPoints.length; i++) {
+    // eslint-disable-next-line security/detect-object-injection -- safe: i is bounded numeric loop counter
     validateDelegationPoint(obj.delegationPoints[i], i);
   }
 
@@ -857,6 +861,7 @@ export async function loadTranscript(projectId: string): Promise<TranscriptEntry
   const entries: TranscriptEntry[] = [];
 
   for (let i = 0; i < lines.length; i++) {
+    // eslint-disable-next-line security/detect-object-injection -- safe: i is bounded numeric loop counter
     const line = lines[i];
     if (line !== undefined) {
       entries.push(deserializeTranscriptEntry(line, i + 1));

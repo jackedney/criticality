@@ -325,6 +325,7 @@ export function determineOverflowStrategy(
       fallback: null,
     };
 
+    // eslint-disable-next-line security/detect-object-injection -- safe: currentModel is typed as ModelAlias with known literal keys
     const target = upgradeTargets[currentModel];
     if (target !== null) {
       return {
@@ -570,6 +571,7 @@ export function truncatePrompt(
 
     // Clear the section in the truncated prompt
     // We need to cast to mutable since StructuredPrompt has optional readonly fields
+    // eslint-disable-next-line security/detect-object-injection -- safe: sectionName comes from sortByTruncationPriority over controlled TruncatableSection enum
     (truncatedPrompt as unknown as Record<string, unknown>)[sectionName] = undefined;
   }
 
@@ -793,6 +795,7 @@ export function isTruncatableSection(
  * @returns Priority number (higher = more important, less likely to be truncated).
  */
 export function getSectionPriority(section: TruncatableSection): number {
+  // eslint-disable-next-line security/detect-object-injection -- safe: section is typed as TruncatableSection enum with known literal keys
   return SECTION_PRIORITY[section];
 }
 
