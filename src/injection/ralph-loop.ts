@@ -594,30 +594,31 @@ export class RalphLoop {
       const securityScanResult = await this.runSecurityVerification(todoFunction);
 
       if (securityScanResult.hasCriticalVulnerabilities) {
-        const failure = securityScanToFailure(securityScanResult);
+        const failure = securityScanToFailure(securityScanResult) ?? {
+          type: 'security' as const,
+          vulnerability: 'injection' as const,
+        };
 
-        if (failure !== undefined) {
-          // Rollback: restore original file
-          await safeWriteFile(todoFunction.filePath, originalContent, 'utf-8');
-          void project.getSourceFile(todoFunction.filePath)?.refreshFromFileSystem();
+        // Rollback: restore original file
+        await safeWriteFile(todoFunction.filePath, originalContent, 'utf-8');
+        void project.getSourceFile(todoFunction.filePath)?.refreshFromFileSystem();
 
-          const vulnSummary = securityScanResult.vulnerabilities
-            .filter((v) => v.severity === 'critical')
-            .slice(0, 3)
-            .map((v) => `${v.cweId ?? 'unknown'}: ${v.message}`)
-            .join('; ');
+        const vulnSummary = securityScanResult.vulnerabilities
+          .filter((v) => v.severity === 'critical')
+          .slice(0, 3)
+          .map((v) => `${v.cweId ?? 'unknown'}: ${v.message}`)
+          .join('; ');
 
-          return {
-            function: todoFunction,
-            accepted: false,
-            generatedBody,
-            compilationResult,
-            securityScanResult,
-            rejectionReason: `Security vulnerabilities: ${vulnSummary}`,
-            failureType: failure,
-            durationMs: Date.now() - startTime,
-          };
-        }
+        return {
+          function: todoFunction,
+          accepted: false,
+          generatedBody,
+          compilationResult,
+          securityScanResult,
+          rejectionReason: `Security vulnerabilities: ${vulnSummary}`,
+          failureType: failure,
+          durationMs: Date.now() - startTime,
+        };
       }
 
       // Verify tests (only if compilation passes and no critical vulnerabilities)
