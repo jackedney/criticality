@@ -481,18 +481,32 @@ export function orderByDependency(functions: TodoFunction[], project: Project): 
     return [];
   }
 
-  // Get all source files from the project
-  const allFunctions: FunctionLike[] = [];
-  for (const sourceFile of project.getSourceFiles()) {
-    const filePath = sourceFile.getFilePath();
-    if (filePath.includes('node_modules') || filePath.endsWith('.d.ts')) {
+  // Optimize: Only analyze files that contain the TODO functions we are interested in
+  // instead of scanning the entire project. This significantly reduces AST traversal overhead.
+  const relevantFiles = new Set(functions.map((f) => f.filePath));
+  const functionNames = new Set(functions.map((f) => f.name));
+  const relevantAstNodes: FunctionLike[] = [];
+
+  for (const filePath of relevantFiles) {
+    const sourceFile = project.getSourceFile(filePath);
+    if (!sourceFile) {
       continue;
     }
-    allFunctions.push(...collectFunctions(sourceFile));
+
+    // Collect all functions in the file, but only keep the ones we care about for the call graph
+    const fileFunctions = collectFunctions(sourceFile);
+    for (const func of fileFunctions) {
+      if (functionNames.has(getFunctionName(func))) {
+        relevantAstNodes.push(func);
+      }
+    }
   }
 
-  // Build call graph from all functions
-  const callGraph = buildCallGraph(allFunctions);
+  // Build call graph from only the relevant functions
+  // Note: buildCallGraph will only track calls TO functions present in the input array.
+  // Since we only pass the AST nodes for our TodoFunctions, it will track dependencies
+  // between TodoFunctions, which is exactly what topologicalSort needs.
+  const callGraph = buildCallGraph(relevantAstNodes);
 
   // Perform topological sort
   return topologicalSort(functions, callGraph);
