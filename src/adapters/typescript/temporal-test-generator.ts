@@ -244,9 +244,7 @@ export function generateTemporalTest(claim: Claim, options: TemporalTestOptions 
     lines.push(`    '${escapedTestName}',`);
     lines.push('    () => {');
     lines.push(generateTestBody(claim));
-    lines.push('    },');
-    lines.push(`    { timeout: ${String(timeout)} }`);
-    lines.push('  );');
+    lines.push(`    }, { timeout: ${String(timeout)} });`);
 
     // Add individual tests for each linked function
     for (const func of claim.functions) {
