@@ -128,9 +128,14 @@ function generateImports(witnesses: WitnessDefinition[], hasSkippedTests: boolea
  *
  * @param claim - The invariant claim.
  * @param witnesses - Witnesses to use for input generation.
+ * @param numRuns - Number of property test runs.
  * @returns The test property code.
  */
-function generateTestProperty(claim: Claim, witnesses: WitnessDefinition[]): string {
+function generateTestProperty(
+  claim: Claim,
+  witnesses: WitnessDefinition[],
+  numRuns: number
+): string {
   const lines: string[] = [];
 
   // If we have witnesses, use them to generate inputs
@@ -163,6 +168,8 @@ function generateTestProperty(claim: Claim, witnesses: WitnessDefinition[]): str
     lines.push(`          return true;`);
     lines.push(`        }`);
     lines.push(`      ),`);
+    lines.push(`      { numRuns: ${String(numRuns)} }`);
+    lines.push(`    );`);
   } else {
     // No witnesses - use a simple property
     lines.push(`    fc.assert(`);
@@ -175,6 +182,8 @@ function generateTestProperty(claim: Claim, witnesses: WitnessDefinition[]): str
     lines.push(`          return true;`);
     lines.push(`        }`);
     lines.push(`      ),`);
+    lines.push(`      { numRuns: ${String(numRuns)} }`);
+    lines.push(`    );`);
   }
 
   return lines.join('\n');
@@ -296,11 +305,8 @@ export function generateInvariantTest(
     lines.push(`    () => {`);
 
     // Add the property test
-    lines.push(generateTestProperty(claim, witnesses));
+    lines.push(generateTestProperty(claim, witnesses, numRuns));
 
-    // Close the fc.assert call
-    lines.push(`      { numRuns: ${String(numRuns)} }`);
-    lines.push(`    );`);
     lines.push(`  },`);
     lines.push(`  { timeout: ${String(timeout)} }`);
     lines.push(`  );`);
@@ -329,8 +335,7 @@ export function generateInvariantTest(
         lines.push(`          // Assert: Invariant still holds`);
         lines.push(`          return true; // Placeholder`);
         lines.push(`        }`);
-        lines.push(`      ),`);
-        lines.push(`      { numRuns: ${String(numRuns)} }`);
+        lines.push(`      )`);
         lines.push(`    );`);
         lines.push(`  }, { timeout: ${String(timeout)} });`);
       }
