@@ -119,8 +119,9 @@ function validateBaseType(baseType: string): void {
   let parentheses = 0;
 
   for (let i = 0; i < trimmed.length; i++) {
-    const char = trimmed[i];
-    const prevChar = i > 0 ? trimmed[i - 1] : '';
+    // eslint-disable-next-line security/detect-object-injection -- safe: i is bounded numeric loop counter, trimmed is a string
+    const char = trimmed[i] ?? '';
+    const prevChar = i > 0 ? (trimmed[i - 1] ?? '') : '';
 
     switch (char) {
       case '<':
@@ -533,6 +534,7 @@ function splitByTopLevelOperator(str: string, operator: string): string[] {
   let current = '';
 
   for (let i = 0; i < str.length; i++) {
+    // eslint-disable-next-line security/detect-object-injection -- safe: i is bounded numeric loop counter
     const char = str[i] ?? '';
 
     // Track nesting depth - only parentheses, brackets, and braces
@@ -723,7 +725,9 @@ function analyzeBaseArbitrary(baseType: string, invariant?: string): BaseArbitra
   if (trimmed === 'number') {
     // Check for common number invariants that can be optimized
     if (invariant !== undefined) {
+      // eslint-disable-next-line security/detect-unsafe-regex -- Short invariant strings from code analysis
       const minMatch = /value\s*>=?\s*(-?\d+(?:\.\d+)?)/.exec(invariant);
+      // eslint-disable-next-line security/detect-unsafe-regex -- Short invariant strings from code analysis
       const maxMatch = /value\s*<=?\s*(-?\d+(?:\.\d+)?)/.exec(invariant);
 
       // For non-negative numbers, use fc.float with min: 0
@@ -1172,18 +1176,21 @@ function canOptimizeAwayFilter(invariant: string, arbInfo: BaseArbitraryInfo): b
   if (arbInfo.arbitrary.includes('minLength: 1') && /value\.length\s*>\s*0/.test(invariant)) {
     return true;
   }
+
   if (arbInfo.arbitrary.includes('minLength: 1') && /value\.length\s*>=\s*1/.test(invariant)) {
     return true;
   }
 
   // For number constraints with min, check if the invariant is covered
+  // eslint-disable-next-line security/detect-unsafe-regex -- Short arbitrary strings from internal generation
   const minMatch = /min:\s*(-?\d+(?:\.\d+)?)/.exec(arbInfo.arbitrary);
-  if (minMatch !== null) {
+  if (minMatch !== null && minMatch[1] !== undefined) {
     const arbMin = Number(minMatch[1]);
+    // eslint-disable-next-line security/detect-unsafe-regex -- Short invariant strings from code analysis
     const invMinMatch = /value\s*>=\s*(-?\d+(?:\.\d+)?)/.exec(invariant);
-    if (invMinMatch !== null && Number(invMinMatch[1]) === arbMin) {
+    if (invMinMatch !== null && invMinMatch[1] !== undefined && Number(invMinMatch[1]) === arbMin) {
       // The min constraint in the arbitrary matches the invariant
-      // We still need the filter for the type guard, but it will rarely reject
+      // We still need to filter for the type guard, but it will rarely reject
       return false; // Keep filter for type safety, but it's optimized
     }
   }

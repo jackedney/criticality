@@ -3,9 +3,11 @@
  */
 
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import { mkdtemp, rm, readFile, writeFile, mkdir } from 'node:fs/promises';
+import * as fc from 'fast-check';
+import { mkdtemp, rm } from 'node:fs/promises';
 import { join } from 'node:path';
 import { tmpdir, homedir } from 'node:os';
+import { safeReadFile, safeWriteFile, safeMkdir, safeReaddir } from '../utils/safe-fs.js';
 import {
   serializeInterviewState,
   deserializeInterviewState,
@@ -28,6 +30,11 @@ import {
   createInitialInterviewState,
   createTranscriptEntry,
   type InterviewState,
+  type InterviewPhase,
+  type FeatureClassification,
+  type DelegationDecision,
+  type TranscriptRole,
+  type TranscriptEntry,
 } from './types.js';
 
 // Mock homedir to use temp directory for tests
@@ -276,6 +283,453 @@ describe('Interview Persistence', () => {
 
       // Check for 4-space indentation
       expect(json).toContain('    "version"');
+    });
+  });
+
+  describe('Property-based tests', () => {
+    const phases: InterviewPhase[] = [
+      'Discovery',
+      'Architecture',
+      'Constraints',
+      'DesignPreferences',
+      'Synthesis',
+      'Approval',
+    ];
+
+    const featureClassifications: FeatureClassification[] = ['core', 'foundational', 'bolt-on'];
+
+    const delegationDecisions: DelegationDecision[] = ['Continue', 'Delegate', 'DelegateWithNotes'];
+
+    const transcriptRoles: TranscriptRole[] = ['system', 'assistant', 'user'];
+
+    const nonEmptyStringArbitrary = fc
+      .string({ minLength: 1, maxLength: 100 })
+      .filter((s) => s.trim().length > 0);
+
+    const isoDateArbitrary = fc
+      .date({ min: new Date('2020-01-01'), max: new Date('2030-12-31') })
+      .filter((d) => !isNaN(d.getTime()))
+      .map((d) => d.toISOString());
+
+    const featureArbitrary = fc
+      .record({
+        id: nonEmptyStringArbitrary,
+        name: nonEmptyStringArbitrary,
+        description: nonEmptyStringArbitrary,
+        classification: fc.constantFrom(...featureClassifications),
+        sourcePhase: fc.constantFrom(...phases),
+        identifiedAt: isoDateArbitrary,
+      })
+      .chain((base) => {
+        return fc
+          .option(nonEmptyStringArbitrary, { nil: undefined })
+          .map((rationale) =>
+            rationale !== undefined ? { ...base, classificationRationale: rationale } : base
+          );
+      });
+
+    const extractedRequirementArbitrary = fc.record({
+      id: nonEmptyStringArbitrary,
+      sourcePhase: fc.constantFrom(...phases),
+      category: fc.constantFrom('functional', 'non_functional', 'constraint', 'preference'),
+      text: nonEmptyStringArbitrary,
+      confidence: fc.constantFrom('high', 'medium', 'low'),
+      extractedAt: isoDateArbitrary,
+    });
+
+    const delegationPointArbitrary = fc
+      .record({
+        phase: fc.constantFrom(...phases),
+        decision: fc.constantFrom(...delegationDecisions),
+        delegatedAt: isoDateArbitrary,
+      })
+      .chain((base) => {
+        return fc
+          .option(nonEmptyStringArbitrary, { nil: undefined })
+          .map((notes) => (notes !== undefined ? { ...base, notes } : base));
+      });
+
+    const interviewStateArbitrary = fc.record<InterviewState>({
+      version: fc.constantFrom('1.0.0'),
+      projectId: nonEmptyStringArbitrary.filter((s) => !s.includes('/') && !s.includes('\\')),
+      currentPhase: fc.constantFrom(...phases),
+      completedPhases: fc.array(fc.constantFrom(...phases)),
+      extractedRequirements: fc.array(extractedRequirementArbitrary, { maxLength: 20 }),
+      features: fc.array(featureArbitrary, { maxLength: 20 }),
+      delegationPoints: fc.array(delegationPointArbitrary, { maxLength: 10 }),
+      transcriptEntryCount: fc.nat({ max: 1000 }),
+      createdAt: isoDateArbitrary,
+      updatedAt: isoDateArbitrary,
+    });
+
+    describe('serialize/deserialize round-trip', () => {
+      it('should preserve interview state through serialize/deserialize round-trip for random valid inputs', () => {
+        fc.assert(
+          fc.property(interviewStateArbitrary, (state) => {
+            const json = serializeInterviewState(state);
+            const restored = deserializeInterviewState(json);
+
+            expect(restored.version).toBe(state.version);
+            expect(restored.projectId).toBe(state.projectId);
+            expect(restored.currentPhase).toBe(state.currentPhase);
+            expect(restored.completedPhases).toEqual(state.completedPhases);
+            expect(restored.transcriptEntryCount).toBe(state.transcriptEntryCount);
+            expect(restored.createdAt).toBe(state.createdAt);
+            expect(restored.updatedAt).toBe(state.updatedAt);
+
+            expect(restored.extractedRequirements).toHaveLength(state.extractedRequirements.length);
+            for (let i = 0; i < state.extractedRequirements.length; i++) {
+              const original = state.extractedRequirements[i];
+              const restoredReq = restored.extractedRequirements[i];
+              if (original === undefined || restoredReq === undefined) {
+                continue;
+              }
+              expect(restoredReq.id).toBe(original.id);
+              expect(restoredReq.sourcePhase).toBe(original.sourcePhase);
+              expect(restoredReq.category).toBe(original.category);
+              expect(restoredReq.text).toBe(original.text);
+              expect(restoredReq.confidence).toBe(original.confidence);
+              expect(restoredReq.extractedAt).toBe(original.extractedAt);
+            }
+
+            expect(restored.features).toHaveLength(state.features.length);
+            for (let i = 0; i < state.features.length; i++) {
+              const original = state.features[i];
+              const restoredFeat = restored.features[i];
+              if (original === undefined || restoredFeat === undefined) {
+                continue;
+              }
+              expect(restoredFeat.id).toBe(original.id);
+              expect(restoredFeat.name).toBe(original.name);
+              expect(restoredFeat.description).toBe(original.description);
+              expect(restoredFeat.classification).toBe(original.classification);
+              expect(restoredFeat.sourcePhase).toBe(original.sourcePhase);
+              expect(restoredFeat.identifiedAt).toBe(original.identifiedAt);
+              expect(restoredFeat.classificationRationale).toBe(original.classificationRationale);
+            }
+
+            expect(restored.delegationPoints).toHaveLength(state.delegationPoints.length);
+            for (let i = 0; i < state.delegationPoints.length; i++) {
+              const original = state.delegationPoints[i];
+              const restoredPoint = restored.delegationPoints[i];
+              if (original === undefined || restoredPoint === undefined) {
+                continue;
+              }
+              expect(restoredPoint.phase).toBe(original.phase);
+              expect(restoredPoint.decision).toBe(original.decision);
+              expect(restoredPoint.notes).toBe(original.notes);
+              expect(restoredPoint.delegatedAt).toBe(original.delegatedAt);
+            }
+          })
+        );
+      });
+
+      it('should handle edge cases: empty strings, special characters, unicode', () => {
+        fc.assert(
+          fc.property(
+            nonEmptyStringArbitrary,
+            fc.constantFrom(...phases),
+            fc.constantFrom(...featureClassifications),
+            (projectId, phase, classification) => {
+              const state: InterviewState = {
+                version: '1.0.0',
+                projectId: projectId.replace(/[/\\]/g, '_'),
+                currentPhase: phase,
+                completedPhases: [],
+                extractedRequirements: [],
+                features: [
+                  {
+                    id: 'feature_001',
+                    name: projectId,
+                    description: projectId,
+                    classification,
+                    sourcePhase: phase,
+                    identifiedAt: new Date().toISOString(),
+                  },
+                ],
+                delegationPoints: [],
+                transcriptEntryCount: 0,
+                createdAt: new Date().toISOString(),
+                updatedAt: new Date().toISOString(),
+              };
+
+              const json = serializeInterviewState(state);
+              const restored = deserializeInterviewState(json);
+
+              expect(restored.features).toHaveLength(1);
+              expect(restored.features[0]?.name).toBe(projectId);
+              expect(restored.features[0]?.description).toBe(projectId);
+            }
+          )
+        );
+      });
+
+      it('should handle large arrays', () => {
+        fc.assert(
+          fc.property(
+            fc.array(featureArbitrary, { minLength: 50, maxLength: 100 }),
+            fc.array(extractedRequirementArbitrary, { minLength: 50, maxLength: 100 }),
+            (features, extractedRequirements) => {
+              const state: InterviewState = {
+                version: '1.0.0',
+                projectId: 'large-array-test',
+                currentPhase: 'Discovery',
+                completedPhases: [],
+                extractedRequirements,
+                features,
+                delegationPoints: [],
+                transcriptEntryCount: 0,
+                createdAt: new Date().toISOString(),
+                updatedAt: new Date().toISOString(),
+              };
+
+              const json = serializeInterviewState(state);
+              const restored = deserializeInterviewState(json);
+
+              expect(restored.features).toHaveLength(features.length);
+              expect(restored.extractedRequirements).toHaveLength(extractedRequirements.length);
+            }
+          )
+        );
+      });
+
+      it('should preserve empty arrays correctly', () => {
+        fc.assert(
+          fc.property(fc.constantFrom(...phases), (phase) => {
+            const state: InterviewState = {
+              version: '1.0.0',
+              projectId: 'empty-test',
+              currentPhase: phase,
+              completedPhases: [],
+              extractedRequirements: [],
+              features: [],
+              delegationPoints: [],
+              transcriptEntryCount: 0,
+              createdAt: new Date().toISOString(),
+              updatedAt: new Date().toISOString(),
+            };
+
+            const json = serializeInterviewState(state);
+            const restored = deserializeInterviewState(json);
+
+            expect(restored.extractedRequirements).toEqual([]);
+            expect(restored.features).toEqual([]);
+            expect(restored.delegationPoints).toEqual([]);
+          })
+        );
+      });
+    });
+
+    describe('malformed data handling', () => {
+      it('should throw InterviewPersistenceError for invalid JSON syntax', () => {
+        fc.assert(
+          fc.property(
+            fc.string().filter((s) => !s.startsWith('{') || !s.endsWith('}')),
+            (invalidJson) => {
+              expect(() => deserializeInterviewState(invalidJson)).toThrow(
+                InterviewPersistenceError
+              );
+            }
+          )
+        );
+      });
+
+      it('should throw InterviewPersistenceError for missing required fields', () => {
+        fc.assert(
+          fc.property(
+            fc.constantFrom(
+              'version',
+              'projectId',
+              'currentPhase',
+              'completedPhases',
+              'extractedRequirements',
+              'features',
+              'delegationPoints',
+              'transcriptEntryCount',
+              'createdAt',
+              'updatedAt'
+            ),
+            (missingField) => {
+              const allFields = {
+                version: '1.0.0',
+                projectId: 'test',
+                currentPhase: 'Discovery',
+                completedPhases: [],
+                extractedRequirements: [],
+                features: [],
+                delegationPoints: [],
+                transcriptEntryCount: 0,
+                createdAt: new Date().toISOString(),
+                updatedAt: new Date().toISOString(),
+              };
+
+              const state: Record<string, unknown> = {};
+              Object.entries(allFields).forEach(([key, value]) => {
+                if (key !== missingField) {
+                  state[key] = value;
+                }
+              });
+
+              const json = JSON.stringify(state);
+              expect(() => deserializeInterviewState(json)).toThrow(InterviewPersistenceError);
+            }
+          )
+        );
+      });
+
+      it('should throw InterviewPersistenceError for invalid interview phase', () => {
+        fc.assert(
+          fc.property(
+            fc.string({ minLength: 1 }).filter((s) => !phases.includes(s as InterviewPhase)),
+            (invalidPhase) => {
+              const state = {
+                version: '1.0.0',
+                projectId: 'test',
+                currentPhase: invalidPhase,
+                completedPhases: [],
+                extractedRequirements: [],
+                features: [],
+                delegationPoints: [],
+                transcriptEntryCount: 0,
+                createdAt: new Date().toISOString(),
+                updatedAt: new Date().toISOString(),
+              };
+
+              const json = JSON.stringify(state);
+              expect(() => deserializeInterviewState(json)).toThrow(InterviewPersistenceError);
+            }
+          )
+        );
+      });
+
+      it('should throw InterviewPersistenceError for invalid feature classification', () => {
+        fc.assert(
+          fc.property(
+            fc
+              .string({ minLength: 1 })
+              .filter((s) => !featureClassifications.includes(s as FeatureClassification)),
+            (invalidClassification) => {
+              const state = {
+                version: '1.0.0',
+                projectId: 'test',
+                currentPhase: 'Discovery',
+                completedPhases: [],
+                extractedRequirements: [],
+                features: [
+                  {
+                    id: 'feature_001',
+                    name: 'Test Feature',
+                    description: 'Test',
+                    classification: invalidClassification,
+                    sourcePhase: 'Discovery',
+                    identifiedAt: new Date().toISOString(),
+                  },
+                ],
+                delegationPoints: [],
+                transcriptEntryCount: 0,
+                createdAt: new Date().toISOString(),
+                updatedAt: new Date().toISOString(),
+              };
+
+              const json = JSON.stringify(state);
+              expect(() => deserializeInterviewState(json)).toThrow(InterviewPersistenceError);
+            }
+          )
+        );
+      });
+
+      it('should throw InterviewPersistenceError for negative transcriptEntryCount', () => {
+        fc.assert(
+          fc.property(fc.integer({ min: -100, max: -1 }), (negativeCount) => {
+            const state = {
+              version: '1.0.0',
+              projectId: 'test',
+              currentPhase: 'Discovery',
+              completedPhases: [],
+              extractedRequirements: [],
+              features: [],
+              delegationPoints: [],
+              transcriptEntryCount: negativeCount,
+              createdAt: new Date().toISOString(),
+              updatedAt: new Date().toISOString(),
+            };
+
+            const json = JSON.stringify(state);
+            expect(() => deserializeInterviewState(json)).toThrow(InterviewPersistenceError);
+          })
+        );
+      });
+    });
+
+    describe('transcript entry serialization round-trip', () => {
+      const transcriptEntryArbitrary = fc
+        .record({
+          id: nonEmptyStringArbitrary,
+          phase: fc.constantFrom(...phases),
+          role: fc.constantFrom(...transcriptRoles),
+          content: nonEmptyStringArbitrary,
+          timestamp: isoDateArbitrary,
+        })
+        .chain((base) => {
+          return fc
+            .option(fc.record({ key: nonEmptyStringArbitrary }), { nil: undefined })
+            .map((metadata) =>
+              metadata !== undefined
+                ? ({ ...base, metadata } as TranscriptEntry)
+                : (base as TranscriptEntry)
+            );
+        });
+
+      it('should preserve transcript entry through serialize/deserialize round-trip', () => {
+        fc.assert(
+          fc.property(transcriptEntryArbitrary, (entry) => {
+            const json = serializeTranscriptEntry(entry);
+            const restored = deserializeTranscriptEntry(json, 1);
+
+            expect(restored.id).toBe(entry.id);
+            expect(restored.phase).toBe(entry.phase);
+            expect(restored.role).toBe(entry.role);
+            expect(restored.content).toBe(entry.content);
+            expect(restored.timestamp).toBe(entry.timestamp);
+            expect(restored.metadata).toEqual(entry.metadata);
+          })
+        );
+      });
+
+      it('should throw InterviewPersistenceError for invalid transcript entry JSON', () => {
+        fc.assert(
+          fc.property(
+            fc.string().filter((s) => !s.startsWith('{') || !s.endsWith('}')),
+            (invalidJson) => {
+              expect(() => deserializeTranscriptEntry(invalidJson, 1)).toThrow(
+                InterviewPersistenceError
+              );
+            }
+          )
+        );
+      });
+
+      it('should throw InterviewPersistenceError for invalid transcript role', () => {
+        fc.assert(
+          fc.property(
+            fc
+              .string({ minLength: 1 })
+              .filter((s) => !transcriptRoles.includes(s as TranscriptRole)),
+            (invalidRole) => {
+              const entry = {
+                id: 'test',
+                phase: 'Discovery',
+                role: invalidRole,
+                content: 'test',
+                timestamp: new Date().toISOString(),
+              };
+
+              const json = JSON.stringify(entry);
+              expect(() => deserializeTranscriptEntry(json, 1)).toThrow(InterviewPersistenceError);
+            }
+          )
+        );
+      });
     });
   });
 
@@ -542,7 +996,7 @@ describe('Interview Persistence', () => {
       await saveInterviewState(state);
 
       const statePath = getInterviewStatePath('new-project');
-      const content = await readFile(statePath, 'utf-8');
+      const content = await safeReadFile(statePath, 'utf-8');
       expect(JSON.parse(content)).toEqual(state);
     });
 
@@ -581,7 +1035,7 @@ describe('Interview Persistence', () => {
 
       // Corrupt the file by making it empty
       const statePath = getInterviewStatePath('empty-test');
-      await writeFile(statePath, '', 'utf-8');
+      await safeWriteFile(statePath, '', 'utf-8');
 
       await expect(loadInterviewState('empty-test')).rejects.toThrow(InterviewPersistenceError);
 
@@ -599,7 +1053,7 @@ describe('Interview Persistence', () => {
 
       // Corrupt the file with invalid JSON
       const statePath = getInterviewStatePath('corrupt-test');
-      await writeFile(statePath, '{ invalid json }', 'utf-8');
+      await safeWriteFile(statePath, '{ invalid json }', 'utf-8');
 
       await expect(loadInterviewState('corrupt-test')).rejects.toThrow(InterviewPersistenceError);
 
@@ -686,7 +1140,7 @@ describe('Interview Persistence', () => {
         await appendTranscriptEntry(projectId, entry2);
 
         const transcriptPath = getTranscriptPath(projectId);
-        const content = await readFile(transcriptPath, 'utf-8');
+        const content = await safeReadFile(transcriptPath, 'utf-8');
         const lines = content.trim().split('\n');
 
         expect(lines).toHaveLength(2);
@@ -705,7 +1159,7 @@ describe('Interview Persistence', () => {
         await appendTranscriptEntry('new-transcript-project', entry);
 
         const transcriptPath = getTranscriptPath('new-transcript-project');
-        const content = await readFile(transcriptPath, 'utf-8');
+        const content = await safeReadFile(transcriptPath, 'utf-8');
         expect(JSON.parse(content.trim())).toEqual(entry);
       });
     });
@@ -718,8 +1172,8 @@ describe('Interview Persistence', () => {
 
       it('should return empty array for empty transcript file', async () => {
         const projectId = 'empty-transcript';
-        await mkdir(getInterviewDir(projectId), { recursive: true });
-        await writeFile(getTranscriptPath(projectId), '', 'utf-8');
+        await safeMkdir(getInterviewDir(projectId), { recursive: true });
+        await safeWriteFile(getTranscriptPath(projectId), '', 'utf-8');
 
         const entries = await loadTranscript(projectId);
         expect(entries).toEqual([]);
@@ -745,12 +1199,12 @@ describe('Interview Persistence', () => {
 
       it('should handle blank lines in transcript', async () => {
         const projectId = 'blank-lines-test';
-        await mkdir(getInterviewDir(projectId), { recursive: true });
+        await safeMkdir(getInterviewDir(projectId), { recursive: true });
 
         const entry = createTranscriptEntry('Discovery', 'user', 'Test');
         const content =
           serializeTranscriptEntry(entry) + '\n\n' + serializeTranscriptEntry(entry) + '\n';
-        await writeFile(getTranscriptPath(projectId), content, 'utf-8');
+        await safeWriteFile(getTranscriptPath(projectId), content, 'utf-8');
 
         const entries = await loadTranscript(projectId);
         expect(entries).toHaveLength(2);
@@ -758,8 +1212,8 @@ describe('Interview Persistence', () => {
 
       it('should throw on corrupted transcript entry', async () => {
         const projectId = 'corrupt-transcript';
-        await mkdir(getInterviewDir(projectId), { recursive: true });
-        await writeFile(getTranscriptPath(projectId), '{ invalid json }\n', 'utf-8');
+        await safeMkdir(getInterviewDir(projectId), { recursive: true });
+        await safeWriteFile(getTranscriptPath(projectId), '{ invalid json }\n', 'utf-8');
 
         await expect(loadTranscript(projectId)).rejects.toThrow(InterviewPersistenceError);
       });
@@ -791,7 +1245,7 @@ describe('Interview Persistence', () => {
     it('should return failure with corruption_error for empty file', async () => {
       const state = createInitialInterviewState('try-load-empty');
       await saveInterviewState(state);
-      await writeFile(getInterviewStatePath('try-load-empty'), '', 'utf-8');
+      await safeWriteFile(getInterviewStatePath('try-load-empty'), '', 'utf-8');
 
       const result = await tryLoadInterviewState('try-load-empty');
 
@@ -804,7 +1258,7 @@ describe('Interview Persistence', () => {
     it('should return failure with parse_error for corrupted JSON', async () => {
       const state = createInitialInterviewState('try-load-corrupt');
       await saveInterviewState(state);
-      await writeFile(getInterviewStatePath('try-load-corrupt'), 'not json', 'utf-8');
+      await safeWriteFile(getInterviewStatePath('try-load-corrupt'), 'not json', 'utf-8');
 
       const result = await tryLoadInterviewState('try-load-corrupt');
 
@@ -890,9 +1344,8 @@ describe('Interview Persistence', () => {
       expect(loaded).toEqual(state);
 
       // Verify no temp files remain
-      const { readdir } = await import('node:fs/promises');
       const dir = getInterviewDir('atomic-test');
-      const files = await readdir(dir);
+      const files = await safeReaddir(dir);
 
       // Should only have state.json, no .tmp files
       expect(files.every((f) => !f.endsWith('.tmp'))).toBe(true);

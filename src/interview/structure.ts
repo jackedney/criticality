@@ -382,6 +382,7 @@ export function applyStateUpdate(
  * @returns True if all required items are confirmed.
  */
 export function hasAllRequiredConfirmations(response: ApprovalResponse): boolean {
+  // eslint-disable-next-line security/detect-object-injection -- safe: item is ConfirmationItem enum with known literal keys
   return CONFIRMATION_ITEMS.every((item) => response.confirmations[item]);
 }
 
@@ -392,6 +393,7 @@ export function hasAllRequiredConfirmations(response: ApprovalResponse): boolean
  * @returns List of missing confirmation items.
  */
 export function getMissingConfirmations(response: ApprovalResponse): ConfirmationItem[] {
+  // eslint-disable-next-line security/detect-object-injection -- safe: item is ConfirmationItem enum with known literal keys
   return CONFIRMATION_ITEMS.filter((item) => !response.confirmations[item]);
 }
 
@@ -468,20 +470,24 @@ export function detectContradictions(
   }));
 
   for (let i = 0; i < requirementTexts.length; i++) {
+    // eslint-disable-next-line security/detect-object-injection -- safe: i is bounded numeric loop counter
     const reqI = requirementTexts[i];
     if (reqI === undefined) {
       continue;
     }
 
     for (let j = i + 1; j < requirementTexts.length; j++) {
+      // eslint-disable-next-line security/detect-object-injection -- safe: j is bounded numeric loop counter
       const reqJ = requirementTexts[j];
       if (reqJ === undefined) {
         continue;
       }
 
       // Check for "must" vs "must not" contradictions
-      const mustPattern = /must\s+(?:have\s+|support\s+|include\s+)?(\w+)/g;
-      const mustNotPattern = /must\s+not\s+(?:have\s+|support\s+|include\s+)?(\w+)/g;
+      // eslint-disable-next-line security/detect-unsafe-regex -- Short requirement text from spec
+      const mustPattern = /must[ \t]+(?:have[ \t]+|support[ \t]+|include[ \t]+)?(\w+)/g;
+      // eslint-disable-next-line security/detect-unsafe-regex -- Short requirement text from spec
+      const mustNotPattern = /must[ \t]+not[ \t]+(?:have[ \t]+|support[ \t]+|include[ \t]+)?(\w+)/g;
 
       const mustMatchesI = [...reqI.text.matchAll(mustPattern)];
       const mustNotMatchesJ = [...reqJ.text.matchAll(mustNotPattern)];
@@ -601,6 +607,7 @@ function convertToSeconds(match: RegExpMatchArray | undefined): number | null {
     year: 31536000,
   };
 
+  // eslint-disable-next-line security/detect-object-injection -- safe: unit comes from regex match on controlled input
   const multiplier = multipliers[unit];
   if (multiplier === undefined) {
     return null;
@@ -727,6 +734,7 @@ export function createApprovalTranscriptEntries(response: ApprovalResponse): Tra
 
   // Confirmation status
   const confirmationStatus = CONFIRMATION_ITEMS.map(
+    // eslint-disable-next-line security/detect-object-injection -- safe: item is ConfirmationItem enum with known literal keys
     (item) => `- ${item}: ${response.confirmations[item] ? 'confirmed' : 'not confirmed'}`
   ).join('\n');
   entries.push(

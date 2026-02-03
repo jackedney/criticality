@@ -231,6 +231,7 @@ export function getPhaseDisplayName(phase: InterviewPhase): string {
     Synthesis: 'Synthesis',
     Approval: 'Approval',
   };
+  // eslint-disable-next-line security/detect-object-injection -- safe: phase is InterviewPhase enum with known literal keys
   return names[phase];
 }
 
@@ -249,6 +250,7 @@ export function getPhaseDescription(phase: InterviewPhase): string {
     Synthesis: 'The architect will synthesize your inputs into a coherent specification.',
     Approval: 'You will review and approve the generated specification before proceeding.',
   };
+  // eslint-disable-next-line security/detect-object-injection -- safe: phase is InterviewPhase enum with known literal keys
   return descriptions[phase];
 }
 
@@ -323,6 +325,7 @@ export function formatUnderstandingSummary(state: InterviewState): string {
   for (const category of categoryOrder) {
     const reqs = grouped.get(category);
     if (reqs !== undefined && reqs.length > 0) {
+      // eslint-disable-next-line security/detect-object-injection -- safe: category comes from known const categoryOrder array
       const name = categoryNames[category] ?? category;
       lines.push(formatSubsectionHeader(name));
 
@@ -579,6 +582,7 @@ export function formatConfirmationItems(): string {
   };
 
   for (const item of CONFIRMATION_ITEMS) {
+    // eslint-disable-next-line security/detect-object-injection -- safe: item comes from CONFIRMATION_ITEMS const array with known literal values
     lines.push(`  ${CLI_STYLES.CYAN}□${CLI_STYLES.RESET} ${itemNames[item]}`);
   }
 
@@ -886,6 +890,7 @@ export class InterviewCli {
 
     const choiceIndex = parseInt(result.input, 10) - 1;
     if (choiceIndex >= 0 && choiceIndex < uniquePhases.length) {
+      // eslint-disable-next-line security/detect-object-injection -- safe: choiceIndex is bounded numeric index validated against array length
       const selectedPhase = uniquePhases[choiceIndex];
       if (selectedPhase !== undefined) {
         // Reset to selected phase
@@ -995,6 +1000,7 @@ export class InterviewCli {
       Approval: 'Please review the specification. Do you approve it?',
     };
 
+    // eslint-disable-next-line security/detect-object-injection -- safe: phase is InterviewPhase enum with known literal keys
     const question = phaseQuestions[phase];
     const isDelegable = (DELEGABLE_PHASES as readonly string[]).includes(phase);
 
@@ -1153,6 +1159,7 @@ export class InterviewCli {
       Synthesis: 'functional',
       Approval: 'functional',
     };
+    // eslint-disable-next-line security/detect-object-injection -- safe: phase is InterviewPhase enum with known literal keys
     return categoryMap[phase];
   }
 

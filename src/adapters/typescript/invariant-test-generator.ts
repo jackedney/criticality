@@ -145,11 +145,9 @@ function generateTestProperty(claim: Claim, witnesses: WitnessDefinition[]): str
     lines.push(`      fc.property(`);
 
     // Add arbitraries
-    for (let i = 0; i < witnesses.length; i++) {
-      const arb = arbList[i] ?? 'fc.anything()';
-      const separator = i < witnesses.length - 1 ? ',' : ',';
-      lines.push(`        ${arb}${separator}`);
-    }
+    arbList.forEach((arb) => {
+      lines.push(`        ${arb},`);
+    });
 
     // Add the property function
     lines.push(`        (${paramNames.join(', ')}) => {`);

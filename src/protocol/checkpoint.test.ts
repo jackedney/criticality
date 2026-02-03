@@ -1,8 +1,9 @@
 import { describe, expect, it, beforeEach, afterEach } from 'vitest';
-import { mkdir, rm, writeFile } from 'node:fs/promises';
+import { rm } from 'node:fs/promises';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { randomUUID } from 'node:crypto';
+import { safeMkdir, safeWriteFile } from '../utils/safe-fs.js';
 import {
   detectExistingState,
   validateStateIntegrity,
@@ -27,7 +28,7 @@ describe('Protocol Checkpoint/Resume', () => {
 
   beforeEach(async () => {
     testDir = join(tmpdir(), `checkpoint-test-${randomUUID()}`);
-    await mkdir(testDir, { recursive: true });
+    await safeMkdir(testDir, { recursive: true });
   });
 
   afterEach(async () => {
@@ -450,7 +451,7 @@ describe('Protocol Checkpoint/Resume', () => {
 
     it('should return CORRUPTED_STATE for invalid JSON', async () => {
       const filePath = join(testDir, 'corrupted.json');
-      await writeFile(filePath, '{ invalid json }}}', 'utf-8');
+      await safeWriteFile(filePath, '{ invalid json }}}', 'utf-8');
 
       const result = await resumeFromCheckpoint(filePath);
 
@@ -464,7 +465,7 @@ describe('Protocol Checkpoint/Resume', () => {
 
     it('should return CORRUPTED_STATE for empty file', async () => {
       const filePath = join(testDir, 'empty.json');
-      await writeFile(filePath, '', 'utf-8');
+      await safeWriteFile(filePath, '', 'utf-8');
 
       const result = await resumeFromCheckpoint(filePath);
 
@@ -486,7 +487,7 @@ describe('Protocol Checkpoint/Resume', () => {
         blockingQueries: [],
       };
       const filePath = join(testDir, 'invalid.json');
-      await writeFile(filePath, JSON.stringify(data), 'utf-8');
+      await safeWriteFile(filePath, JSON.stringify(data), 'utf-8');
 
       const result = await resumeFromCheckpoint(filePath);
 
@@ -617,7 +618,7 @@ describe('Protocol Checkpoint/Resume', () => {
 
     it('should recover and return fresh state for corrupted file', async () => {
       const filePath = join(testDir, 'corrupted.json');
-      await writeFile(filePath, '{ corrupted }}}', 'utf-8');
+      await safeWriteFile(filePath, '{ corrupted }}}', 'utf-8');
 
       const result = await getStartupState(filePath);
 
@@ -637,7 +638,7 @@ describe('Protocol Checkpoint/Resume', () => {
         blockingQueries: [],
       };
       const filePath = join(testDir, 'invalid.json');
-      await writeFile(filePath, JSON.stringify(data), 'utf-8');
+      await safeWriteFile(filePath, JSON.stringify(data), 'utf-8');
 
       const result = await getStartupState(filePath);
 
@@ -675,7 +676,7 @@ describe('Protocol Checkpoint/Resume', () => {
 
     it('should return true for corrupted JSON', async () => {
       const filePath = join(testDir, 'corrupted.json');
-      await writeFile(filePath, '{ invalid }}}', 'utf-8');
+      await safeWriteFile(filePath, '{ invalid }}}', 'utf-8');
 
       const corrupted = await isStateCorrupted(filePath);
 
@@ -684,7 +685,7 @@ describe('Protocol Checkpoint/Resume', () => {
 
     it('should return true for empty file', async () => {
       const filePath = join(testDir, 'empty.json');
-      await writeFile(filePath, '', 'utf-8');
+      await safeWriteFile(filePath, '', 'utf-8');
 
       const corrupted = await isStateCorrupted(filePath);
 
@@ -693,7 +694,7 @@ describe('Protocol Checkpoint/Resume', () => {
 
     it('should return true for truncated file', async () => {
       const filePath = join(testDir, 'truncated.json');
-      await writeFile(filePath, '{"version": "1.0.0", "persistedAt":', 'utf-8');
+      await safeWriteFile(filePath, '{"version": "1.0.0", "persistedAt":', 'utf-8');
 
       const corrupted = await isStateCorrupted(filePath);
 
@@ -711,7 +712,7 @@ describe('Protocol Checkpoint/Resume', () => {
 
     it('should return true for file with invalid schema', async () => {
       const filePath = join(testDir, 'invalid-schema.json');
-      await writeFile(filePath, JSON.stringify({ notAValidState: true }), 'utf-8');
+      await safeWriteFile(filePath, JSON.stringify({ notAValidState: true }), 'utf-8');
 
       const corrupted = await isStateCorrupted(filePath);
 
@@ -793,7 +794,7 @@ describe('Protocol Checkpoint/Resume', () => {
   describe('corrupted state file triggers recovery or clean start (negative case)', () => {
     it('should trigger clean start for corrupted JSON syntax', async () => {
       const filePath = join(testDir, 'corrupted.json');
-      await writeFile(filePath, '{"version": corrupted syntax }}}', 'utf-8');
+      await safeWriteFile(filePath, '{"version": corrupted syntax }}}', 'utf-8');
 
       const result = await getStartupState(filePath);
 
@@ -804,7 +805,7 @@ describe('Protocol Checkpoint/Resume', () => {
 
     it('should trigger clean start for truncated state file', async () => {
       const filePath = join(testDir, 'truncated.json');
-      await writeFile(filePath, '{"version": "1.0.0", "persisted', 'utf-8');
+      await safeWriteFile(filePath, '{"version": "1.0.0", "persisted', 'utf-8');
 
       const result = await getStartupState(filePath);
 
@@ -823,7 +824,7 @@ describe('Protocol Checkpoint/Resume', () => {
         blockingQueries: [],
       };
       const filePath = join(testDir, 'invalid-phase.json');
-      await writeFile(filePath, JSON.stringify(data), 'utf-8');
+      await safeWriteFile(filePath, JSON.stringify(data), 'utf-8');
 
       const result = await getStartupState(filePath);
 
@@ -837,7 +838,7 @@ describe('Protocol Checkpoint/Resume', () => {
         // Missing persistedAt, phase, substate, etc.
       };
       const filePath = join(testDir, 'incomplete.json');
-      await writeFile(filePath, JSON.stringify(data), 'utf-8');
+      await safeWriteFile(filePath, JSON.stringify(data), 'utf-8');
 
       const result = await getStartupState(filePath);
 
@@ -847,7 +848,7 @@ describe('Protocol Checkpoint/Resume', () => {
 
     it('should trigger clean start for empty file', async () => {
       const filePath = join(testDir, 'empty.json');
-      await writeFile(filePath, '', 'utf-8');
+      await safeWriteFile(filePath, '', 'utf-8');
 
       const result = await getStartupState(filePath);
 
@@ -857,7 +858,7 @@ describe('Protocol Checkpoint/Resume', () => {
 
     it('should trigger clean start for file with only whitespace', async () => {
       const filePath = join(testDir, 'whitespace.json');
-      await writeFile(filePath, '   \n\t  ', 'utf-8');
+      await safeWriteFile(filePath, '   \n\t  ', 'utf-8');
 
       const result = await getStartupState(filePath);
 

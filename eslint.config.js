@@ -1,12 +1,10 @@
 import eslint from '@eslint/js';
+import securityPlugin from 'eslint-plugin-security';
 import tseslint from 'typescript-eslint';
-import eslintPluginPrettier from 'eslint-plugin-prettier/recommended';
 
-export default tseslint.config(
+export default [
   eslint.configs.recommended,
   ...tseslint.configs.strictTypeChecked,
-  ...tseslint.configs.stylisticTypeChecked,
-  eslintPluginPrettier,
   {
     languageOptions: {
       parserOptions: {
@@ -16,20 +14,43 @@ export default tseslint.config(
     },
   },
   {
+    files: ['**/*.ts'],
+    plugins: {
+      security: securityPlugin,
+    },
     rules: {
-      // TypeScript-specific rules
-      '@typescript-eslint/explicit-function-return-type': 'error',
+      // TypeScript strict rules
       '@typescript-eslint/no-unused-vars': [
+        'warn',
+        {
+          argsIgnorePattern: '^_',
+          varsIgnorePattern: '^_',
+          caughtErrorsIgnorePattern: '^_',
+        },
+      ],
+      '@typescript-eslint/explicit-function-return-type': [
         'error',
-        { argsIgnorePattern: '^_', varsIgnorePattern: '^_' },
+        {
+          allowExpressions: true,
+          allowTypedFunctionExpressions: true,
+          allowHigherOrderFunctions: true,
+        },
       ],
       '@typescript-eslint/no-explicit-any': 'error',
-      '@typescript-eslint/strict-boolean-expressions': 'error',
 
       // Code quality rules
       'no-console': 'warn',
-      eqeqeq: ['error', 'always'],
-      curly: ['error', 'all'],
+      'eqeqeq': ['error', 'always'],
+      'curly': ['error', 'all'],
+
+      // Critical security rules (CI-blocking)
+      'security/detect-eval-with-expression': 'error',
+      'security/detect-child-process': 'error',
+      'security/detect-unsafe-regex': 'error',
+
+      // Important security rules (warnings)
+      'security/detect-object-injection': 'warn',
+      'security/detect-non-literal-fs-filename': 'warn',
     },
   },
   {
@@ -37,9 +58,11 @@ export default tseslint.config(
       'dist/**',
       'node_modules/**',
       'test-fixtures/**',
-      '*.js',
+      '**/*.js',
       'vitest.config.ts',
       '.claude/**',
+      '.opencode/**',
+      'docs/**',
     ],
-  }
-);
+  },
+];

@@ -304,6 +304,7 @@ function getCategoryForPhase(
     Synthesis: 'functional',
     Approval: 'functional',
   };
+  // eslint-disable-next-line security/detect-object-injection -- safe: phase is InterviewPhase enum with known literal keys
   return categoryMap[phase];
 }
 
@@ -311,6 +312,7 @@ function getCategoryForPhase(
  * Creates a current question for a phase.
  */
 function createQuestionForPhase(phase: InterviewPhase): CurrentQuestion {
+  // eslint-disable-next-line security/detect-object-injection -- safe: phase is InterviewPhase enum with known literal keys
   const questionDef = PHASE_QUESTIONS[phase];
   const allowsDelegation = isDelegablePhase(phase);
 
@@ -505,10 +507,12 @@ function validateAnswerResponseShape(
         } else if (obj.confirmations !== null) {
           const confirmations = obj.confirmations as Record<string, unknown>;
           for (const item of CONFIRMATION_ITEMS) {
+            // eslint-disable-next-line security/detect-object-injection -- safe: item is ConfirmationItem enum with known literal keys
             if (typeof confirmations[item] !== 'boolean') {
               details.push({
                 field: `confirmations.${item}`,
                 message: `Confirmation for ${item} must be a boolean`,
+                // eslint-disable-next-line security/detect-object-injection -- safe: item is ConfirmationItem enum with known literal keys
                 received: typeof confirmations[item],
                 expected: 'boolean',
               });

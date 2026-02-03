@@ -12,9 +12,10 @@
  */
 
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import { mkdir, rm } from 'node:fs/promises';
+import { rm } from 'node:fs/promises';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
+import { safeMkdir } from '../utils/safe-fs.js';
 import type { ProtocolStateSnapshot } from './persistence.js';
 import type { ExternalOperations, TickContext } from './orchestrator.js';
 import type { BlockingRecord } from './blocking.js';
@@ -29,7 +30,7 @@ describe('Blocking Behavior per DECISIONS.toml', () => {
 
   beforeEach(async () => {
     testDir = join(tmpdir(), `blocking-constraints-test-${String(Date.now())}`);
-    await mkdir(testDir, { recursive: true });
+    await safeMkdir(testDir, { recursive: true });
     statePath = join(testDir, 'state.json');
   });
 

@@ -13,6 +13,7 @@ Thumbs.db
 *.swp
 *.swo
 *~
+*.bak
 
 # Python
 __pycache__/
@@ -50,6 +51,20 @@ logs/
 .serena/
 .claude/
 .jules/
+.opencode/
 
 # Archive
 archive/
+
+# Temporary files (may contain sensitive data)
+tmp/
+temp/
+*.tmp
+*.temp
+.cache/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+*.swp
+*.swo
+*~

@@ -100,6 +100,7 @@ export function parseArgs(args: readonly string[]): CliOptions {
   const mutableArgs = [...args];
 
   for (let i = 0; i < mutableArgs.length; i++) {
+    // eslint-disable-next-line security/detect-object-injection -- safe: i is bounded numeric loop counter
     const arg = mutableArgs[i];
     if (arg === undefined) {
       continue;

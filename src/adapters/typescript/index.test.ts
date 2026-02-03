@@ -12,7 +12,7 @@
  */
 
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
-import * as fs from 'node:fs';
+import { mkdtempSync } from 'node:fs';
 import * as path from 'node:path';
 import * as os from 'node:os';
 import {
@@ -21,20 +21,27 @@ import {
   NotTypeScriptProjectError,
   FunctionNotFoundError,
 } from './index.js';
+import {
+  safeWriteFileSync,
+  safeReadFileSync,
+  safeExistsSync,
+  safeMkdirSync,
+  safeRmSync,
+} from '../../utils/safe-fs.js';
 
 /**
  * Creates a temporary directory for test fixtures.
  */
 function createTempDir(): string {
-  return fs.mkdtempSync(path.join(os.tmpdir(), 'ts-adapter-test-'));
+  return mkdtempSync(path.join(os.tmpdir(), 'ts-adapter-test-'));
 }
 
 /**
  * Removes a directory and all its contents recursively.
  */
 function removeTempDir(dirPath: string): void {
-  if (fs.existsSync(dirPath)) {
-    fs.rmSync(dirPath, { recursive: true, force: true });
+  if (safeExistsSync(dirPath)) {
+    safeRmSync(dirPath, { recursive: true, force: true });
   }
 }
 
@@ -61,9 +68,9 @@ describe('TypeScriptAdapter', () => {
         },
         include: ['src/**/*'],
       };
-      fs.mkdirSync(path.join(tempDir, 'src'));
-      fs.writeFileSync(path.join(tempDir, 'tsconfig.json'), JSON.stringify(tsConfig));
-      fs.writeFileSync(
+      safeMkdirSync(path.join(tempDir, 'src'));
+      safeWriteFileSync(path.join(tempDir, 'tsconfig.json'), JSON.stringify(tsConfig));
+      safeWriteFileSync(
         path.join(tempDir, 'src', 'index.ts'),
         'export function hello(): string { return "hello"; }'
       );
@@ -76,7 +83,7 @@ describe('TypeScriptAdapter', () => {
 
     it('should initialize with TypeScript files but no tsconfig.json', async () => {
       // Create a directory with .ts files but no tsconfig
-      fs.writeFileSync(
+      safeWriteFileSync(
         path.join(tempDir, 'example.ts'),
         'export function example(): number { return 1; }'
       );
@@ -89,7 +96,7 @@ describe('TypeScriptAdapter', () => {
 
     it('should throw NotTypeScriptProjectError for non-TypeScript project', async () => {
       // Create a directory with no .ts files and no tsconfig
-      fs.writeFileSync(path.join(tempDir, 'readme.md'), '# Hello');
+      safeWriteFileSync(path.join(tempDir, 'readme.md'), '# Hello');
 
       const adapter = new TypeScriptAdapter();
 
@@ -110,8 +117,8 @@ describe('TypeScriptAdapter', () => {
         name: 'monorepo-root',
         workspaces: ['packages/*'],
       };
-      fs.writeFileSync(path.join(tempDir, 'package.json'), JSON.stringify(packageJson));
-      fs.writeFileSync(
+      safeWriteFileSync(path.join(tempDir, 'package.json'), JSON.stringify(packageJson));
+      safeWriteFileSync(
         path.join(tempDir, 'tsconfig.json'),
         JSON.stringify({ compilerOptions: { strict: true } })
       );
@@ -119,13 +126,13 @@ describe('TypeScriptAdapter', () => {
       // Create a package
       const packagesDir = path.join(tempDir, 'packages');
       const packageADir = path.join(packagesDir, 'package-a');
-      fs.mkdirSync(packageADir, { recursive: true });
-      fs.writeFileSync(
+      safeMkdirSync(packageADir, { recursive: true });
+      safeWriteFileSync(
         path.join(packageADir, 'package.json'),
         JSON.stringify({ name: '@mono/package-a' })
       );
-      fs.writeFileSync(path.join(packageADir, 'tsconfig.json'), JSON.stringify({}));
-      fs.writeFileSync(path.join(packageADir, 'index.ts'), 'export const a = 1;');
+      safeWriteFileSync(path.join(packageADir, 'tsconfig.json'), JSON.stringify({}));
+      safeWriteFileSync(path.join(packageADir, 'index.ts'), 'export const a = 1;');
 
       const adapter = new TypeScriptAdapter();
       await adapter.initialize(tempDir);
@@ -181,11 +188,11 @@ describe('TypeScriptAdapter', () => {
     });
 
     it('should find functions with TODO markers', async () => {
-      fs.writeFileSync(
+      safeWriteFileSync(
         path.join(tempDir, 'tsconfig.json'),
         JSON.stringify({ compilerOptions: { strict: true }, include: ['*.ts'] })
       );
-      fs.writeFileSync(
+      safeWriteFileSync(
         path.join(tempDir, 'math.ts'),
         `
 export function add(a: number, b: number): number {
@@ -212,11 +219,11 @@ export function multiply(a: number, b: number): number {
     });
 
     it('should return functions in topological order', async () => {
-      fs.writeFileSync(
+      safeWriteFileSync(
         path.join(tempDir, 'tsconfig.json'),
         JSON.stringify({ compilerOptions: { strict: true }, include: ['*.ts'] })
       );
-      fs.writeFileSync(
+      safeWriteFileSync(
         path.join(tempDir, 'chain.ts'),
         `
 // A calls B, B calls C
@@ -266,11 +273,11 @@ export function funcC(): number {
     });
 
     it('should extract function signature', async () => {
-      fs.writeFileSync(
+      safeWriteFileSync(
         path.join(tempDir, 'tsconfig.json'),
         JSON.stringify({ compilerOptions: { strict: true }, include: ['*.ts'] })
       );
-      fs.writeFileSync(
+      safeWriteFileSync(
         path.join(tempDir, 'math.ts'),
         `
 export function add(a: number, b: number): number {
@@ -294,11 +301,11 @@ export function add(a: number, b: number): number {
     });
 
     it('should extract referenced types', async () => {
-      fs.writeFileSync(
+      safeWriteFileSync(
         path.join(tempDir, 'tsconfig.json'),
         JSON.stringify({ compilerOptions: { strict: true }, include: ['*.ts'] })
       );
-      fs.writeFileSync(
+      safeWriteFileSync(
         path.join(tempDir, 'types.ts'),
         `
 export interface User {
@@ -329,11 +336,11 @@ export function processUser(user: User): Result {
     });
 
     it('should extract contract from JSDoc', async () => {
-      fs.writeFileSync(
+      safeWriteFileSync(
         path.join(tempDir, 'tsconfig.json'),
         JSON.stringify({ compilerOptions: { strict: true }, include: ['*.ts'] })
       );
-      fs.writeFileSync(
+      safeWriteFileSync(
         path.join(tempDir, 'contract.ts'),
         `
 /**
@@ -364,11 +371,11 @@ export function divide(dividend: number, divisor: number): number {
     });
 
     it('should throw FunctionNotFoundError for non-existent function', async () => {
-      fs.writeFileSync(
+      safeWriteFileSync(
         path.join(tempDir, 'tsconfig.json'),
         JSON.stringify({ compilerOptions: { strict: true }, include: ['*.ts'] })
       );
-      fs.writeFileSync(path.join(tempDir, 'empty.ts'), 'export const x = 1;');
+      safeWriteFileSync(path.join(tempDir, 'empty.ts'), 'export const x = 1;');
 
       const adapter = new TypeScriptAdapter();
       await adapter.initialize(tempDir);
@@ -377,15 +384,15 @@ export function divide(dividend: number, divisor: number): number {
     });
 
     it('should disambiguate functions with same name using filePath', async () => {
-      fs.writeFileSync(
+      safeWriteFileSync(
         path.join(tempDir, 'tsconfig.json'),
         JSON.stringify({ compilerOptions: { strict: true }, include: ['*.ts'] })
       );
-      fs.writeFileSync(
+      safeWriteFileSync(
         path.join(tempDir, 'file1.ts'),
         `export function helper(x: number): number { throw new Error('TODO'); }`
       );
-      fs.writeFileSync(
+      safeWriteFileSync(
         path.join(tempDir, 'file2.ts'),
         `export function helper(x: string): string { throw new Error('TODO'); }`
       );
@@ -413,12 +420,12 @@ export function divide(dividend: number, divisor: number): number {
     });
 
     it('should inject function body successfully', async () => {
-      fs.writeFileSync(
+      safeWriteFileSync(
         path.join(tempDir, 'tsconfig.json'),
         JSON.stringify({ compilerOptions: { strict: true }, include: ['*.ts'] })
       );
       const filePath = path.join(tempDir, 'math.ts');
-      fs.writeFileSync(
+      safeWriteFileSync(
         filePath,
         `
 export function add(a: number, b: number): number {
@@ -436,17 +443,17 @@ export function add(a: number, b: number): number {
       expect(result.functionName).toBe('add');
 
       // Verify the file was modified
-      const content = fs.readFileSync(filePath, 'utf-8');
+      const content = safeReadFileSync(filePath, 'utf-8');
       expect(content).toContain('return a + b;');
       expect(content).not.toContain("throw new Error('TODO')");
     });
 
     it('should return error for non-existent function', async () => {
-      fs.writeFileSync(
+      safeWriteFileSync(
         path.join(tempDir, 'tsconfig.json'),
         JSON.stringify({ compilerOptions: { strict: true }, include: ['*.ts'] })
       );
-      fs.writeFileSync(path.join(tempDir, 'empty.ts'), 'export const x = 1;');
+      safeWriteFileSync(path.join(tempDir, 'empty.ts'), 'export const x = 1;');
 
       const adapter = new TypeScriptAdapter();
       await adapter.initialize(tempDir);
@@ -458,11 +465,11 @@ export function add(a: number, b: number): number {
     });
 
     it('should return error for invalid syntax', async () => {
-      fs.writeFileSync(
+      safeWriteFileSync(
         path.join(tempDir, 'tsconfig.json'),
         JSON.stringify({ compilerOptions: { strict: true }, include: ['*.ts'] })
       );
-      fs.writeFileSync(
+      safeWriteFileSync(
         path.join(tempDir, 'math.ts'),
         `
 export function add(a: number, b: number): number {
@@ -532,8 +539,8 @@ export function add(a: number, b: number): number {
         },
         include: ['*.ts'],
       };
-      fs.writeFileSync(path.join(tempDir, 'tsconfig.json'), JSON.stringify(tsconfig));
-      fs.writeFileSync(
+      safeWriteFileSync(path.join(tempDir, 'tsconfig.json'), JSON.stringify(tsconfig));
+      safeWriteFileSync(
         path.join(tempDir, 'math.ts'),
         `
 /**
@@ -578,18 +585,18 @@ export function multiply(a: number, b: number): number {
       // Step 6: Verify file contents were modified correctly
       // Note: We don't test verify() here because temp dirs don't have tsc access
       // The verify() method is tested separately with test fixtures
-      const content = fs.readFileSync(path.join(tempDir, 'math.ts'), 'utf-8');
+      const content = safeReadFileSync(path.join(tempDir, 'math.ts'), 'utf-8');
       expect(content).toContain('return a + b;');
       expect(content).toContain('return a * b;');
       expect(content).not.toContain("throw new Error('TODO')");
     });
 
     it('should handle async functions in workflow', async () => {
-      fs.writeFileSync(
+      safeWriteFileSync(
         path.join(tempDir, 'tsconfig.json'),
         JSON.stringify({ compilerOptions: { strict: true, target: 'ES2022' }, include: ['*.ts'] })
       );
-      fs.writeFileSync(
+      safeWriteFileSync(
         path.join(tempDir, 'async.ts'),
         `
 export async function fetchData(url: string): Promise<string> {
@@ -626,8 +633,8 @@ export async function fetchData(url: string): Promise<string> {
         },
         include: ['*.ts'],
       };
-      fs.writeFileSync(path.join(tempDir, 'tsconfig.json'), JSON.stringify(tsconfig));
-      fs.writeFileSync(
+      safeWriteFileSync(path.join(tempDir, 'tsconfig.json'), JSON.stringify(tsconfig));
+      safeWriteFileSync(
         path.join(tempDir, 'class.ts'),
         `
 export class Calculator {
@@ -652,7 +659,7 @@ export class Calculator {
       expect(result.success).toBe(true);
 
       // Verify file was modified
-      const content = fs.readFileSync(path.join(tempDir, 'class.ts'), 'utf-8');
+      const content = safeReadFileSync(path.join(tempDir, 'class.ts'), 'utf-8');
       expect(content).toContain('return a + b;');
       expect(content).not.toContain("throw new Error('TODO')");
     });
@@ -670,11 +677,11 @@ export class Calculator {
     });
 
     it('should order functions with leaves first', async () => {
-      fs.writeFileSync(
+      safeWriteFileSync(
         path.join(tempDir, 'tsconfig.json'),
         JSON.stringify({ compilerOptions: { strict: true }, include: ['*.ts'] })
       );
-      fs.writeFileSync(
+      safeWriteFileSync(
         path.join(tempDir, 'deps.ts'),
         `
 export function root(): number {

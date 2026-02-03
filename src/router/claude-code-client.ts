@@ -7,6 +7,7 @@
  * @packageDocumentation
  */
 
+import { TypedMap } from '../utils/typed-map.js';
 import { execa, type ExecaError } from 'execa';
 import type { Config } from '../config/types.js';
 import type {
@@ -129,6 +130,14 @@ export async function checkClaudeCodeInstalled(executablePath = 'claude'): Promi
   }
 }
 
+const MODEL_ALIAS_MAP = TypedMap.fromObject({
+  architect: 'architect_model',
+  auditor: 'auditor_model',
+  structurer: 'structurer_model',
+  worker: 'worker_model',
+  fallback: 'fallback_model',
+});
+
 /**
  * Resolves a model alias to the actual model identifier.
  *
@@ -137,16 +146,8 @@ export async function checkClaudeCodeInstalled(executablePath = 'claude'): Promi
  * @returns The resolved model identifier.
  */
 function resolveModelAlias(alias: ModelAlias, config: Config): string {
-  const modelMap: Record<ModelAlias, keyof Config['models']> = {
-    architect: 'architect_model',
-    auditor: 'auditor_model',
-    structurer: 'structurer_model',
-    worker: 'worker_model',
-    fallback: 'fallback_model',
-  };
-
-  const configKey = modelMap[alias];
-  return config.models[configKey];
+  const configKey = MODEL_ALIAS_MAP.get(alias) ?? 'architect_model';
+  return config.models[configKey as keyof Config['models']];
 }
 
 /**

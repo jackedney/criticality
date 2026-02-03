@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
-import * as fs from 'node:fs';
+import { mkdtempSync, rmSync } from 'node:fs';
 import * as path from 'node:path';
 import * as os from 'node:os';
 import { Project } from 'ts-morph';
@@ -14,16 +14,17 @@ import {
   inspectAst,
   type TodoFunction,
 } from './ast.js';
+import { safeWriteFileSync, safeReadFileSync, safeExistsSync } from '../../utils/safe-fs.js';
 
 describe('createProject', () => {
   let tempDir: string;
 
   beforeEach(() => {
-    tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'ast-test-'));
+    tempDir = mkdtempSync(path.join(os.tmpdir(), 'ast-test-'));
   });
 
   afterEach(() => {
-    fs.rmSync(tempDir, { recursive: true, force: true });
+    rmSync(tempDir, { recursive: true, force: true });
   });
 
   describe('with tsconfig.json path', () => {
@@ -36,7 +37,7 @@ describe('createProject', () => {
           strict: true,
         },
       };
-      fs.writeFileSync(tsConfigPath, JSON.stringify(tsConfigContent, null, 2));
+      safeWriteFileSync(tsConfigPath, JSON.stringify(tsConfigContent, null, 2));
 
       const project = createProject(tsConfigPath);
 
@@ -52,7 +53,7 @@ describe('createProject', () => {
           noImplicitAny: false,
         },
       };
-      fs.writeFileSync(tsConfigPath, JSON.stringify(tsConfigContent, null, 2));
+      safeWriteFileSync(tsConfigPath, JSON.stringify(tsConfigContent, null, 2));
 
       const project = createProject(tsConfigPath);
       const compilerOptions = project.getCompilerOptions();
@@ -78,7 +79,7 @@ describe('createProject', () => {
 
     it('resolves relative paths correctly', () => {
       const tsConfigPath = path.join(tempDir, 'tsconfig.json');
-      fs.writeFileSync(tsConfigPath, JSON.stringify({ compilerOptions: {} }));
+      safeWriteFileSync(tsConfigPath, JSON.stringify({ compilerOptions: {} }));
 
       const cwd = process.cwd();
       process.chdir(tempDir);
@@ -154,17 +155,17 @@ describe('findTodoFunctions', () => {
   let project: Project;
 
   beforeEach(() => {
-    tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'todo-test-'));
+    tempDir = mkdtempSync(path.join(os.tmpdir(), 'todo-test-'));
     project = createProject();
   });
 
   afterEach(() => {
-    fs.rmSync(tempDir, { recursive: true, force: true });
+    rmSync(tempDir, { recursive: true, force: true });
   });
 
   function addSourceFile(filename: string, content: string): string {
     const filePath = path.join(tempDir, filename);
-    fs.writeFileSync(filePath, content);
+    safeWriteFileSync(filePath, content);
     project.addSourceFileAtPath(filePath);
     return filePath;
   }
@@ -522,7 +523,7 @@ describe('findTodoFunctions', () => {
       const fixtureDir = path.resolve(process.cwd(), 'test-fixtures/todo-patterns');
       const fixturePath = path.join(fixtureDir, 'todo-single-quotes.ts');
 
-      if (fs.existsSync(fixturePath)) {
+      if (safeExistsSync(fixturePath)) {
         const fixtureProject = createProject();
         fixtureProject.addSourceFileAtPath(fixturePath);
 
@@ -537,7 +538,7 @@ describe('findTodoFunctions', () => {
       const fixtureDir = path.resolve(process.cwd(), 'test-fixtures/todo-patterns');
       const fixturePath = path.join(fixtureDir, 'todo-double-quotes.ts');
 
-      if (fs.existsSync(fixturePath)) {
+      if (safeExistsSync(fixturePath)) {
         const fixtureProject = createProject();
         fixtureProject.addSourceFileAtPath(fixturePath);
 
@@ -555,23 +556,23 @@ describe('injectFunctionBody', () => {
   let project: Project;
 
   beforeEach(() => {
-    tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'inject-test-'));
+    tempDir = mkdtempSync(path.join(os.tmpdir(), 'inject-test-'));
     project = createProject();
   });
 
   afterEach(() => {
-    fs.rmSync(tempDir, { recursive: true, force: true });
+    rmSync(tempDir, { recursive: true, force: true });
   });
 
   function addSourceFile(filename: string, content: string): string {
     const filePath = path.join(tempDir, filename);
-    fs.writeFileSync(filePath, content);
+    safeWriteFileSync(filePath, content);
     project.addSourceFileAtPath(filePath);
     return filePath;
   }
 
   function readFileContent(filePath: string): string {
-    return fs.readFileSync(filePath, 'utf-8');
+    return safeReadFileSync(filePath, 'utf-8');
   }
 
   describe('basic injection', () => {
@@ -1078,17 +1079,17 @@ describe('orderByDependency', () => {
   let project: Project;
 
   beforeEach(() => {
-    tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'topo-test-'));
+    tempDir = mkdtempSync(path.join(os.tmpdir(), 'topo-test-'));
     project = createProject();
   });
 
   afterEach(() => {
-    fs.rmSync(tempDir, { recursive: true, force: true });
+    rmSync(tempDir, { recursive: true, force: true });
   });
 
   function addSourceFile(filename: string, content: string): string {
     const filePath = path.join(tempDir, filename);
-    fs.writeFileSync(filePath, content);
+    safeWriteFileSync(filePath, content);
     project.addSourceFileAtPath(filePath);
     return filePath;
   }
@@ -1722,16 +1723,16 @@ describe('inspectAst', () => {
   let tempDir: string;
 
   beforeEach(() => {
-    tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'inspect-test-'));
+    tempDir = mkdtempSync(path.join(os.tmpdir(), 'inspect-test-'));
   });
 
   afterEach(() => {
-    fs.rmSync(tempDir, { recursive: true, force: true });
+    rmSync(tempDir, { recursive: true, force: true });
   });
 
   function createSourceFile(filename: string, content: string): string {
     const filePath = path.join(tempDir, filename);
-    fs.writeFileSync(filePath, content);
+    safeWriteFileSync(filePath, content);
     return filePath;
   }
 

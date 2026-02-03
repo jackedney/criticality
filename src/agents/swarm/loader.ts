@@ -7,7 +7,6 @@
  * @packageDocumentation
  */
 
-import fs from 'node:fs/promises';
 import TOML from '@iarna/toml';
 
 import type {
@@ -20,6 +19,7 @@ import type {
 import { SwarmConfigurationError, MCP_SERVER_NAMES } from './types.js';
 import { SwarmRegistry, validateSwarmConfiguration } from './registry.js';
 import { DEFAULT_SWARM_CONFIG } from './definitions.js';
+import { safeReadFile } from '../../utils/safe-fs.js';
 import type { AgentRole, SkillName, SkillPermissions } from '../types.js';
 import { AGENT_ROLES, SKILL_NAMES } from '../types.js';
 
@@ -69,9 +69,9 @@ export async function loadSwarmConfigFromFile(filePath: string): Promise<SwarmCo
   let content: string;
 
   try {
-    content = await fs.readFile(filePath, 'utf-8');
+    content = await safeReadFile(filePath, 'utf-8');
   } catch (err) {
-    const error = err as NodeJS.ErrnoException;
+    const error = err as Error & { code?: string };
     if (error.code === 'ENOENT') {
       throw new SwarmConfigurationError([`Configuration file not found: ${filePath}`]);
     }
@@ -138,6 +138,10 @@ export function parseSwarmConfig(data: unknown): SwarmConfiguration {
 
 /**
  * Parses a single agent definition from raw data.
+ *
+ * @param data - Raw agent data from TOML/JSON.
+ * @returns The parsed agent definition.
+ * @throws {SwarmConfigurationError} If the data is invalid.
  */
 function parseAgentDefinition(data: unknown): AgentDefinition {
   if (typeof data !== 'object' || data === null) {
@@ -149,7 +153,7 @@ function parseAgentDefinition(data: unknown): AgentDefinition {
   // Parse role
   const role = obj.role as AgentRole;
   if (!AGENT_ROLES.includes(role)) {
-    throw new SwarmConfigurationError([`Invalid agent role: ${String(obj.role)}`]);
+    throw new SwarmConfigurationError([`Invalid agent role: ${role}`]);
   }
 
   // Parse description
@@ -195,17 +199,18 @@ function parseAgentDefinition(data: unknown): AgentDefinition {
     mcpServers,
     assignedSkills,
     permissions,
+    ...(contextLimit !== undefined ? { contextLimit } : {}),
   };
-
-  if (contextLimit !== undefined) {
-    return { ...agent, contextLimit };
-  }
 
   return agent;
 }
 
 /**
  * Parses an MCP server access configuration from raw data.
+ *
+ * @param data - Raw server data from TOML/JSON.
+ * @returns The parsed MCP server access configuration.
+ * @throws {SwarmConfigurationError} If the data is invalid.
  */
 function parseMCPServerAccess(data: unknown): MCPServerAccess {
   if (typeof data !== 'object' || data === null) {
@@ -217,7 +222,7 @@ function parseMCPServerAccess(data: unknown): MCPServerAccess {
   // Parse server name
   const server = obj.server as MCPServerName;
   if (!MCP_SERVER_NAMES.includes(server)) {
-    throw new SwarmConfigurationError([`Invalid MCP server: ${String(obj.server)}`]);
+    throw new SwarmConfigurationError([`Invalid MCP server: ${server}`]);
   }
 
   // Parse mode - defaults to 'full' if not specified or invalid
@@ -226,25 +231,24 @@ function parseMCPServerAccess(data: unknown): MCPServerAccess {
       ? (obj.mode as MCPAccessMode)
       : 'full';
 
-  const access: MCPServerAccess = { server, mode };
+  // Filter scopedPaths and allowedTools to string arrays (only for scoped mode)
+  const scopedPaths =
+    mode === 'scoped' && Array.isArray(obj.scopedPaths)
+      ? obj.scopedPaths.filter((p): p is string => typeof p === 'string')
+      : [];
 
-  // Parse optional scoped paths
-  if (Array.isArray(obj.scopedPaths)) {
-    const scopedPaths = obj.scopedPaths.filter((p): p is string => typeof p === 'string');
-    return { ...access, scopedPaths };
-  }
+  const allowedTools =
+    mode === 'scoped' && Array.isArray(obj.allowedTools)
+      ? obj.allowedTools.filter((t): t is string => typeof t === 'string')
+      : [];
 
-  // Parse optional allowed tools
-  if (Array.isArray(obj.allowedTools)) {
-    const allowedTools = obj.allowedTools.filter((t): t is string => typeof t === 'string');
-    return { ...access, allowedTools };
-  }
-
-  // Parse optional blocked tools
-  if (Array.isArray(obj.blockedTools)) {
-    const blockedTools = obj.blockedTools.filter((t): t is string => typeof t === 'string');
-    return { ...access, blockedTools };
-  }
+  // Build access object using conditional spreads (immutable)
+  const access: MCPServerAccess = {
+    server,
+    mode,
+    ...(mode === 'scoped' && scopedPaths.length > 0 ? { scopedPaths } : {}),
+    ...(mode === 'scoped' && allowedTools.length > 0 ? { allowedTools } : {}),
+  };
 
   return access;
 }
@@ -292,23 +296,20 @@ export function applyEnvironmentOverrides(config: SwarmConfiguration): SwarmConf
     const result: AgentDefinition = {
       ...agent,
       permissions,
+      ...(contextLimit !== undefined ? { contextLimit } : {}),
     };
-
-    if (contextLimit !== undefined) {
-      return { ...result, contextLimit };
-    }
 
     return result;
   });
 
-  const result: SwarmConfiguration = {
-    version: config.version,
+  const overrideResult: SwarmConfiguration = {
+    ...config,
     agents,
     ...(defaultTimeout !== undefined ? { defaultTimeout } : {}),
     ...(maxConcurrentAgents !== undefined ? { maxConcurrentAgents } : {}),
   };
 
-  return result;
+  return overrideResult;
 }
 
 /**
@@ -319,7 +320,7 @@ function parseEnvInt(value: string | undefined, defaultValue?: number): number |
     return defaultValue;
   }
   const parsed = parseInt(value, 10);
-  if (isNaN(parsed)) {
+  if (Number.isNaN(parsed)) {
     return defaultValue;
   }
   return parsed;
@@ -357,10 +358,11 @@ export async function loadSwarmConfig(
   if (configPath !== undefined) {
     try {
       config = await loadSwarmConfigFromFile(configPath);
-      source = mergeWithDefaults ? 'merged' : 'file';
-
       if (mergeWithDefaults) {
         config = mergeConfigurations(DEFAULT_SWARM_CONFIG, config);
+        source = 'merged';
+      } else {
+        source = 'file';
       }
     } catch (err) {
       if (err instanceof SwarmConfigurationError) {

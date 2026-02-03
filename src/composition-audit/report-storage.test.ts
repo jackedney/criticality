@@ -40,6 +40,7 @@ vi.mock('node:os', async (): Promise<typeof import('node:os')> => {
   const actual = await vi.importActual<typeof import('node:os')>('node:os');
   return {
     ...actual,
+    // eslint-disable-next-line security/detect-non-literal-fs-filename -- test file: path constructed from temp directory
     homedir: () => realpathSync(join(tmpdir(), 'criticality-test-storage')),
   };
 });
@@ -50,8 +51,11 @@ describe('Report Storage', () => {
 
   beforeEach(async () => {
     testDir = join(tmpdir(), 'criticality-test-storage');
+    // eslint-disable-next-line security/detect-non-literal-fs-filename -- test file: path constructed from temp directory
     await mkdir(testDir, { recursive: true });
+    // eslint-disable-next-line security/detect-non-literal-fs-filename -- test file: path constructed from temp directory
     await mkdir(join(testDir, '.criticality'), { recursive: true });
+    // eslint-disable-next-line security/detect-non-literal-fs-filename -- test file: path constructed from temp directory
     await mkdir(join(testDir, '.criticality', 'projects'), { recursive: true });
   });
 
@@ -275,6 +279,7 @@ describe('Report Storage', () => {
       const path = await saveContradictionReport(report);
 
       expect(path).toContain('.json');
+      // eslint-disable-next-line security/detect-non-literal-fs-filename -- test file: path returned from saveContradictionReport
       const content = await readFile(path, 'utf-8');
       const parsed = JSON.parse(content) as ContradictionReport;
       expect(parsed.projectId).toBe(testProjectId);
@@ -285,6 +290,7 @@ describe('Report Storage', () => {
       const path = await saveContradictionReport(report, { format: 'yaml' });
 
       expect(path).toContain('.yaml');
+      // eslint-disable-next-line security/detect-non-literal-fs-filename -- test file: path returned from saveContradictionReport
       const content = await readFile(path, 'utf-8');
       expect(content).toContain('id:');
       expect(content).toContain('projectId:');
@@ -295,6 +301,7 @@ describe('Report Storage', () => {
       await saveContradictionReport(report);
 
       const latestPath = getLatestReportPath(testProjectId, 'json');
+      // eslint-disable-next-line security/detect-non-literal-fs-filename -- test file: path from getLatestReportPath helper
       const content = await readFile(latestPath, 'utf-8');
       const parsed = JSON.parse(content) as ContradictionReport;
       expect(parsed.id).toBe(report.id);
@@ -337,8 +344,10 @@ describe('Report Storage', () => {
     it('throws validation_error for invalid content', async () => {
       // Create invalid report file
       const auditDir = getAuditDir(testProjectId);
+      // eslint-disable-next-line security/detect-non-literal-fs-filename -- test file: path from getAuditDir helper
       await mkdir(auditDir, { recursive: true });
       const reportPath = join(auditDir, 'INVALID_REPORT.json');
+      // eslint-disable-next-line security/detect-non-literal-fs-filename -- test file: path constructed from test audit directory
       await writeFile(reportPath, '{"invalid": true}', 'utf-8');
 
       await expect(loadContradictionReport(testProjectId, 'INVALID_REPORT')).rejects.toThrow(
@@ -414,6 +423,7 @@ describe('Report Storage', () => {
       // Set report1's mtime to be older than report2
       const report1Path = getReportPath(testProjectId, report1.id, 'json');
       const now = new Date();
+      // eslint-disable-next-line security/detect-non-literal-fs-filename -- test file: path from getReportPath helper
       await utimes(report1Path, now, new Date(now.getTime() - 10000));
 
       const reports = await listContradictionReports(testProjectId);

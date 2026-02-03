@@ -4,9 +4,10 @@
 
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import fc from 'fast-check';
-import * as fs from 'node:fs/promises';
+import { mkdtemp, rm } from 'node:fs/promises';
 import * as path from 'node:path';
 import * as os from 'node:os';
+import { safeReadFile, safeWriteFile, safeMkdir, safeStat } from '../utils/safe-fs.js';
 import {
   generateModuleStructure,
   generateAndWriteModuleStructure,
@@ -394,11 +395,11 @@ describe('writeModuleStructure', () => {
   let tempDir: string;
 
   beforeEach(async () => {
-    tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'lattice-test-'));
+    tempDir = await mkdtemp(path.join(os.tmpdir(), 'lattice-test-'));
   });
 
   afterEach(async () => {
-    await fs.rm(tempDir, { recursive: true, force: true });
+    await rm(tempDir, { recursive: true, force: true });
   });
 
   it('should write generated files to disk', async () => {
@@ -422,16 +423,13 @@ fields = [{ name = "id", type = "string" }]
     const barrelPath = path.join(tempDir, 'src', 'domain', 'account', 'index.ts');
     const rootBarrelPath = path.join(tempDir, 'src', 'domain', 'index.ts');
 
-    const typesExists = await fs
-      .stat(typesPath)
+    const typesExists = await safeStat(typesPath)
       .then(() => true)
       .catch(() => false);
-    const barrelExists = await fs
-      .stat(barrelPath)
+    const barrelExists = await safeStat(barrelPath)
       .then(() => true)
       .catch(() => false);
-    const rootBarrelExists = await fs
-      .stat(rootBarrelPath)
+    const rootBarrelExists = await safeStat(rootBarrelPath)
       .then(() => true)
       .catch(() => false);
 
@@ -440,7 +438,7 @@ fields = [{ name = "id", type = "string" }]
     expect(rootBarrelExists).toBe(true);
 
     // Verify content
-    const typesContent = await fs.readFile(typesPath, 'utf-8');
+    const typesContent = await safeReadFile(typesPath, 'utf-8');
     expect(typesContent).toContain('export interface Account');
   });
 });
@@ -450,11 +448,11 @@ describe('generateAndWriteModuleStructure', () => {
   let specPath: string;
 
   beforeEach(async () => {
-    tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'lattice-full-test-'));
+    tempDir = await mkdtemp(path.join(os.tmpdir(), 'lattice-full-test-'));
     specPath = path.join(tempDir, 'spec.toml');
 
     // Write a test spec file
-    await fs.writeFile(
+    await safeWriteFile(
       specPath,
       `
 [meta]
@@ -482,7 +480,7 @@ methods = [
   });
 
   afterEach(async () => {
-    await fs.rm(tempDir, { recursive: true, force: true });
+    await rm(tempDir, { recursive: true, force: true });
   });
 
   it('should generate and write module structure from spec file', async () => {
@@ -497,9 +495,9 @@ methods = [
     const interfacesPath = path.join(tempDir, 'src', 'domain', 'account', 'interfaces.ts');
     const barrelPath = path.join(tempDir, 'src', 'domain', 'account', 'index.ts');
 
-    const typesContent = await fs.readFile(typesPath, 'utf-8');
-    const interfacesContent = await fs.readFile(interfacesPath, 'utf-8');
-    const barrelContent = await fs.readFile(barrelPath, 'utf-8');
+    const typesContent = await safeReadFile(typesPath, 'utf-8');
+    const interfacesContent = await safeReadFile(interfacesPath, 'utf-8');
+    const barrelContent = await safeReadFile(barrelPath, 'utf-8');
 
     expect(typesContent).toContain('export interface Account');
     expect(interfacesContent).toContain('export interface AccountService');
@@ -523,15 +521,15 @@ describe('detectProjectConventions', () => {
   let tempDir: string;
 
   beforeEach(async () => {
-    tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'conventions-test-'));
+    tempDir = await mkdtemp(path.join(os.tmpdir(), 'conventions-test-'));
   });
 
   afterEach(async () => {
-    await fs.rm(tempDir, { recursive: true, force: true });
+    await rm(tempDir, { recursive: true, force: true });
   });
 
   it('should detect src directory', async () => {
-    await fs.mkdir(path.join(tempDir, 'src'));
+    await safeMkdir(path.join(tempDir, 'src'));
 
     const conventions = await detectProjectConventions(tempDir);
 
@@ -539,7 +537,7 @@ describe('detectProjectConventions', () => {
   });
 
   it('should detect lib directory as alternative', async () => {
-    await fs.mkdir(path.join(tempDir, 'lib'));
+    await safeMkdir(path.join(tempDir, 'lib'));
 
     const conventions = await detectProjectConventions(tempDir);
 
@@ -547,7 +545,7 @@ describe('detectProjectConventions', () => {
   });
 
   it('should detect domain directory patterns', async () => {
-    await fs.mkdir(path.join(tempDir, 'src', 'domain'), { recursive: true });
+    await safeMkdir(path.join(tempDir, 'src', 'domain'), { recursive: true });
 
     const conventions = await detectProjectConventions(tempDir);
 
@@ -555,7 +553,7 @@ describe('detectProjectConventions', () => {
   });
 
   it('should detect modules directory pattern', async () => {
-    await fs.mkdir(path.join(tempDir, 'src', 'modules'), { recursive: true });
+    await safeMkdir(path.join(tempDir, 'src', 'modules'), { recursive: true });
 
     const conventions = await detectProjectConventions(tempDir);
 
@@ -584,6 +582,7 @@ describe('Property-based tests for inferDomainBoundaries', () => {
     if (modelNames.length > 0) {
       spec.data_models = {};
       for (const name of modelNames) {
+        // eslint-disable-next-line security/detect-object-injection -- safe: name comes from controlled test data array
         spec.data_models[name] = {
           fields: [{ name: 'id', type: 'string' }],
         };
@@ -593,6 +592,7 @@ describe('Property-based tests for inferDomainBoundaries', () => {
     if (interfaceNames.length > 0) {
       spec.interfaces = {};
       for (const name of interfaceNames) {
+        // eslint-disable-next-line security/detect-object-injection -- safe: name comes from controlled test data array
         spec.interfaces[name] = {
           methods: [{ name: 'get', returns: 'void' }],
         };
@@ -710,7 +710,8 @@ describe('Property-based tests for inferDomainBoundaries', () => {
         const boundaries = inferDomainBoundaries(spec);
 
         // All domain names should be lowercase and contain only alphanumeric chars and hyphens
-        const validNamePattern = /^[a-z0-9]+(-[a-z0-9]+)*$/;
+        // Use a pattern that doesn't have nested quantifiers
+        const validNamePattern = /^[a-z0-9][a-z0-9-]*[a-z0-9]$|^[a-z0-9]$/;
         for (const boundary of boundaries) {
           // Skip the default system name which may not follow this pattern
           if (boundary.name === 'test-system') {

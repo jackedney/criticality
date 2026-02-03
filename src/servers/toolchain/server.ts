@@ -15,7 +15,6 @@ import {
   type CallToolResult,
 } from '@modelcontextprotocol/sdk/types.js';
 import { execa, type ResultPromise, type Options as ExecaOptions } from 'execa';
-import fs from 'node:fs/promises';
 import path from 'node:path';
 
 import {
@@ -36,6 +35,7 @@ import {
   OutputParseError,
 } from './types.js';
 import { createServerLogger } from '../logging.js';
+import { safeStat, safeReadFile, safeReaddir } from '../../utils/safe-fs.js';
 
 const DEFAULT_TIMEOUT = 60000;
 
@@ -69,7 +69,7 @@ export function createToolchainServer(config: ToolchainServerConfig): Server {
 
     for (const { file, lang } of checks) {
       try {
-        await fs.access(path.join(projectRoot, file));
+        await safeStat(path.join(projectRoot, file));
         return lang;
       } catch {
         // File doesn't exist, continue
@@ -412,7 +412,13 @@ export function createToolchainServer(config: ToolchainServerConfig): Server {
 
       case 'python': {
         // mypy format: file:line:col: error: message [error-code]
-        const pyRegex = /^(.+?):(\d+):(\d+):\s+(error|warning):\s+(.+?)(?:\s+\[(.+?)\])?$/gm;
+        /* eslint-disable security/detect-unsafe-regex --
+           pyRegex is safe: anchored with ^ and $, uses only bounded character classes
+           ([^:]+, [^\]]+, [^[]+?) with no nested quantifiers or catastrophic-backtracking
+           constructs, and [ \t] instead of \s reduces ambiguity. */
+        const pyRegex =
+          /^([^:]+):(\d+):(\d+):[ \t]+(error|warning):[ \t]+([^[]+?)(?:[ \t]+\[([^\]]+)\])?$/gm;
+        /* eslint-enable security/detect-unsafe-regex */
         let match;
         while ((match = pyRegex.exec(output)) !== null) {
           errors.push({
@@ -870,7 +876,7 @@ export function createToolchainServer(config: ToolchainServerConfig): Server {
     // Check if it's a file or directory
     let files: string[];
     try {
-      const stat = await fs.stat(fullPath);
+      const stat = await safeStat(fullPath);
       if (stat.isDirectory()) {
         files = await collectFiles(fullPath, ['.ts', '.js']);
       } else {
@@ -881,7 +887,7 @@ export function createToolchainServer(config: ToolchainServerConfig): Server {
     }
 
     for (const file of files) {
-      const content = await fs.readFile(file, 'utf-8');
+      const content = await safeReadFile(file, 'utf-8');
       const fileFunctions = extractFunctionComplexity(content, path.relative(projectRoot, file));
       functions.push(...fileFunctions);
     }
@@ -894,7 +900,9 @@ export function createToolchainServer(config: ToolchainServerConfig): Server {
    */
   async function collectFiles(dirPath: string, extensions: string[]): Promise<string[]> {
     const files: string[] = [];
-    const entries = await fs.readdir(dirPath, { withFileTypes: true });
+    const entries = await safeReaddir(dirPath, {
+      withFileTypes: true,
+    });
 
     for (const entry of entries) {
       const fullPath = path.join(dirPath, entry.name);
@@ -922,14 +930,19 @@ export function createToolchainServer(config: ToolchainServerConfig): Server {
     const functions: FunctionComplexity[] = [];
 
     // Pattern to find function declarations and arrow functions
+    /* eslint-disable security/detect-unsafe-regex --
+       These patterns are safe: no nested quantifiers or catastrophic-backtracking constructs,
+       applied line-by-line with bounded lookahead, and [ \t] instead of \s reduces ambiguity
+       by matching only horizontal whitespace. */
     const funcPatterns = [
       // Function declarations: function name(...)
-      /function\s+(\w+)\s*\([^)]*\)/g,
+      /function[ \t]+(\w+)[ \t]*\([^)]*\)/g,
       // Method definitions: name(...)
-      /(\w+)\s*\([^)]*\)\s*(?::\s*\w+\s*)?\{/g,
+      /(\w+)[ \t]*\([^)]*\)[ \t]*(?::[ \t]*\w+[ \t]*)?\{/g,
       // Arrow functions with name: const name = (...) =>
-      /(?:const|let|var)\s+(\w+)\s*=\s*(?:async\s*)?\([^)]*\)\s*=>/g,
+      /(?:const|let|var)[ \t]+(\w+)[ \t]*=[ \t]*(?:async[ \t]*)?\([^)]*\)[ \t]*=>/g,
     ];
+    /* eslint-enable security/detect-unsafe-regex */
 
     for (const pattern of funcPatterns) {
       let match;
@@ -1028,6 +1041,7 @@ export function createToolchainServer(config: ToolchainServerConfig): Server {
   function findMatchingBrace(content: string, start: number): number {
     let depth = 0;
     for (let i = start; i < content.length; i++) {
+      // eslint-disable-next-line security/detect-object-injection -- content[i] is safe: bounded string index access
       const char = content[i];
       if (char === '{') {
         depth++;

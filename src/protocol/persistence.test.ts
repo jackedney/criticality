@@ -1,8 +1,9 @@
 import { describe, expect, it, beforeEach, afterEach } from 'vitest';
-import { mkdir, rm, readFile, writeFile, readdir } from 'node:fs/promises';
+import { rm } from 'node:fs/promises';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { randomUUID } from 'node:crypto';
+import { safeMkdir, safeReadFile, safeReaddir, safeWriteFile } from '../utils/safe-fs.js';
 import {
   serializeState,
   deserializeState,
@@ -561,7 +562,7 @@ describe('Protocol State Persistence', () => {
 
     beforeEach(async () => {
       testDir = join(tmpdir(), `state-test-${randomUUID()}`);
-      await mkdir(testDir, { recursive: true });
+      await safeMkdir(testDir, { recursive: true });
     });
 
     afterEach(async () => {
@@ -582,7 +583,7 @@ describe('Protocol State Persistence', () => {
         const filePath = join(testDir, 'state.json');
         await saveState(snapshot, filePath);
 
-        const content = await readFile(filePath, 'utf-8');
+        const content = await safeReadFile(filePath, 'utf-8');
         const parsed = JSON.parse(content) as PersistedStateData;
         expect(parsed.phase).toBe('Lattice');
         expect(parsed.artifacts).toEqual(['spec']);
@@ -594,7 +595,7 @@ describe('Protocol State Persistence', () => {
         const filePath = join(testDir, 'state.json');
         await saveState(snapshot, filePath);
 
-        const content = await readFile(filePath, 'utf-8');
+        const content = await safeReadFile(filePath, 'utf-8');
         expect(content).toContain('\n');
       });
 
@@ -604,7 +605,7 @@ describe('Protocol State Persistence', () => {
         const filePath = join(testDir, 'state.json');
         await saveState(snapshot, filePath, { pretty: false });
 
-        const content = await readFile(filePath, 'utf-8');
+        const content = await safeReadFile(filePath, 'utf-8');
         expect(content).not.toContain('\n');
       });
 
@@ -617,11 +618,11 @@ describe('Protocol State Persistence', () => {
         await saveState(snapshot, filePath);
 
         // File should exist with correct content
-        const content = await readFile(filePath, 'utf-8');
+        const content = await safeReadFile(filePath, 'utf-8');
         expect(content).toContain('Lattice');
 
         // No temp files should remain
-        const files = await readdir(testDir);
+        const files = await safeReaddir(testDir);
         expect(files.filter((f: string) => f.includes('.tmp'))).toHaveLength(0);
       });
 
@@ -637,7 +638,7 @@ describe('Protocol State Persistence', () => {
         await saveState(snapshot1, filePath);
         await saveState(snapshot2, filePath);
 
-        const content = await readFile(filePath, 'utf-8');
+        const content = await safeReadFile(filePath, 'utf-8');
         expect(content).toContain('Lattice');
         expect(content).not.toContain('"phase": "Ignition"');
       });
@@ -691,7 +692,7 @@ describe('Protocol State Persistence', () => {
 
       it('should throw StatePersistenceError for empty file', async () => {
         const filePath = join(testDir, 'empty.json');
-        await writeFile(filePath, '', 'utf-8');
+        await safeWriteFile(filePath, '', 'utf-8');
 
         await expect(loadState(filePath)).rejects.toThrow(StatePersistenceError);
 
@@ -706,7 +707,7 @@ describe('Protocol State Persistence', () => {
 
       it('should throw StatePersistenceError for corrupted JSON', async () => {
         const filePath = join(testDir, 'corrupted.json');
-        await writeFile(filePath, '{ corrupted json data }}}', 'utf-8');
+        await safeWriteFile(filePath, '{ corrupted json data }}}', 'utf-8');
 
         await expect(loadState(filePath)).rejects.toThrow(StatePersistenceError);
 
@@ -721,7 +722,7 @@ describe('Protocol State Persistence', () => {
       it('should throw StatePersistenceError for truncated file', async () => {
         const filePath = join(testDir, 'truncated.json');
         // Simulate a partially written file
-        await writeFile(filePath, '{"version": "1.0.0", "persistedAt": "2024', 'utf-8');
+        await safeWriteFile(filePath, '{"version": "1.0.0", "persistedAt": "2024', 'utf-8');
 
         await expect(loadState(filePath)).rejects.toThrow(StatePersistenceError);
       });
@@ -816,7 +817,7 @@ describe('Protocol State Persistence', () => {
         await saveState(validSnapshot, filePath);
 
         // Verify valid state is saved
-        const beforeContent = await readFile(filePath, 'utf-8');
+        const beforeContent = await safeReadFile(filePath, 'utf-8');
         expect(beforeContent).toContain('Lattice');
 
         // Try to save to a non-existent directory (will fail)
@@ -832,7 +833,7 @@ describe('Protocol State Persistence', () => {
         }
 
         // Original file should be unchanged
-        const afterContent = await readFile(filePath, 'utf-8');
+        const afterContent = await safeReadFile(filePath, 'utf-8');
         expect(afterContent).toBe(beforeContent);
       });
     });
@@ -843,7 +844,7 @@ describe('Protocol State Persistence', () => {
 
     beforeEach(async () => {
       testDir = join(tmpdir(), `state-exists-test-${randomUUID()}`);
-      await mkdir(testDir, { recursive: true });
+      await safeMkdir(testDir, { recursive: true });
     });
 
     afterEach(async () => {

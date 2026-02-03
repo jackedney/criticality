@@ -725,6 +725,7 @@ export function formatAuditResult(
     lines.push('');
 
     for (let i = 0; i < findings.length; i++) {
+      // eslint-disable-next-line security/detect-object-injection -- safe: i is bounded numeric loop counter
       const finding = findings[i];
       if (finding === undefined) {
         continue;

@@ -16,9 +16,10 @@ import type { ProtocolStateSnapshot } from './persistence.js';
 import type { ArtifactType } from './transitions.js';
 import { createActiveState, createBlockingSubstate, createFailedSubstate } from './types.js';
 import { saveState } from './persistence.js';
-import { mkdir, rm } from 'node:fs/promises';
+import { rm } from 'node:fs/promises';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
+import { safeMkdir } from '../utils/safe-fs.js';
 
 describe('Protocol Orchestrator', () => {
   describe('Guards', () => {
@@ -293,7 +294,7 @@ describe('Protocol Orchestrator', () => {
 
     beforeEach(async () => {
       testDir = join(tmpdir(), `orchestrator-test-${String(Date.now())}`);
-      await mkdir(testDir, { recursive: true });
+      await safeMkdir(testDir, { recursive: true });
       statePath = join(testDir, 'state.json');
     });
 
@@ -431,7 +432,7 @@ describe('Protocol Orchestrator', () => {
 
     beforeEach(async () => {
       testDir = join(tmpdir(), `orchestrator-create-test-${String(Date.now())}`);
-      await mkdir(testDir, { recursive: true });
+      await safeMkdir(testDir, { recursive: true });
       statePath = join(testDir, 'state.json');
     });
 

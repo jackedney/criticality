@@ -6,7 +6,7 @@
 
 import { describe, expect, it, beforeEach } from 'vitest';
 import * as path from 'path';
-import * as fs from 'fs';
+import { mkdtempSync } from 'fs';
 import * as os from 'os';
 import {
   parseClaims,
@@ -15,6 +15,7 @@ import {
   type Claim,
   DEFAULT_CLAIM_TYPE,
 } from './claims.js';
+import { safeWriteFileSync } from '../../utils/safe-fs.js';
 
 const FIXTURES_DIR = path.resolve(__dirname, '../../../test-fixtures/claims');
 
@@ -158,7 +159,7 @@ describe('Claim Parser', () => {
       let tempDir: string;
 
       beforeEach(() => {
-        tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'claims-test-'));
+        tempDir = mkdtempSync(path.join(os.tmpdir(), 'claims-test-'));
       });
 
       it('should handle spec with empty claims section', () => {
@@ -173,7 +174,7 @@ name = "test-system"
 [claims]
 `;
         const specPath = path.join(tempDir, 'empty-claims.toml');
-        fs.writeFileSync(specPath, specContent);
+        safeWriteFileSync(specPath, specContent);
 
         const claims = parseClaims(specPath);
         expect(claims).toEqual([]);
@@ -197,7 +198,7 @@ text = "Another claim"
 type = "invariant"
 `;
         const specPath = path.join(tempDir, 'custom-ids.toml');
-        fs.writeFileSync(specPath, specContent);
+        safeWriteFileSync(specPath, specContent);
 
         const claims = parseClaims(specPath);
         const claimIds = claims.map((c) => c.id).sort();

@@ -1,5 +1,5 @@
 /**
- * Model request/response logging for the Criticality Protocol.
+ * Model request/response logging for Criticality Protocol.
  *
  * Provides configurable logging of all model interactions for debugging
  * and auditing purposes.
@@ -8,7 +8,6 @@
  */
 
 import { createHash } from 'node:crypto';
-import * as fs from 'node:fs';
 import * as path from 'node:path';
 import type {
   ModelAlias,
@@ -16,6 +15,13 @@ import type {
   ModelRouterResponse,
   ModelRouterError,
 } from './types.js';
+
+import {
+  safeExistsSync,
+  safeMkdirSync,
+  safeAppendFileWithOptions,
+  safeReadFileSync,
+} from '../utils/safe-fs.js';
 
 /**
  * Log levels for model interaction logging.
@@ -34,7 +40,7 @@ export const MODEL_LOG_LEVELS: readonly ModelLogLevel[] = ['none', 'summary', 'f
  * Checks if a value is a valid ModelLogLevel.
  *
  * @param value - The value to check.
- * @returns True if the value is a valid ModelLogLevel.
+ * @returns True if value is a valid ModelLogLevel.
  */
 export function isValidModelLogLevel(value: string): value is ModelLogLevel {
   return MODEL_LOG_LEVELS.includes(value as ModelLogLevel);
@@ -46,11 +52,11 @@ export function isValidModelLogLevel(value: string): value is ModelLogLevel {
 export interface ModelRequestLogEntry {
   /** Type discriminator. */
   readonly type: 'request';
-  /** ISO 8601 timestamp of the request. */
+  /** ISO 8601 timestamp of request. */
   readonly timestamp: string;
   /** Model alias used for routing. */
   readonly modelAlias: ModelAlias;
-  /** SHA-256 hash of the prompt (first 16 hex chars). */
+  /** SHA-256 hash of prompt (first 16 hex chars). */
   readonly promptHash: string;
   /** Request ID if provided. */
   readonly requestId?: string;
@@ -68,9 +74,9 @@ export interface ModelRequestLogEntry {
 export interface ModelResponseLogEntry {
   /** Type discriminator. */
   readonly type: 'response';
-  /** ISO 8601 timestamp of the response. */
+  /** ISO 8601 timestamp of response. */
   readonly timestamp: string;
-  /** Model alias that handled the request. */
+  /** Model alias that handled request. */
   readonly modelAlias: ModelAlias;
   /** Total token count. */
   readonly tokenCount: number;
@@ -80,7 +86,7 @@ export interface ModelResponseLogEntry {
   readonly completionTokens: number;
   /** Latency in milliseconds. */
   readonly latencyMs: number;
-  /** The model ID that processed the request. */
+  /** The model ID that processed request. */
   readonly modelId: string;
   /** The provider used. */
   readonly provider: string;
@@ -96,7 +102,7 @@ export interface ModelResponseLogEntry {
 export interface ModelErrorLogEntry {
   /** Type discriminator. */
   readonly type: 'error';
-  /** ISO 8601 timestamp of the error. */
+  /** ISO 8601 timestamp of error. */
   readonly timestamp: string;
   /** Model alias that was targeted. */
   readonly modelAlias: ModelAlias;
@@ -104,7 +110,7 @@ export interface ModelErrorLogEntry {
   readonly errorKind: string;
   /** Error message. */
   readonly errorMessage: string;
-  /** Whether the error is retryable. */
+  /** Whether error is retryable. */
   readonly retryable: boolean;
   /** Request ID for correlation. */
   readonly requestId?: string;
@@ -116,12 +122,12 @@ export interface ModelErrorLogEntry {
 export type ModelLogEntry = ModelRequestLogEntry | ModelResponseLogEntry | ModelErrorLogEntry;
 
 /**
- * Options for the model logger.
+ * Options for model logger.
  */
 export interface ModelLoggerOptions {
   /** Log level (default: 'summary'). */
   logLevel?: ModelLogLevel;
-  /** Path to the log file. If not provided, logs to memory only. */
+  /** Path to log file. If not provided, logs to memory only. */
   logFilePath?: string;
   /** Function to get current timestamp (injectable for testing). */
   now?: () => Date;
@@ -130,10 +136,10 @@ export interface ModelLoggerOptions {
 }
 
 /**
- * Computes a truncated SHA-256 hash of the prompt.
+ * Computes a truncated SHA-256 hash of prompt.
  *
  * @param prompt - The prompt text to hash.
- * @returns First 16 hex characters of the SHA-256 hash.
+ * @returns First 16 hex characters of SHA-256 hash.
  */
 export function computePromptHash(prompt: string): string {
   const hash = createHash('sha256').update(prompt, 'utf8').digest('hex');
@@ -172,14 +178,14 @@ export class ModelLogger {
     // Ensure log directory exists
     if (this.logFilePath !== undefined && this.createDirectory) {
       const dir = path.dirname(this.logFilePath);
-      if (!fs.existsSync(dir)) {
-        fs.mkdirSync(dir, { recursive: true });
+      if (!safeExistsSync(dir)) {
+        safeMkdirSync(dir, { recursive: true });
       }
     }
   }
 
   /**
-   * Gets the current log level.
+   * Gets current log level.
    *
    * @returns The configured log level.
    */
@@ -188,7 +194,7 @@ export class ModelLogger {
   }
 
   /**
-   * Gets the log file path.
+   * Gets log file path.
    *
    * @returns The configured log file path, or undefined if not set.
    */
@@ -218,7 +224,7 @@ export class ModelLogger {
    * @param request - The model router request to log.
    * @returns The created log entry, or undefined if log level is 'none'.
    */
-  logRequest(request: ModelRouterRequest): ModelRequestLogEntry | undefined {
+  async logRequest(request: ModelRouterRequest): Promise<ModelRequestLogEntry | undefined> {
     if (this.logLevel === 'none') {
       return undefined;
     }
@@ -260,7 +266,7 @@ export class ModelLogger {
         entry = { ...entry, maxTokens: request.parameters.maxTokens };
       }
     } else {
-      // Summary log - just the basics
+      // Summary log - just basics
       if (request.requestId !== undefined) {
         entry = { ...baseEntry, requestId: request.requestId };
       } else {
@@ -269,7 +275,7 @@ export class ModelLogger {
     }
 
     this.entries.push(entry);
-    this.writeToFile(entry);
+    await this.writeToFile(entry);
 
     return entry;
   }
@@ -278,15 +284,15 @@ export class ModelLogger {
    * Logs a model response.
    *
    * @param response - The model router response to log.
-   * @param modelAlias - The model alias that handled the request.
+   * @param modelAlias - The model alias that handled request.
    * @param requestId - Optional request ID for correlation.
    * @returns The created log entry, or undefined if log level is 'none'.
    */
-  logResponse(
+  async logResponse(
     response: ModelRouterResponse,
     modelAlias: ModelAlias,
     requestId?: string
-  ): ModelResponseLogEntry | undefined {
+  ): Promise<ModelResponseLogEntry | undefined> {
     if (this.logLevel === 'none') {
       return undefined;
     }
@@ -324,7 +330,7 @@ export class ModelLogger {
     }
 
     this.entries.push(entry);
-    this.writeToFile(entry);
+    await this.writeToFile(entry);
 
     return entry;
   }
@@ -337,11 +343,11 @@ export class ModelLogger {
    * @param requestId - Optional request ID for correlation.
    * @returns The created log entry, or undefined if log level is 'none'.
    */
-  logError(
+  async logError(
     error: ModelRouterError,
     modelAlias: ModelAlias,
     requestId?: string
-  ): ModelErrorLogEntry | undefined {
+  ): Promise<ModelErrorLogEntry | undefined> {
     if (this.logLevel === 'none') {
       return undefined;
     }
@@ -366,7 +372,7 @@ export class ModelLogger {
     }
 
     this.entries.push(entry);
-    this.writeToFile(entry);
+    await this.writeToFile(entry);
 
     return entry;
   }
@@ -382,18 +388,18 @@ export class ModelLogger {
   }
 
   /**
-   * Writes a log entry to the log file.
+   * Writes a log entry to log file.
    *
    * @param entry - The log entry to write.
    */
-  private writeToFile(entry: ModelLogEntry): void {
+  private async writeToFile(entry: ModelLogEntry): Promise<void> {
     if (this.logFilePath === undefined) {
       return;
     }
 
     try {
       const line = this.formatEntry(entry) + '\n';
-      fs.appendFileSync(this.logFilePath, line, 'utf8');
+      await safeAppendFileWithOptions(this.logFilePath, line, { encoding: 'utf8' });
     } catch {
       // Silently ignore write errors to avoid breaking the model request flow
       // In production, you might want to emit an event or use a fallback
@@ -402,7 +408,7 @@ export class ModelLogger {
 }
 
 /**
- * Creates a model logger with the specified options.
+ * Creates a model logger with specified options.
  *
  * @param options - Logger configuration options.
  * @returns A configured ModelLogger instance.
@@ -422,16 +428,16 @@ export function createModelLogger(options: ModelLoggerOptions = {}): ModelLogger
 /**
  * Reads log entries from a log file.
  *
- * @param filePath - Path to the log file.
+ * @param filePath - Path to log file.
  * @returns Array of parsed log entries.
  * @throws Error if file cannot be read or contains invalid JSON.
  */
 export function readLogFile(filePath: string): ModelLogEntry[] {
-  if (!fs.existsSync(filePath)) {
+  if (!safeExistsSync(filePath)) {
     return [];
   }
 
-  const content = fs.readFileSync(filePath, 'utf8');
+  const content = safeReadFileSync(filePath, { encoding: 'utf8' });
   const lines = content.trim().split('\n');
   const entries: ModelLogEntry[] = [];
 
@@ -453,9 +459,9 @@ export function readLogFile(filePath: string): ModelLogEntry[] {
 }
 
 /**
- * Gets the count of logged entries by type from a log file.
+ * Gets count of logged entries by type from a log file.
  *
- * @param filePath - Path to the log file.
+ * @param filePath - Path to log file.
  * @returns Object with counts for each entry type.
  */
 export function getLogStats(filePath: string): {

@@ -14,8 +14,8 @@ import {
   SyntaxKind,
   type SourceFile,
 } from 'ts-morph';
-import * as fs from 'node:fs';
 import * as path from 'node:path';
+import { safeExistsSync } from '../../utils/safe-fs.js';
 
 /**
  * Error thrown when a tsconfig.json file cannot be found.
@@ -48,7 +48,7 @@ export function createProject(tsConfigPath?: string): Project {
   if (tsConfigPath !== undefined) {
     const resolvedPath = path.resolve(tsConfigPath);
 
-    if (!fs.existsSync(resolvedPath)) {
+    if (!safeExistsSync(resolvedPath)) {
       throw new TsConfigNotFoundError(resolvedPath);
     }
 
@@ -60,6 +60,8 @@ export function createProject(tsConfigPath?: string): Project {
   const defaultOptions: ProjectOptions = {
     compilerOptions: {
       strict: true,
+      noUncheckedIndexedAccess: true,
+      exactOptionalPropertyTypes: true,
       target: 99, // ScriptTarget.ESNext
       module: 199, // ModuleKind.NodeNext
       moduleResolution: 99, // ModuleResolutionKind.NodeNext
@@ -360,6 +362,7 @@ function topologicalSort(
   // Build SCC-level dependency graph
   const nodeToScc = new Map<string, number>();
   for (let i = 0; i < sccs.length; i++) {
+    // eslint-disable-next-line security/detect-object-injection -- safe array access with numeric loop counter
     const scc = sccs[i];
     if (scc) {
       for (const node of scc) {
@@ -419,6 +422,7 @@ function topologicalSort(
     }
     processedSccs.add(sccIndex);
 
+    // eslint-disable-next-line security/detect-object-injection -- safe array access with validated numeric index
     const scc = sccs[sccIndex];
     if (scc) {
       // Add all functions in this SCC (already sorted for determinism)
@@ -907,15 +911,17 @@ export function inspectAst(
   const project = new Project({
     compilerOptions: {
       strict: true,
+      noUncheckedIndexedAccess: true,
+      exactOptionalPropertyTypes: true,
       target: 99, // ScriptTarget.ESNext
       module: 199, // ModuleKind.NodeNext
     },
   });
 
-  project.addSourceFilesAtPaths(filePath);
-  const sourceFile = project.getSourceFile(filePath);
-
-  if (!sourceFile) {
+  let sourceFile: SourceFile;
+  try {
+    sourceFile = project.addSourceFileAtPath(filePath);
+  } catch {
     return {
       functions: [],
       logicPatterns: [

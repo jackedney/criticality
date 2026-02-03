@@ -9,8 +9,8 @@
  */
 
 import { type Project } from 'ts-morph';
-import * as fs from 'node:fs';
 import * as path from 'node:path';
+import { safeExistsSync, safeReadFileSync, safeReaddirSync } from '../../utils/safe-fs.js';
 
 import {
   createProject,
@@ -237,13 +237,13 @@ export class TypeScriptAdapter implements TargetAdapter {
     const resolvedPath = path.resolve(projectPath);
 
     // Validate the project exists
-    if (!fs.existsSync(resolvedPath)) {
+    if (!safeExistsSync(resolvedPath)) {
       throw new NotTypeScriptProjectError(resolvedPath);
     }
 
     // Check for tsconfig.json
     const tsConfigPath = path.join(resolvedPath, 'tsconfig.json');
-    const hasTsConfig = fs.existsSync(tsConfigPath);
+    const hasTsConfig = safeExistsSync(tsConfigPath);
 
     // If no tsconfig, check for .ts files
     if (!hasTsConfig) {
@@ -468,7 +468,7 @@ export class TypeScriptAdapter implements TargetAdapter {
    * Checks if a directory contains TypeScript files.
    */
   private async hasTypeScriptFiles(dirPath: string): Promise<boolean> {
-    const entries = fs.readdirSync(dirPath, { withFileTypes: true });
+    const entries = safeReaddirSync(dirPath, { withFileTypes: true });
 
     for (const entry of entries) {
       if (entry.name === 'node_modules' || entry.name.startsWith('.')) {
@@ -503,9 +503,9 @@ export class TypeScriptAdapter implements TargetAdapter {
 
     // Check for npm/yarn workspaces in package.json
     const packageJsonPath = path.join(projectPath, 'package.json');
-    if (fs.existsSync(packageJsonPath)) {
+    if (safeExistsSync(packageJsonPath)) {
       try {
-        const packageJson = JSON.parse(fs.readFileSync(packageJsonPath, 'utf-8')) as {
+        const packageJson = JSON.parse(safeReadFileSync(packageJsonPath, 'utf-8')) as {
           workspaces?: string[] | { packages?: string[] };
         };
 
@@ -528,11 +528,12 @@ export class TypeScriptAdapter implements TargetAdapter {
 
     // Check for pnpm workspaces
     const pnpmWorkspacePath = path.join(projectPath, 'pnpm-workspace.yaml');
-    if (fs.existsSync(pnpmWorkspacePath) && packages.length === 0) {
+    if (safeExistsSync(pnpmWorkspacePath) && packages.length === 0) {
       try {
-        const content = fs.readFileSync(pnpmWorkspacePath, 'utf-8');
+        const content = safeReadFileSync(pnpmWorkspacePath, 'utf-8');
         // Simple YAML parsing for packages array
-        const packagesMatch = /packages:\s*\n((?:\s+-\s+.+\n?)+)/i.exec(content);
+        // eslint-disable-next-line security/detect-unsafe-regex -- File size bounded, local config file
+        const packagesMatch = /packages:\s*\n((?:\s+-\s+[^\n]+\n?)+)/i.exec(content);
         const matchContent = packagesMatch?.[1];
         if (matchContent !== undefined) {
           const patterns = matchContent
@@ -562,23 +563,23 @@ export class TypeScriptAdapter implements TargetAdapter {
     // Simple glob expansion - handles patterns like "packages/*" or "apps/*"
     if (pattern.endsWith('/*')) {
       const dirPath = path.join(basePath, pattern.slice(0, -2));
-      if (fs.existsSync(dirPath)) {
-        const entries = fs.readdirSync(dirPath, { withFileTypes: true });
+      if (safeExistsSync(dirPath)) {
+        const entries = safeReaddirSync(dirPath, { withFileTypes: true });
         for (const entry of entries) {
           if (entry.isDirectory() && !entry.name.startsWith('.')) {
             const packagePath = path.join(dirPath, entry.name);
             const packageJsonPath = path.join(packagePath, 'package.json');
             const tsConfigPath = path.join(packagePath, 'tsconfig.json');
 
-            if (fs.existsSync(packageJsonPath)) {
+            if (safeExistsSync(packageJsonPath)) {
               try {
-                const pkgJson = JSON.parse(fs.readFileSync(packageJsonPath, 'utf-8')) as {
+                const pkgJson = JSON.parse(safeReadFileSync(packageJsonPath, 'utf-8')) as {
                   name?: string;
                 };
                 packages.push({
                   name: pkgJson.name ?? entry.name,
                   path: packagePath,
-                  hasTsConfig: fs.existsSync(tsConfigPath),
+                  hasTsConfig: safeExistsSync(tsConfigPath),
                 });
               } catch {
                 // Ignore parse errors
@@ -593,15 +594,15 @@ export class TypeScriptAdapter implements TargetAdapter {
       const packageJsonPath = path.join(packagePath, 'package.json');
       const tsConfigPath = path.join(packagePath, 'tsconfig.json');
 
-      if (fs.existsSync(packageJsonPath)) {
+      if (safeExistsSync(packageJsonPath)) {
         try {
-          const pkgJson = JSON.parse(fs.readFileSync(packageJsonPath, 'utf-8')) as {
+          const pkgJson = JSON.parse(safeReadFileSync(packageJsonPath, 'utf-8')) as {
             name?: string;
           };
           packages.push({
             name: pkgJson.name ?? path.basename(pattern),
             path: packagePath,
-            hasTsConfig: fs.existsSync(tsConfigPath),
+            hasTsConfig: safeExistsSync(tsConfigPath),
           });
         } catch {
           // Ignore parse errors
@@ -617,7 +618,7 @@ export class TypeScriptAdapter implements TargetAdapter {
    */
   private addSourceFiles(dirPath: string, project: Project): void {
     const srcDir = path.join(dirPath, 'src');
-    if (fs.existsSync(srcDir)) {
+    if (safeExistsSync(srcDir)) {
       project.addSourceFilesAtPaths(`${srcDir}/**/*.ts`);
     } else {
       // No src directory - add all .ts files from root

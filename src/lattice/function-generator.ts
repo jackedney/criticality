@@ -14,6 +14,23 @@ import type {
   TypeParameterInfo,
 } from '../adapters/typescript/signature.js';
 
+/** Keys that are prohibited due to prototype pollution concerns. */
+const PROHIBITED_KEYS = ['__proto__', 'constructor', 'prototype'];
+
+/**
+ * Validates that an interface name is safe from prototype pollution.
+ *
+ * @param interfaceName - The interface name to validate.
+ * @throws Error if interface name is a prohibited key.
+ */
+function validateInterfaceName(interfaceName: string): void {
+  if (PROHIBITED_KEYS.includes(interfaceName)) {
+    throw new Error(
+      `Invalid interface name '${interfaceName}': interface names ${PROHIBITED_KEYS.map((k) => `'${k}'`).join(', ')} are not allowed for security reasons`
+    );
+  }
+}
+
 /**
  * Standard TypeScript types that don't need to be imported or defined in spec.
  * Includes built-in types, utility types, and common generics.
@@ -188,32 +205,36 @@ export class InvalidTypeReferenceError extends Error {
  * @returns The corresponding TypeScript type.
  */
 export function mapSpecTypeToTypeScript(specType: string): string {
-  const typeMap: Record<string, string> = {
-    string: 'string',
-    number: 'number',
-    boolean: 'boolean',
-    integer: 'number',
-    float: 'number',
-    decimal: 'number',
-    date: 'Date',
-    datetime: 'Date',
-    timestamp: 'Date',
-    uuid: 'string',
-    email: 'string',
-    url: 'string',
-    json: 'unknown',
-    any: 'unknown',
-    void: 'void',
-    null: 'null',
-    undefined: 'undefined',
-  };
+  // Handle common type mappings using null-prototype object
+  const typeMap = Object.create(null) as Record<string, string>;
+  typeMap.string = 'string';
+  typeMap.number = 'number';
+  typeMap.boolean = 'boolean';
+  typeMap.integer = 'number';
+  typeMap.float = 'number';
+  typeMap.decimal = 'number';
+  typeMap.date = 'Date';
+  typeMap.datetime = 'Date';
+  typeMap.timestamp = 'Date';
+  typeMap.uuid = 'string';
+  typeMap.email = 'string';
+  typeMap.url = 'string';
+  typeMap.json = 'unknown';
+  typeMap.any = 'unknown';
+  typeMap.void = 'void';
+  typeMap.null = 'null';
+  typeMap.undefined = 'undefined';
 
   const trimmed = specType.trim();
   const lowerType = trimmed.toLowerCase();
 
-  // Check direct mapping
-  if (typeMap[lowerType] !== undefined) {
-    return typeMap[lowerType];
+  // Check direct mapping using Object.hasOwn() to prevent prototype pollution
+  if (Object.hasOwn(typeMap, lowerType)) {
+    // eslint-disable-next-line security/detect-object-injection -- safe: lowerType derived from controlled specType string, validated by Object.hasOwn()
+    const mapped = typeMap[lowerType];
+    if (mapped !== undefined) {
+      return mapped;
+    }
   }
 
   // Handle Result<T, E> type -> map to a union or keep as Result
@@ -833,6 +854,10 @@ export function generateFunctionsForInterface(
   if (!spec.interfaces) {
     throw new Error('Spec has no interfaces defined');
   }
+
+  validateInterfaceName(interfaceName);
+
+  // eslint-disable-next-line security/detect-object-injection -- safe: interfaceName is validated by validateInterfaceName()
   const iface = spec.interfaces[interfaceName];
   if (iface === undefined) {
     throw new Error(`Interface '${interfaceName}' not found in spec`);

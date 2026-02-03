@@ -42,6 +42,7 @@ function parseArgs(): { projectRoot: string; debug: boolean } {
   let projectRoot = process.cwd();
   let debug = false;
 
+  /* eslint-disable security/detect-object-injection -- args[i] and args[i+1] are safe: bounded array access for CLI argument parsing */
   for (let i = 0; i < args.length; i++) {
     const arg = args[i];
     if (arg === '--project-root' || arg === '-p') {
@@ -57,6 +58,7 @@ function parseArgs(): { projectRoot: string; debug: boolean } {
       process.exit(0);
     }
   }
+  /* eslint-enable security/detect-object-injection */
 
   return { projectRoot, debug };
 }

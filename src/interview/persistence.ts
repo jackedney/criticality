@@ -7,7 +7,15 @@
  * @packageDocumentation
  */
 
-import { writeFile, readFile, rename, unlink, appendFile, mkdir, stat } from 'node:fs/promises';
+import {
+  safeWriteFile,
+  safeReadFile,
+  safeRename,
+  safeUnlink,
+  safeMkdir,
+  safeStat,
+  safeAppendFile,
+} from '../utils/safe-fs.js';
 import { join, dirname } from 'node:path';
 import { homedir } from 'node:os';
 import { randomUUID } from 'node:crypto';
@@ -166,7 +174,7 @@ export function getTranscriptPath(projectId: string): string {
  */
 export async function ensureInterviewDir(projectId: string): Promise<void> {
   const dir = getInterviewDir(projectId);
-  await mkdir(dir, { recursive: true });
+  await safeMkdir(dir, { recursive: true });
 }
 
 /**
@@ -469,6 +477,7 @@ export function deserializeInterviewState(json: string): InterviewState {
     );
   }
   for (let i = 0; i < obj.completedPhases.length; i++) {
+    // eslint-disable-next-line security/detect-object-injection -- safe: i is bounded numeric loop counter
     validatePhase(obj.completedPhases[i], `completedPhases[${String(i)}]`);
   }
 
@@ -480,6 +489,7 @@ export function deserializeInterviewState(json: string): InterviewState {
     );
   }
   for (let i = 0; i < obj.extractedRequirements.length; i++) {
+    // eslint-disable-next-line security/detect-object-injection -- safe: i is bounded numeric loop counter
     validateExtractedRequirement(obj.extractedRequirements[i], i);
   }
 
@@ -491,6 +501,7 @@ export function deserializeInterviewState(json: string): InterviewState {
     );
   }
   for (let i = 0; i < obj.features.length; i++) {
+    // eslint-disable-next-line security/detect-object-injection -- safe: i is bounded numeric loop counter
     validateFeature(obj.features[i], i);
   }
 
@@ -502,6 +513,7 @@ export function deserializeInterviewState(json: string): InterviewState {
     );
   }
   for (let i = 0; i < obj.delegationPoints.length; i++) {
+    // eslint-disable-next-line security/detect-object-injection -- safe: i is bounded numeric loop counter
     validateDelegationPoint(obj.delegationPoints[i], i);
   }
 
@@ -553,14 +565,14 @@ export async function saveInterviewState(
 
   try {
     // Write to temporary file first
-    await writeFile(tempPath, json, 'utf-8');
+    await safeWriteFile(tempPath, json, 'utf-8');
 
     // Atomic rename to target path
-    await rename(tempPath, filePath);
+    await safeRename(tempPath, filePath);
   } catch (error) {
     // Clean up temp file if it exists
     try {
-      await unlink(tempPath);
+      await safeUnlink(tempPath);
     } catch {
       // Ignore cleanup errors
     }
@@ -586,7 +598,7 @@ export async function loadInterviewState(projectId: string): Promise<InterviewSt
   let content: string;
 
   try {
-    content = await readFile(filePath, 'utf-8');
+    content = await safeReadFile(filePath, 'utf-8');
   } catch (error) {
     const fileError = error instanceof Error ? error : new Error(String(error));
     const isNotFound =
@@ -662,7 +674,7 @@ export async function loadInterviewState(projectId: string): Promise<InterviewSt
 export async function interviewStateExists(projectId: string): Promise<boolean> {
   const filePath = getInterviewStatePath(projectId);
   try {
-    await stat(filePath);
+    await safeStat(filePath);
     return true;
   } catch {
     return false;
@@ -764,7 +776,7 @@ export async function appendTranscriptEntry(
   const line = serializeTranscriptEntry(entry) + '\n';
 
   try {
-    await appendFile(filePath, line, 'utf-8');
+    await safeAppendFile(filePath, line, 'utf-8');
   } catch (error) {
     const fileError = error instanceof Error ? error : new Error(String(error));
     throw new InterviewPersistenceError(
@@ -819,7 +831,7 @@ export async function loadTranscript(projectId: string): Promise<TranscriptEntry
   let content: string;
 
   try {
-    content = await readFile(filePath, 'utf-8');
+    content = await safeReadFile(filePath, 'utf-8');
   } catch (error) {
     const fileError = error instanceof Error ? error : new Error(String(error));
     const isNotFound =
@@ -849,6 +861,7 @@ export async function loadTranscript(projectId: string): Promise<TranscriptEntry
   const entries: TranscriptEntry[] = [];
 
   for (let i = 0; i < lines.length; i++) {
+    // eslint-disable-next-line security/detect-object-injection -- safe: i is bounded numeric loop counter
     const line = lines[i];
     if (line !== undefined) {
       entries.push(deserializeTranscriptEntry(line, i + 1));

@@ -7,7 +7,7 @@
  * @packageDocumentation
  */
 
-import { writeFile, readFile, rename, unlink } from 'node:fs/promises';
+import { safeWriteFile, safeRename, safeUnlink, safeReadFile, safeStat } from '../utils/safe-fs.js';
 import { join, dirname } from 'node:path';
 import { randomUUID } from 'node:crypto';
 import type {
@@ -554,14 +554,14 @@ export async function saveState(
 
   try {
     // Write to temporary file first
-    await writeFile(tempPath, json, 'utf-8');
+    await safeWriteFile(tempPath, json, 'utf-8');
 
     // Atomic rename to target path
-    await rename(tempPath, filePath);
+    await safeRename(tempPath, filePath);
   } catch (error) {
     // Clean up temp file if it exists
     try {
-      await unlink(tempPath);
+      await safeUnlink(tempPath);
     } catch {
       // Ignore cleanup errors
     }
@@ -594,7 +594,7 @@ export async function loadState(filePath: string): Promise<ProtocolStateSnapshot
   let content: string;
 
   try {
-    content = await readFile(filePath, 'utf-8');
+    content = await safeReadFile(filePath, 'utf-8');
   } catch (error) {
     const fileError = error instanceof Error ? error : new Error(String(error));
     const isNotFound =
@@ -647,7 +647,7 @@ export async function loadState(filePath: string): Promise<ProtocolStateSnapshot
  */
 export async function stateFileExists(filePath: string): Promise<boolean> {
   try {
-    await readFile(filePath, 'utf-8');
+    await safeStat(filePath);
     return true;
   } catch {
     return false;

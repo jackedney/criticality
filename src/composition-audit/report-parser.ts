@@ -22,13 +22,95 @@ import { isValidContradictionType, ContradictionReportParseError } from './types
 import { generateContradictionId } from './prompts.js';
 
 let yaml: typeof import('js-yaml') | null = null;
+let yamlLoadPromise: Promise<void> | null = null;
 
 const USE_JS_YAML = process.env.PARSE_WITH_JSYAML === 'true';
 
 if (USE_JS_YAML) {
-  void (async (): Promise<void> => {
+  yamlLoadPromise = (async (): Promise<void> => {
     yaml ??= await import('js-yaml');
   })();
+}
+
+/**
+ * Ensures the js-yaml module is loaded when PARSE_WITH_JSYAML is enabled.
+ * Call this before using parseWithJsYaml to avoid race conditions.
+ */
+export async function ensureYamlLoaded(): Promise<void> {
+  if (yamlLoadPromise) {
+    await yamlLoadPromise;
+  }
+}
+
+/**
+ * Dangerous keys that could lead to prototype pollution attacks.
+ */
+const DANGEROUS_KEYS = new Set(['__proto__', 'constructor', 'prototype']);
+
+/**
+ * Recursively validates parsed data for dangerous keys.
+ *
+ * @param data - The parsed data to validate.
+ * @param visited - Set of visited objects to prevent circular reference issues.
+ * @throws ContradictionReportParseError if a dangerous key is found.
+ */
+function validateNoDangerousKeys(data: unknown, visited: WeakSet<object> = new WeakSet()): void {
+  if (data === null || typeof data !== 'object') {
+    return;
+  }
+
+  if (visited.has(data)) {
+    return;
+  }
+  visited.add(data);
+
+  if (Array.isArray(data)) {
+    for (const item of data) {
+      validateNoDangerousKeys(item, visited);
+    }
+    return;
+  }
+
+  for (const key of Object.keys(data)) {
+    if (DANGEROUS_KEYS.has(key)) {
+      throw new ContradictionReportParseError(
+        'Rejected dangerous key in YAML input',
+        'validation_error',
+        { details: `Blocked key: ${key}` }
+      );
+    }
+    // eslint-disable-next-line security/detect-object-injection -- safe: key validated against DANGEROUS_KEYS
+    validateNoDangerousKeys((data as Record<string, unknown>)[key], visited);
+  }
+}
+
+/**
+ * Safely assigns a value to an object, rejecting dangerous keys.
+ *
+ * @param obj - The object to assign to.
+ * @param key - The key to assign.
+ * @param value - The value to assign.
+ * @throws ContradictionReportParseError if key is dangerous or invalid.
+ */
+function safeAssign(obj: Record<string, unknown>, key: string, value: unknown): void {
+  if (typeof key !== 'string' || key === '') {
+    throw new ContradictionReportParseError(
+      'Invalid key in YAML: key must be a non-empty string',
+      'validation_error',
+      { details: `Key: ${key}` }
+    );
+  }
+
+  if (DANGEROUS_KEYS.has(key)) {
+    throw new ContradictionReportParseError(
+      'Rejected dangerous key in YAML input',
+      'validation_error',
+      { details: `Blocked key: ${key}` }
+    );
+  }
+
+  // eslint-disable-next-line security/detect-object-injection -- safe: key validated against DANGEROUS_KEYS
+  obj[key] = value;
 }
 
 /**
@@ -40,7 +122,7 @@ export const REPORT_VERSION = '1.0.0';
  * Module-level default logger for parse operations.
  * Initially a no-op, can be configured via setDefaultParserLogger.
  */
-let defaultParserLogger: (message: string) => void = (): void => {}; // eslint-disable-line @typescript-eslint/no-empty-function
+let defaultParserLogger: (message: string) => void = (): void => {};
 
 /**
  * Default parse options.
@@ -71,7 +153,7 @@ function getParseOptions(): Required<ContradictionParseOptions> {
  * @param logger - The logger function to use for warnings.
  */
 export function setDefaultParserLogger(logger: ContradictionParseOptions['logger']): void {
-  defaultParserLogger = logger ?? ((): void => {}); // eslint-disable-line @typescript-eslint/no-empty-function
+  defaultParserLogger = logger ?? ((): void => {});
 }
 
 /**
@@ -137,8 +219,13 @@ function parseWithJsYaml(content: string): unknown {
   try {
     const yamlBlockMatch = /```(?:yaml|yml)?\s*([\s\S]*?)```/.exec(content);
     const yamlContent = yamlBlockMatch?.[1]?.trim() ?? content.trim();
-    return yaml.load(yamlContent);
-  } catch {
+    const parsed = yaml.load(yamlContent);
+    validateNoDangerousKeys(parsed);
+    return parsed;
+  } catch (error) {
+    if (error instanceof ContradictionReportParseError) {
+      throw error;
+    }
     return null;
   }
 }
@@ -158,7 +245,7 @@ function parseWithJsYaml(content: string): unknown {
  * @param content - The raw content string.
  * @returns The parsed object or null if parsing fails.
  */
-function tryParseYaml(content: string): unknown {
+export function tryParseYaml(content: string): unknown {
   if (USE_JS_YAML) {
     return parseWithJsYaml(content);
   }
@@ -171,7 +258,7 @@ function tryParseYaml(content: string): unknown {
   // This handles the basic structure LLMs typically output
   try {
     const lines = yamlContent.split('\n');
-    const result: Record<string, unknown> = {};
+    const result: Record<string, unknown> = Object.create(null) as Record<string, unknown>;
     let currentKey: string | null = null;
     let currentArray: unknown[] | null = null;
     let currentObject: Record<string, unknown> | null = null;
@@ -208,7 +295,7 @@ function tryParseYaml(content: string): unknown {
           if (nestedObject !== null) {
             nestedArray.push(nestedObject);
           }
-          currentObject[nestedArrayKey] = nestedArray;
+          safeAssign(currentObject, nestedArrayKey, nestedArray);
           nestedArrayKey = null;
           nestedArray = null;
           nestedObject = null;
@@ -220,7 +307,7 @@ function tryParseYaml(content: string): unknown {
           if (inArrayOfObjects && currentObject !== null) {
             currentArray.push(currentObject);
           }
-          result[currentKey] = currentArray;
+          safeAssign(result, currentKey, currentArray);
         }
 
         currentKey = key;
@@ -230,7 +317,7 @@ function tryParseYaml(content: string): unknown {
 
         if (value !== undefined && value !== '') {
           // Inline value
-          result[key] = parseYamlValue(value);
+          safeAssign(result, key, parseYamlValue(value));
           currentKey = null;
         }
         continue;
@@ -248,7 +335,7 @@ function tryParseYaml(content: string): unknown {
           if (nestedObject !== null) {
             nestedArray.push(nestedObject);
           }
-          currentObject[nestedArrayKey] = nestedArray;
+          safeAssign(currentObject, nestedArrayKey, nestedArray);
           nestedArrayKey = null;
           nestedArray = null;
           nestedObject = null;
@@ -269,10 +356,10 @@ function tryParseYaml(content: string): unknown {
         const objKeyMatch = /^([a-zA-Z_][a-zA-Z0-9_]*):\s*(.*)$/.exec(itemContent);
         if (objKeyMatch !== null) {
           inArrayOfObjects = true;
-          currentObject = {};
+          currentObject = Object.create(null) as Record<string, unknown>;
           const [, objKey, objValue] = objKeyMatch;
           if (objKey !== undefined && objValue !== undefined) {
-            currentObject[objKey] = parseYamlValue(objValue);
+            safeAssign(currentObject, objKey, parseYamlValue(objValue));
           }
         } else {
           // Simple array item
@@ -299,10 +386,10 @@ function tryParseYaml(content: string): unknown {
         // Check if this is an object in nested array (starts with key:)
         const objKeyMatch = /^([a-zA-Z_][a-zA-Z0-9_]*):\s*(.*)$/.exec(itemContent);
         if (objKeyMatch !== null) {
-          nestedObject = {};
+          nestedObject = Object.create(null) as Record<string, unknown>;
           const [, objKey, objValue] = objKeyMatch;
           if (objKey !== undefined && objValue !== undefined) {
-            nestedObject[objKey] = parseYamlValue(objValue);
+            safeAssign(nestedObject, objKey, parseYamlValue(objValue));
           }
         } else {
           // Simple array item
@@ -317,7 +404,7 @@ function tryParseYaml(content: string): unknown {
         if (nestedObjKeyMatch !== null) {
           const [, nestedObjKey, nestedObjValue] = nestedObjKeyMatch;
           if (nestedObjKey !== undefined && nestedObjValue !== undefined) {
-            nestedObject[nestedObjKey] = parseYamlValue(nestedObjValue);
+            safeAssign(nestedObject, nestedObjKey, parseYamlValue(nestedObjValue));
           }
         }
         continue;
@@ -331,7 +418,7 @@ function tryParseYaml(content: string): unknown {
             nestedArray.push(nestedObject);
             nestedObject = null;
           }
-          currentObject[nestedArrayKey] = nestedArray;
+          safeAssign(currentObject, nestedArrayKey, nestedArray);
           nestedArrayKey = null;
           nestedArray = null;
           inNestedArray = false;
@@ -342,7 +429,7 @@ function tryParseYaml(content: string): unknown {
           const [, nestedKey, nestedValue] = nestedKeyMatch;
           if (nestedKey !== undefined) {
             if (nestedValue !== undefined && nestedValue !== '') {
-              currentObject[nestedKey] = parseYamlValue(nestedValue);
+              safeAssign(currentObject, nestedKey, parseYamlValue(nestedValue));
             } else {
               // This might be the start of a nested array
               nestedArrayKey = nestedKey;
@@ -365,7 +452,7 @@ function tryParseYaml(content: string): unknown {
       if (nestedObject !== null) {
         nestedArray.push(nestedObject);
       }
-      currentObject[nestedArrayKey] = nestedArray;
+      safeAssign(currentObject, nestedArrayKey, nestedArray);
     }
 
     // Finalize last array
@@ -373,11 +460,16 @@ function tryParseYaml(content: string): unknown {
       if (inArrayOfObjects && currentObject !== null) {
         currentArray.push(currentObject);
       }
-      result[currentKey] = currentArray;
+      safeAssign(result, currentKey, currentArray);
     }
 
     return Object.keys(result).length > 0 ? result : null;
-  } catch {
+  } catch (error) {
+    // Re-throw ContradictionReportParseError (e.g., from safeAssign)
+    if (error instanceof ContradictionReportParseError) {
+      throw error;
+    }
+    // Catch other parsing errors
     return null;
   }
 }
@@ -697,21 +789,38 @@ This is retry attempt ${String(attemptNumber)} of the maximum allowed retries.`;
  * @param options - Parse options.
  * @returns The parse result with contradictions or error.
  */
-export function parseContradictionOutput(
+export async function parseContradictionOutput(
   content: string,
   options?: ContradictionParseOptions
-): ContradictionParseResult {
+): Promise<ContradictionParseResult> {
   const opts: Required<ContradictionParseOptions> = {
     ...getParseOptions(),
     ...options,
   };
+
+  // Ensure js-yaml module is loaded before attempting YAML parsing
+  if (USE_JS_YAML && opts.tryYaml) {
+    await ensureYamlLoaded();
+  }
 
   // Try JSON first
   let parsed = tryParseJson(content);
 
   // Try YAML if JSON fails and YAML is enabled
   if (parsed === null && opts.tryYaml) {
-    parsed = tryParseYaml(content);
+    try {
+      parsed = tryParseYaml(content);
+    } catch (error) {
+      // Re-throw ContradictionReportParseError (e.g., from safeAssign)
+      if (error instanceof ContradictionReportParseError) {
+        return {
+          success: false,
+          error,
+        };
+      }
+      // Other parsing errors return null
+      parsed = null;
+    }
   }
 
   // If both fail, return parse error
@@ -767,7 +876,7 @@ export async function parseContradictionOutputWithRetry(
   };
 
   // First attempt
-  let result = parseContradictionOutput(content, opts);
+  let result = await parseContradictionOutput(content, opts);
 
   if (result.success) {
     return result;
@@ -789,7 +898,7 @@ export async function parseContradictionOutputWithRetry(
     }
 
     currentContent = retryResult.response.content;
-    result = parseContradictionOutput(currentContent, opts);
+    result = await parseContradictionOutput(currentContent, opts);
 
     if (result.success) {
       opts.logger(`Parse succeeded on retry attempt ${String(attempt)}`);
