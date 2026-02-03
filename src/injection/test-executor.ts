@@ -11,7 +11,7 @@
  */
 
 import * as path from 'node:path';
-import { access } from 'node:fs/promises';
+import { safeExists } from '../utils/safe-fs.js';
 import {
   runTests,
   type TestRunOptions,
@@ -157,11 +157,8 @@ export async function findTestFile(sourceFilePath: string): Promise<string | und
   ];
 
   for (const candidate of candidates) {
-    try {
-      await access(candidate);
+    if (await safeExists(candidate)) {
       return candidate;
-    } catch {
-      // File doesn't exist, try next candidate
     }
   }
 
