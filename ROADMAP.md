@@ -50,6 +50,7 @@ Phase 0 (Design), Phase 1 (Core Infrastructure), and Phase 2 (TypeScript Adapter
 ### Milestones
 
 #### 1.1 Project Scaffolding
+
 - [x] Initialize TypeScript project with strict mode
 - [x] Set up CI/CD pipeline
 - [x] Configure linting (ESLint) and formatting (Prettier)
@@ -57,12 +58,14 @@ Phase 0 (Design), Phase 1 (Core Infrastructure), and Phase 2 (TypeScript Adapter
 - [x] Create documentation generation (TypeDoc)
 
 #### 1.2 Configuration System
+
 - [x] Implement `criticality.toml` parser
 - [x] Implement `spec.toml` parser
 - [x] Create configuration validation
 - [x] Support environment variable overrides
 
 #### 1.3 Decision Ledger
+
 - [x] Implement append operations
 - [x] Implement override/invalidate operations
 - [x] Implement cascade (dependency tracking)
@@ -70,6 +73,7 @@ Phase 0 (Design), Phase 1 (Core Infrastructure), and Phase 2 (TypeScript Adapter
 - [x] Add ledger query interface
 
 #### 1.4 Protocol State Machine
+
 - [x] Define `ProtocolState` enum
 - [x] Implement phase transitions
 - [x] Implement blocking state
@@ -77,6 +81,7 @@ Phase 0 (Design), Phase 1 (Core Infrastructure), and Phase 2 (TypeScript Adapter
 - [x] Add checkpoint/resume capability
 
 #### 1.5 Model Router
+
 - [x] Define `ModelRouter` trait
 - [x] Implement Anthropic client (Claude)
 - [x] Implement Groq client (Kimi K2)
@@ -85,6 +90,7 @@ Phase 0 (Design), Phase 1 (Core Infrastructure), and Phase 2 (TypeScript Adapter
 - [x] Implement retry logic with backoff
 
 #### 1.6 Tooling & Agents
+
 - [x] Implement `criticality-artifact-server` (MCP)
 - [x] Implement `criticality-toolchain-server` (MCP)
 - [x] Define Agent Skills & Permissions registry
@@ -99,6 +105,7 @@ Phase 0 (Design), Phase 1 (Core Infrastructure), and Phase 2 (TypeScript Adapter
 ### Milestones
 
 #### 2.1 AST Operations
+
 - [x] Integrate `ts-morph` for AST manipulation
 - [x] Implement function body injection
 - [x] Implement `throw new Error('TODO')` detection
@@ -106,6 +113,7 @@ Phase 0 (Design), Phase 1 (Core Infrastructure), and Phase 2 (TypeScript Adapter
 - [x] Implement type extraction
 
 #### 2.2 Compiler Integration
+
 - [x] Implement `tsc` wrapper
 - [x] Parse compiler errors into structured format
 - [x] Extract type information from errors
@@ -113,18 +121,21 @@ Phase 0 (Design), Phase 1 (Core Infrastructure), and Phase 2 (TypeScript Adapter
 - [x] Parse test results
 
 #### 2.3 Type Witness Generator
+
 - [x] Implement branded type witness generation
 - [x] Generate validation factory functions
 - [x] Generate runtime assertions
 - [x] Generate fast-check Arbitrary instances
 
 #### 2.4 Micro-Contract Parser
+
 - [x] Parse contract JSDoc comments
 - [x] Extract @requires/@ensures/etc tags
 - [x] Validate contract syntax
 - [x] Generate contract objects for prompts
 
 #### 2.5 Property Test Generator
+
 - [x] Implement claim parser (LLM-based)
 - [x] Generate fast-check tests for invariant claims
 - [x] Generate integration tests for behavioral claims
@@ -140,6 +151,7 @@ Phase 0 (Design), Phase 1 (Core Infrastructure), and Phase 2 (TypeScript Adapter
 ### Milestones
 
 #### 3.1 Phase I: Ignition
+
 - [ ] Implement user intent parser
 - [ ] Implement spec synthesis prompt
 - [ ] Implement adversarial auditor integration
@@ -147,6 +159,7 @@ Phase 0 (Design), Phase 1 (Core Infrastructure), and Phase 2 (TypeScript Adapter
 - [ ] Implement claim extraction
 
 #### 3.2 Phase II: Lattice
+
 - [ ] Implement module structure generator
 - [ ] Implement type definition generator
 - [ ] Implement function signature generator
@@ -155,12 +168,14 @@ Phase 0 (Design), Phase 1 (Core Infrastructure), and Phase 2 (TypeScript Adapter
 - [ ] Implement compilation verification loop
 
 #### 3.3 Composition Audit
+
 - [ ] Implement contradiction detection prompts
 - [ ] Parse contradiction reports
 - [ ] Implement phase regression on contradiction
 - [ ] Add contradiction to ledger
 
 #### 3.4 Phase III: Injection
+
 - [ ] Implement Ralph Loop
 - [ ] Implement context extraction
 - [ ] Implement minimal prompt generation
@@ -170,6 +185,7 @@ Phase 0 (Design), Phase 1 (Core Infrastructure), and Phase 2 (TypeScript Adapter
 - [ ] Implement circuit breaker
 
 #### 3.5 Phase III.5: Mesoscopic
+
 - [ ] Implement cluster definition
 - [ ] Implement spec-driven test generation
 - [ ] Implement cluster execution
@@ -177,6 +193,7 @@ Phase 0 (Design), Phase 1 (Core Infrastructure), and Phase 2 (TypeScript Adapter
 - [ ] Implement re-injection on failure
 
 #### 3.6 Phase IV: Mass Defect
+
 - [ ] Integrate complexity analysis tools
 - [ ] Implement transformation catalog
 - [ ] Implement transformation application
@@ -192,6 +209,7 @@ Phase 0 (Design), Phase 1 (Core Infrastructure), and Phase 2 (TypeScript Adapter
 ### Milestones
 
 #### 4.1 CLI Interface
+
 - [ ] Implement blocking query display
 - [ ] Implement option selection
 - [ ] Implement clarification input
@@ -199,6 +217,7 @@ Phase 0 (Design), Phase 1 (Core Infrastructure), and Phase 2 (TypeScript Adapter
 - [ ] Implement resume command
 
 #### 4.2 Notification System
+
 - [ ] Implement notification trait
 - [ ] Add Slack integration
 - [ ] Add email integration
@@ -206,6 +225,7 @@ Phase 0 (Design), Phase 1 (Core Infrastructure), and Phase 2 (TypeScript Adapter
 - [ ] Implement reminder scheduling
 
 #### 4.3 Web Dashboard (Optional)
+
 - [ ] Design dashboard UI
 - [ ] Implement protocol state visualization
 - [ ] Implement ledger browser
@@ -221,6 +241,7 @@ Phase 0 (Design), Phase 1 (Core Infrastructure), and Phase 2 (TypeScript Adapter
 ### Milestones
 
 #### 5.1 Rust Adapter
+
 - [ ] Create Rust AST helper binary (using `syn`/`quote`)
 - [ ] Implement `cargo check` integration
 - [ ] Implement `cargo test` integration
@@ -228,6 +249,7 @@ Phase 0 (Design), Phase 1 (Core Infrastructure), and Phase 2 (TypeScript Adapter
 - [ ] Implement proptest property test generator
 
 #### 5.2 Python Adapter
+
 - [ ] Integrate ast module or libcst (via Python subprocess)
 - [ ] Implement mypy integration
 - [ ] Implement pytest integration
@@ -235,6 +257,7 @@ Phase 0 (Design), Phase 1 (Core Infrastructure), and Phase 2 (TypeScript Adapter
 - [ ] Implement hypothesis property test generator
 
 #### 5.3 Go Adapter
+
 - [ ] Create Go AST helper (using go/ast)
 - [ ] Implement go build integration
 - [ ] Implement go test integration
@@ -250,24 +273,28 @@ Phase 0 (Design), Phase 1 (Core Infrastructure), and Phase 2 (TypeScript Adapter
 ### Milestones
 
 #### 6.1 Reliability
+
 - [ ] Comprehensive error handling
 - [ ] Graceful degradation on model failures
 - [ ] Automatic retry with exponential backoff
 - [ ] State recovery from crashes
 
 #### 6.2 Observability
+
 - [ ] Structured logging
 - [ ] Metrics collection (Prometheus)
 - [ ] Distributed tracing
 - [ ] Cost tracking per run
 
 #### 6.3 Security
+
 - [ ] Secrets management
 - [ ] API key rotation
 - [ ] Audit logging
 - [ ] Sandboxed code execution
 
 #### 6.4 Performance
+
 - [ ] Parallel injection execution
 - [ ] Caching of model responses (where safe)
 - [ ] Incremental compilation support
@@ -282,23 +309,27 @@ Phase 0 (Design), Phase 1 (Core Infrastructure), and Phase 2 (TypeScript Adapter
 ### Milestones
 
 #### 7.1 Incremental Updates
+
 - [ ] Detect spec changes
 - [ ] Identify affected phases
 - [ ] Preserve unaffected artifacts
 - [ ] Targeted re-execution
 
 #### 7.2 Multi-Language Projects
+
 - [ ] Cross-language type mapping
 - [ ] Unified spec for polyglot projects
 - [ ] FFI interface generation
 
 #### 7.3 IDE Integration
+
 - [ ] VS Code extension
 - [ ] Real-time Lattice visualization
 - [ ] Contract editing
 - [ ] Inline witness inspection
 
 #### 7.4 Formal Verification
+
 - [ ] Integration with formal verification tools per target language
 - [ ] Property extraction for formal tools
 - [ ] Proof obligation generation
@@ -308,21 +339,25 @@ Phase 0 (Design), Phase 1 (Core Infrastructure), and Phase 2 (TypeScript Adapter
 ## Success Metrics
 
 ### Protocol Correctness
+
 - All generated code compiles (100% from Phase II onward)
 - All generated tests pass after Injection (target: 95%+)
 - No security vulnerabilities in generated code
 
 ### Efficiency
+
 - Average cost per 1000 LOC generated
 - Average time per 1000 LOC generated
 - Escalation rate (target: <10% to Sonnet, <1% to Opus)
 
 ### Reliability
+
 - Mean time between failures
 - Recovery success rate
 - Human intervention frequency
 
 ### Quality
+
 - Cyclomatic complexity of generated code (target: <10 per function)
 - Test coverage of generated code (target: >80%)
 - Maintainability index
@@ -332,7 +367,7 @@ Phase 0 (Design), Phase 1 (Core Infrastructure), and Phase 2 (TypeScript Adapter
 ## Risk Register
 
 | Risk | Impact | Likelihood | Mitigation |
-|------|--------|------------|------------|
+| ------ | -------- | ------------ | ------------ |
 | Model API changes | High | Medium | Abstract model interface, version pinning |
 | Model capability regression | High | Low | Benchmark suite, fallback strategies |
 | Cost overruns | Medium | Medium | Cost tracking, budget limits, model selection optimization |
