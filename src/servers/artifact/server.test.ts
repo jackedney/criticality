@@ -279,7 +279,7 @@ describe('criticality-artifact-server', () => {
       });
 
       // Read the file and verify
-      const content = (await safeReadFile(path.join(tempDir, 'DECISIONS.toml'), 'utf-8')) as string;
+      const content = await safeReadFile(path.join(tempDir, 'DECISIONS.toml'), 'utf-8');
       expect(content).toContain('Security constraint');
       expect(content).toContain('security_001');
     });

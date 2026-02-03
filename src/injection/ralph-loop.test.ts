@@ -537,7 +537,7 @@ export function add(a: number, b: number): number {
     expect(result.attempts[0]?.rejectionReason).toContain('Compilation failed');
 
     // Verify the original file is restored (rollback)
-    const content = (await safeReadFile(path.join(srcDir, 'math.ts'), 'utf-8')) as string;
+    const content = await safeReadFile(path.join(srcDir, 'math.ts'), 'utf-8');
     expect(content).toContain("throw new Error('TODO')");
   });
 
@@ -650,7 +650,7 @@ describe('add', () => {
     expect(result.attempts[0]?.rejectionReason).toContain('Failed to inject');
 
     // Verify the original file is NOT modified (syntax error caught before write)
-    const content = (await safeReadFile(path.join(srcDir, 'sort.ts'), 'utf-8')) as string;
+    const content = await safeReadFile(path.join(srcDir, 'sort.ts'), 'utf-8');
     expect(content).toContain("throw new Error('TODO')");
   });
 
@@ -702,7 +702,7 @@ describe('add', () => {
     expect(result.attempts[0]?.accepted).toBe(true);
 
     // Verify the implementation was injected
-    const content = (await safeReadFile(path.join(srcDir, 'sort.ts'), 'utf-8')) as string;
+    const content = await safeReadFile(path.join(srcDir, 'sort.ts'), 'utf-8');
     expect(content).toContain('return arr.sort();');
     expect(content).not.toContain("throw new Error('TODO')");
   });

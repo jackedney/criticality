@@ -437,7 +437,7 @@ export function readLogFile(filePath: string): ModelLogEntry[] {
     return [];
   }
 
-  const content = safeReadFileSync(filePath, { encoding: 'utf8' }) as string;
+  const content = safeReadFileSync(filePath, { encoding: 'utf8' });
   const lines = content.trim().split('\n');
   const entries: ModelLogEntry[] = [];
 

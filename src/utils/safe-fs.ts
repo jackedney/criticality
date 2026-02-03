@@ -113,6 +113,32 @@ export function validatePath(filePath: string): string {
  * Safely reads a file after validating the path.
  *
  * @param filePath - The path to the file to read.
+ * @param encoding - The encoding to use or options with encoding specified.
+ * @returns A promise that resolves to the file contents as a string.
+ * @throws {PathValidationError} If the path is invalid.
+ * @throws {Error} If the file cannot be read (e.g., file not found, permission denied).
+ */
+export function safeReadFile(
+  filePath: string,
+  encoding: BufferEncoding | { encoding: BufferEncoding; flag?: string }
+): Promise<string>;
+/**
+ * Safely reads a file after validating the path.
+ *
+ * @param filePath - The path to the file to read.
+ * @param options - Options without encoding (returns Buffer).
+ * @returns A promise that resolves to the file contents as a Buffer.
+ * @throws {PathValidationError} If the path is invalid.
+ * @throws {Error} If the file cannot be read (e.g., file not found, permission denied).
+ */
+export function safeReadFile(
+  filePath: string,
+  options?: { encoding?: null; flag?: string } | null
+): Promise<Buffer>;
+/**
+ * Safely reads a file after validating the path.
+ *
+ * @param filePath - The path to the file to read.
  * @param options - Optional encoding or file read options.
  * @returns A promise that resolves to the file contents.
  * @throws {PathValidationError} If the path is invalid.
@@ -180,6 +206,32 @@ export function safeExistsSync(filePath: string): boolean {
   return existsSync(validatedPath);
 }
 
+/**
+ * Synchronously reads a file after validating the path.
+ *
+ * @param filePath - The path to the file to read.
+ * @param encoding - The encoding to use or options with encoding specified.
+ * @returns The file contents as a string.
+ * @throws {PathValidationError} If the path is invalid.
+ * @throws {Error} If the file cannot be read (e.g., file not found, permission denied).
+ */
+export function safeReadFileSync(
+  filePath: string,
+  encoding: BufferEncoding | { encoding: BufferEncoding; flag?: string }
+): string;
+/**
+ * Synchronously reads a file after validating the path.
+ *
+ * @param filePath - The path to the file to read.
+ * @param options - Options without encoding (returns Buffer).
+ * @returns The file contents as a Buffer.
+ * @throws {PathValidationError} If the path is invalid.
+ * @throws {Error} If the file cannot be read (e.g., file not found, permission denied).
+ */
+export function safeReadFileSync(
+  filePath: string,
+  options?: { encoding?: null; flag?: string } | null
+): Buffer;
 /**
  * Synchronously reads a file after validating the path.
  *

@@ -804,7 +804,7 @@ export async function loadProposal(projectId: string, version: number): Promise<
   const proposalPath = join(getProposalsDir(projectId), `v${String(version)}.toml`);
 
   try {
-    return (await safeReadFile(proposalPath, 'utf-8')) as string;
+    return await safeReadFile(proposalPath, 'utf-8');
   } catch (error) {
     const err = error instanceof Error ? error : new Error(String(error));
     throw new SpecGeneratorError(

@@ -673,7 +673,7 @@ describe('ModelLogger', () => {
 
             expect(entry).toBeDefined();
             if (entry !== undefined) {
-              expect(entry.timestamp).toMatch(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}.\d{3}Z$/);
+              expect(entry.timestamp).toMatch(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/);
               expect(entry.modelAlias).toBe(modelAlias);
               expect(entry.promptHash).toMatch(/^[0-9a-f]{16}$/);
             }
@@ -707,7 +707,7 @@ describe('ModelLogger', () => {
 
             expect(entry).toBeDefined();
             if (entry !== undefined) {
-              expect(entry.timestamp).toMatch(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}.\d{3}Z$/);
+              expect(entry.timestamp).toMatch(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/);
               expect(entry.tokenCount).toBe(promptTokens + completionTokens);
               expect(entry.latencyMs).toBe(latencyMs);
             }

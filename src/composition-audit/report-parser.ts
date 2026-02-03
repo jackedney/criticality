@@ -48,6 +48,43 @@ export async function ensureYamlLoaded(): Promise<void> {
 const DANGEROUS_KEYS = new Set(['__proto__', 'constructor', 'prototype']);
 
 /**
+ * Recursively validates parsed data for dangerous keys.
+ *
+ * @param data - The parsed data to validate.
+ * @param visited - Set of visited objects to prevent circular reference issues.
+ * @throws ContradictionReportParseError if a dangerous key is found.
+ */
+function validateNoDangerousKeys(data: unknown, visited: WeakSet<object> = new WeakSet()): void {
+  if (data === null || typeof data !== 'object') {
+    return;
+  }
+
+  if (visited.has(data)) {
+    return;
+  }
+  visited.add(data);
+
+  if (Array.isArray(data)) {
+    for (const item of data) {
+      validateNoDangerousKeys(item, visited);
+    }
+    return;
+  }
+
+  for (const key of Object.keys(data)) {
+    if (DANGEROUS_KEYS.has(key)) {
+      throw new ContradictionReportParseError(
+        'Rejected dangerous key in YAML input',
+        'validation_error',
+        { details: `Blocked key: ${key}` }
+      );
+    }
+    // eslint-disable-next-line security/detect-object-injection -- safe: key validated against DANGEROUS_KEYS
+    validateNoDangerousKeys((data as Record<string, unknown>)[key], visited);
+  }
+}
+
+/**
  * Safely assigns a value to an object, rejecting dangerous keys.
  *
  * @param obj - The object to assign to.
@@ -182,8 +219,13 @@ function parseWithJsYaml(content: string): unknown {
   try {
     const yamlBlockMatch = /```(?:yaml|yml)?\s*([\s\S]*?)```/.exec(content);
     const yamlContent = yamlBlockMatch?.[1]?.trim() ?? content.trim();
-    return yaml.load(yamlContent);
-  } catch {
+    const parsed = yaml.load(yamlContent);
+    validateNoDangerousKeys(parsed);
+    return parsed;
+  } catch (error) {
+    if (error instanceof ContradictionReportParseError) {
+      throw error;
+    }
     return null;
   }
 }

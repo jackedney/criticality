@@ -97,9 +97,7 @@ export async function detectProjectConventions(projectRoot: string): Promise<Pro
     let usesJsExtension = true;
     for (const file of files) {
       if (file.endsWith('.ts') && !file.endsWith('.d.ts')) {
-        const content = (await safeReadFile(path.join(srcPath, file), 'utf-8').catch(
-          () => ''
-        )) as string;
+        const content = await safeReadFile(path.join(srcPath, file), 'utf-8').catch(() => '');
         if (content.includes("from './") || content.includes('from "./')) {
           // Check if imports use .js extension
           usesJsExtension = content.includes(".js'") || content.includes('.js"');
@@ -886,7 +884,7 @@ export async function generateAndWriteModuleStructure(
   // Read spec file
   let specContent: string;
   try {
-    specContent = (await safeReadFile(specPath, 'utf-8')) as string;
+    specContent = await safeReadFile(specPath, 'utf-8');
   } catch (error) {
     const err = error instanceof Error ? error : new Error(String(error));
     throw new ModuleGeneratorError(

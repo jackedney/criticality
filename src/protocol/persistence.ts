@@ -594,7 +594,7 @@ export async function loadState(filePath: string): Promise<ProtocolStateSnapshot
   let content: string;
 
   try {
-    content = (await safeReadFile(filePath, 'utf-8')) as string;
+    content = await safeReadFile(filePath, 'utf-8');
   } catch (error) {
     const fileError = error instanceof Error ? error : new Error(String(error));
     const isNotFound =

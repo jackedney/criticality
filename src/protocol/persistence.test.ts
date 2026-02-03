@@ -583,7 +583,7 @@ describe('Protocol State Persistence', () => {
         const filePath = join(testDir, 'state.json');
         await saveState(snapshot, filePath);
 
-        const content = (await safeReadFile(filePath, 'utf-8')) as string;
+        const content = await safeReadFile(filePath, 'utf-8');
         const parsed = JSON.parse(content) as PersistedStateData;
         expect(parsed.phase).toBe('Lattice');
         expect(parsed.artifacts).toEqual(['spec']);
@@ -595,7 +595,7 @@ describe('Protocol State Persistence', () => {
         const filePath = join(testDir, 'state.json');
         await saveState(snapshot, filePath);
 
-        const content = (await safeReadFile(filePath, 'utf-8')) as string;
+        const content = await safeReadFile(filePath, 'utf-8');
         expect(content).toContain('\n');
       });
 
@@ -605,7 +605,7 @@ describe('Protocol State Persistence', () => {
         const filePath = join(testDir, 'state.json');
         await saveState(snapshot, filePath, { pretty: false });
 
-        const content = (await safeReadFile(filePath, 'utf-8')) as string;
+        const content = await safeReadFile(filePath, 'utf-8');
         expect(content).not.toContain('\n');
       });
 
@@ -618,7 +618,7 @@ describe('Protocol State Persistence', () => {
         await saveState(snapshot, filePath);
 
         // File should exist with correct content
-        const content = (await safeReadFile(filePath, 'utf-8')) as string;
+        const content = await safeReadFile(filePath, 'utf-8');
         expect(content).toContain('Lattice');
 
         // No temp files should remain
@@ -638,7 +638,7 @@ describe('Protocol State Persistence', () => {
         await saveState(snapshot1, filePath);
         await saveState(snapshot2, filePath);
 
-        const content = (await safeReadFile(filePath, 'utf-8')) as string;
+        const content = await safeReadFile(filePath, 'utf-8');
         expect(content).toContain('Lattice');
         expect(content).not.toContain('"phase": "Ignition"');
       });
@@ -817,7 +817,7 @@ describe('Protocol State Persistence', () => {
         await saveState(validSnapshot, filePath);
 
         // Verify valid state is saved
-        const beforeContent = (await safeReadFile(filePath, 'utf-8')) as string;
+        const beforeContent = await safeReadFile(filePath, 'utf-8');
         expect(beforeContent).toContain('Lattice');
 
         // Try to save to a non-existent directory (will fail)
@@ -833,7 +833,7 @@ describe('Protocol State Persistence', () => {
         }
 
         // Original file should be unchanged
-        const afterContent = (await safeReadFile(filePath, 'utf-8')) as string;
+        const afterContent = await safeReadFile(filePath, 'utf-8');
         expect(afterContent).toBe(beforeContent);
       });
     });

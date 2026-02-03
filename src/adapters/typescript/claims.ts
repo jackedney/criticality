@@ -130,7 +130,7 @@ export function parseClaims(specPath: string): Claim[] {
   // Read the spec file
   let tomlContent: string;
   try {
-    tomlContent = safeReadFileSync(specPath, 'utf-8') as string;
+    tomlContent = safeReadFileSync(specPath, 'utf-8');
   } catch (error) {
     const fsError = error as NodeJS.ErrnoException;
     throw new ClaimParseError(

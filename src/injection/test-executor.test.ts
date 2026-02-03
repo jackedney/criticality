@@ -294,7 +294,7 @@ describe('findTestFile', () => {
     expect(found).toBe(testFile);
   });
 
-  it('should still find .test.ts file for .ts source file (negative case)', async () => {
+  it('should find .test.ts file for .ts source file', async () => {
     const srcFile = path.join(tempDir, 'account.ts');
     const testFile = path.join(tempDir, 'account.test.ts');
 

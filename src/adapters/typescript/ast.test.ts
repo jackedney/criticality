@@ -572,7 +572,7 @@ describe('injectFunctionBody', () => {
   }
 
   function readFileContent(filePath: string): string {
-    return safeReadFileSync(filePath, 'utf-8') as string;
+    return safeReadFileSync(filePath, 'utf-8');
   }
 
   describe('basic injection', () => {

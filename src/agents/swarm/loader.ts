@@ -69,7 +69,7 @@ export async function loadSwarmConfigFromFile(filePath: string): Promise<SwarmCo
   let content: string;
 
   try {
-    content = (await safeReadFile(filePath, 'utf-8')) as string;
+    content = await safeReadFile(filePath, 'utf-8');
   } catch (err) {
     const error = err as Error & { code?: string };
     if (error.code === 'ENOENT') {

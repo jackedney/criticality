@@ -101,7 +101,7 @@ export function createArtifactServer(config: ArtifactServerConfig): Server {
   async function readTomlArtifact(filePath: string): Promise<Record<string, unknown>> {
     const validPath = validateArtifactPath(filePath);
     try {
-      const content = (await safeReadFile(validPath, 'utf-8')) as string;
+      const content = await safeReadFile(validPath, 'utf-8');
       return TOML.parse(content) as Record<string, unknown>;
     } catch (err) {
       if ((err as NodeJS.ErrnoException).code === 'ENOENT') {
@@ -117,7 +117,7 @@ export function createArtifactServer(config: ArtifactServerConfig): Server {
   async function readSchema(schemaName: string): Promise<Record<string, unknown>> {
     const schemaPath = path.join(projectRoot, 'schemas', `${schemaName}.schema.json`);
     try {
-      const content = (await safeReadFile(schemaPath, 'utf-8')) as string;
+      const content = await safeReadFile(schemaPath, 'utf-8');
       return JSON.parse(content) as Record<string, unknown>;
     } catch (err) {
       if ((err as NodeJS.ErrnoException).code === 'ENOENT') {

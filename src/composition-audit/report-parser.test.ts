@@ -834,6 +834,54 @@ summary: Test
 
       expect(result.success).toBe(true);
     });
+
+    it('rejects deeply nested dangerous keys and prevents prototype pollution', async () => {
+      vi.stubEnv('PARSE_WITH_JSYAML', 'true');
+      vi.resetModules();
+      const freshParser = await import('./report-parser.js');
+      const freshTypes = await import('./types.js');
+      await freshParser.ensureYamlLoaded();
+
+      const prototypeKeysBefore = Object.keys(Object.prototype);
+
+      const yamlContent = `hasContradictions: true
+contradictions:
+  - type: temporal
+    severity: critical
+    description: Test
+    involved:
+      - elementType: constraint
+        id: C1
+        name: Test
+        text: Test text
+        nested:
+          deep:
+            __proto__:
+              polluted: true
+            constructor:
+              prototype:
+                injected: value
+            prototype:
+              malicious: data
+    analysis: Test analysis
+    minimalScenario: Test scenario
+    suggestedResolutions: []
+summary: Test`;
+
+      const result = await freshParser.parseContradictionOutput(yamlContent);
+
+      expect(result.success).toBe(false);
+      if (!result.success) {
+        expect(result.error).toBeInstanceOf(freshTypes.ContradictionReportParseError);
+        expect(result.error.errorType).toBe('validation_error');
+      }
+
+      const prototypeKeysAfter = Object.keys(Object.prototype);
+      expect(prototypeKeysAfter).toEqual(prototypeKeysBefore);
+      expect(Object.prototype).not.toHaveProperty('polluted');
+      expect(Object.prototype).not.toHaveProperty('injected');
+      expect(Object.prototype).not.toHaveProperty('malicious');
+    });
   });
 
   describe('Prototype Pollution Protection', () => {

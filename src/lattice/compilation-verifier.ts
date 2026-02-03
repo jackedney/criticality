@@ -529,7 +529,7 @@ export interface LogicLeakageViolation {
  */
 async function readTsconfigPatterns(tsconfigPath: string): Promise<string[] | null> {
   try {
-    const tsconfigContent = (await safeReadFile(tsconfigPath, 'utf-8')) as string;
+    const tsconfigContent = await safeReadFile(tsconfigPath, 'utf-8');
     const tsconfig = JSON.parse(tsconfigContent) as { include?: string[] };
     const include = tsconfig.include;
     if (include !== undefined && include.length > 0) {
@@ -861,7 +861,7 @@ export class CompilationVerifier {
 
     for (const file of uniqueFiles) {
       try {
-        const content = (await safeReadFile(file, 'utf-8')) as string;
+        const content = await safeReadFile(file, 'utf-8');
         fileContents.set(file, content);
       } catch {
         // File might not exist or be readable
@@ -921,7 +921,7 @@ export class CompilationVerifier {
         // Read the old content
         let oldContent: string | undefined;
         try {
-          oldContent = (await safeReadFile(normalizedFile, 'utf-8')) as string;
+          oldContent = await safeReadFile(normalizedFile, 'utf-8');
         } catch {
           // File might be new
         }

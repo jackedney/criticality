@@ -289,7 +289,7 @@ export async function loadContradictionReport(
   let filePath: string;
 
   try {
-    content = (await safeReadFile(jsonPath, 'utf-8')) as string;
+    content = await safeReadFile(jsonPath, 'utf-8');
     filePath = jsonPath;
   } catch (error) {
     const fileError = error instanceof Error ? error : new Error(String(error));
@@ -301,7 +301,7 @@ export async function loadContradictionReport(
       );
     }
     try {
-      content = (await safeReadFile(yamlPath, 'utf-8')) as string;
+      content = await safeReadFile(yamlPath, 'utf-8');
       filePath = yamlPath;
     } catch (yamlError) {
       const yamlFileError = yamlError instanceof Error ? yamlError : new Error(String(yamlError));
@@ -341,7 +341,7 @@ export async function loadLatestContradictionReport(
   let filePath: string;
 
   try {
-    content = (await safeReadFile(jsonPath, 'utf-8')) as string;
+    content = await safeReadFile(jsonPath, 'utf-8');
     filePath = jsonPath;
   } catch (err) {
     if (!hasErrorCode(err, 'ENOENT')) {
@@ -352,7 +352,7 @@ export async function loadLatestContradictionReport(
       });
     }
     try {
-      content = (await safeReadFile(yamlPath, 'utf-8')) as string;
+      content = await safeReadFile(yamlPath, 'utf-8');
       filePath = yamlPath;
     } catch (yamlErr) {
       if (!hasErrorCode(yamlErr, 'ENOENT')) {

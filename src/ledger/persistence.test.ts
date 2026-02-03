@@ -570,7 +570,7 @@ describe('Ledger Persistence', () => {
     });
 
     describe('malformed data handling', () => {
-      it('should throw LedgerSerializationError for invalid JSON syntax', () => {
+      it('should throw LedgerSerializationError for non-object JSON inputs', () => {
         fc.assert(
           fc.property(
             fc.string().filter((s) => !s.startsWith('{') || !s.endsWith('}')),
@@ -660,7 +660,7 @@ describe('Ledger Persistence', () => {
         const filePath = join(testDir, 'ledger.json');
         await saveLedger(ledger, filePath);
 
-        const content = (await safeReadFile(filePath, 'utf-8')) as string;
+        const content = await safeReadFile(filePath, 'utf-8');
         const parsed = JSON.parse(content) as LedgerData;
         expect(parsed.decisions).toHaveLength(1);
         expect(parsed.decisions[0]?.constraint).toBe('Test decision');
@@ -672,7 +672,7 @@ describe('Ledger Persistence', () => {
         const filePath = join(testDir, 'ledger.json');
         await saveLedger(ledger, filePath);
 
-        const content = (await safeReadFile(filePath, 'utf-8')) as string;
+        const content = await safeReadFile(filePath, 'utf-8');
         expect(content).toContain('\n');
       });
 
@@ -682,7 +682,7 @@ describe('Ledger Persistence', () => {
         const filePath = join(testDir, 'ledger.json');
         await saveLedger(ledger, filePath, { pretty: false });
 
-        const content = (await safeReadFile(filePath, 'utf-8')) as string;
+        const content = await safeReadFile(filePath, 'utf-8');
         expect(content).not.toContain('\n');
       });
 
@@ -694,7 +694,7 @@ describe('Ledger Persistence', () => {
         await saveLedger(ledger, filePath);
 
         // File should exist with correct content
-        const content = (await safeReadFile(filePath, 'utf-8')) as string;
+        const content = await safeReadFile(filePath, 'utf-8');
         expect(content).toContain('Important data');
 
         // No temp files should remain
@@ -713,7 +713,7 @@ describe('Ledger Persistence', () => {
         await saveLedger(ledger1, filePath);
         await saveLedger(ledger2, filePath);
 
-        const content = (await safeReadFile(filePath, 'utf-8')) as string;
+        const content = await safeReadFile(filePath, 'utf-8');
         expect(content).toContain('Second version');
         expect(content).not.toContain('First version');
       });

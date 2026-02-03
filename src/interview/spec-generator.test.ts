@@ -803,7 +803,7 @@ describe('Spec Generator', () => {
         expect(result.spec).toEqual(spec);
 
         // Verify file exists and is valid TOML
-        const content = (await safeReadFile(result.path, 'utf-8')) as string;
+        const content = await safeReadFile(result.path, 'utf-8');
         const parsed = TOML.parse(content);
         expect(parsed.meta).toBeDefined();
       });
@@ -968,7 +968,7 @@ describe('Spec Generator', () => {
 
       expect(result.path).toBe(join(testDir, 'spec.toml'));
 
-      const content = (await safeReadFile(result.path, 'utf-8')) as string;
+      const content = await safeReadFile(result.path, 'utf-8');
       expect(content).toContain('name = "test-system"');
     });
 

@@ -505,7 +505,7 @@ export class TypeScriptAdapter implements TargetAdapter {
     const packageJsonPath = path.join(projectPath, 'package.json');
     if (safeExistsSync(packageJsonPath)) {
       try {
-        const packageJson = JSON.parse(safeReadFileSync(packageJsonPath, 'utf-8') as string) as {
+        const packageJson = JSON.parse(safeReadFileSync(packageJsonPath, 'utf-8')) as {
           workspaces?: string[] | { packages?: string[] };
         };
 
@@ -530,7 +530,7 @@ export class TypeScriptAdapter implements TargetAdapter {
     const pnpmWorkspacePath = path.join(projectPath, 'pnpm-workspace.yaml');
     if (safeExistsSync(pnpmWorkspacePath) && packages.length === 0) {
       try {
-        const content = safeReadFileSync(pnpmWorkspacePath, 'utf-8') as string;
+        const content = safeReadFileSync(pnpmWorkspacePath, 'utf-8');
         // Simple YAML parsing for packages array
         // eslint-disable-next-line security/detect-unsafe-regex -- File size bounded, local config file
         const packagesMatch = /packages:\s*\n((?:\s+-\s+[^\n]+\n?)+)/i.exec(content);
@@ -573,9 +573,7 @@ export class TypeScriptAdapter implements TargetAdapter {
 
             if (safeExistsSync(packageJsonPath)) {
               try {
-                const pkgJson = JSON.parse(
-                  safeReadFileSync(packageJsonPath, 'utf-8') as string
-                ) as {
+                const pkgJson = JSON.parse(safeReadFileSync(packageJsonPath, 'utf-8')) as {
                   name?: string;
                 };
                 packages.push({
@@ -598,7 +596,7 @@ export class TypeScriptAdapter implements TargetAdapter {
 
       if (safeExistsSync(packageJsonPath)) {
         try {
-          const pkgJson = JSON.parse(safeReadFileSync(packageJsonPath, 'utf-8') as string) as {
+          const pkgJson = JSON.parse(safeReadFileSync(packageJsonPath, 'utf-8')) as {
             name?: string;
           };
           packages.push({

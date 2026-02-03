@@ -545,7 +545,7 @@ export class RalphLoop {
       }
 
       // Save original file content for potential rollback
-      originalContent = (await safeReadFile(todoFunction.filePath, 'utf-8')) as string;
+      originalContent = await safeReadFile(todoFunction.filePath, 'utf-8');
 
       // Inject implementation via AST
       try {

@@ -37,7 +37,7 @@ assignedSkills = ["implement_atomic"]
 permissions = { canRead = true, canWrite = true, canNet = false }
 `;
 
-      vi.mocked(safeReadFile).mockResolvedValue(partialConfigToml);
+      vi.mocked(safeReadFile).mockResolvedValue(partialConfigToml as string & Buffer);
 
       const result = await loadSwarmConfig({
         configPath: './swarm.toml',
@@ -65,7 +65,7 @@ assignedSkills = ["implement_atomic"]
 permissions = { canRead = true, canWrite = true, canNet = false }
 `;
 
-      vi.mocked(safeReadFile).mockResolvedValue(partialConfigToml);
+      vi.mocked(safeReadFile).mockResolvedValue(partialConfigToml as string & Buffer);
 
       const result = await loadSwarmConfig({
         configPath: './swarm.toml',

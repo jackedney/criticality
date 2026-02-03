@@ -887,7 +887,7 @@ export function createToolchainServer(config: ToolchainServerConfig): Server {
     }
 
     for (const file of files) {
-      const content = (await safeReadFile(file, 'utf-8')) as string;
+      const content = await safeReadFile(file, 'utf-8');
       const fileFunctions = extractFunctionComplexity(content, path.relative(projectRoot, file));
       functions.push(...fileFunctions);
     }

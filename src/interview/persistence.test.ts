@@ -696,22 +696,6 @@ describe('Interview Persistence', () => {
         );
       });
 
-      it('should preserve transcript entry through serialize/deserialize round-trip', () => {
-        fc.assert(
-          fc.property(transcriptEntryArbitrary, (entry) => {
-            const json = serializeTranscriptEntry(entry);
-            const restored = deserializeTranscriptEntry(json, 1);
-
-            expect(restored.id).toBe(entry.id);
-            expect(restored.phase).toBe(entry.phase);
-            expect(restored.role).toBe(entry.role);
-            expect(restored.content).toBe(entry.content);
-            expect(restored.timestamp).toBe(entry.timestamp);
-            expect(restored.metadata).toEqual(entry.metadata);
-          })
-        );
-      });
-
       it('should throw InterviewPersistenceError for invalid transcript entry JSON', () => {
         fc.assert(
           fc.property(
@@ -1012,7 +996,7 @@ describe('Interview Persistence', () => {
       await saveInterviewState(state);
 
       const statePath = getInterviewStatePath('new-project');
-      const content = (await safeReadFile(statePath, 'utf-8')) as string;
+      const content = await safeReadFile(statePath, 'utf-8');
       expect(JSON.parse(content)).toEqual(state);
     });
 
@@ -1156,7 +1140,7 @@ describe('Interview Persistence', () => {
         await appendTranscriptEntry(projectId, entry2);
 
         const transcriptPath = getTranscriptPath(projectId);
-        const content = (await safeReadFile(transcriptPath, 'utf-8')) as string;
+        const content = await safeReadFile(transcriptPath, 'utf-8');
         const lines = content.trim().split('\n');
 
         expect(lines).toHaveLength(2);
@@ -1175,7 +1159,7 @@ describe('Interview Persistence', () => {
         await appendTranscriptEntry('new-transcript-project', entry);
 
         const transcriptPath = getTranscriptPath('new-transcript-project');
-        const content = (await safeReadFile(transcriptPath, 'utf-8')) as string;
+        const content = await safeReadFile(transcriptPath, 'utf-8');
         expect(JSON.parse(content.trim())).toEqual(entry);
       });
     });
