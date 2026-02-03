@@ -17,6 +17,7 @@
  */
 
 import * as path from 'node:path';
+import { Project } from 'ts-morph';
 import type { CompilerError, TypeCheckResult } from '../adapters/typescript/typecheck.js';
 import { runTypeCheck } from '../adapters/typescript/typecheck.js';
 import type { ModelRouter, ModelRouterRequest } from '../router/types.js';
@@ -445,15 +446,30 @@ export function verifyNoLogicLeakage(
   const violations: LogicLeakageViolation[] = [];
   const allInspectedFunctions: InspectedFunction[] = [];
 
+  // Create a shared Project instance to avoid repeated compiler initialization
+  const project = new Project({
+    compilerOptions: {
+      strict: true,
+      noUncheckedIndexedAccess: true,
+      exactOptionalPropertyTypes: true,
+      target: 99, // ScriptTarget.ESNext
+      module: 199, // ModuleKind.NodeNext
+    },
+  });
+
   for (const file of files) {
     const filePath = path.resolve(projectPath, file);
 
     try {
-      const result = inspectAst(filePath, {
-        checkFunctionBodies: true,
-        checkTodoPattern: true,
-        detectLogicPatterns: true,
-      });
+      const result = inspectAst(
+        filePath,
+        {
+          checkFunctionBodies: true,
+          checkTodoPattern: true,
+          detectLogicPatterns: true,
+        },
+        project
+      );
 
       // Collect all inspected functions
       allInspectedFunctions.push(...result.functions);
@@ -493,7 +509,7 @@ export function verifyNoLogicLeakage(
         line: 0,
         functionName: 'N/A',
         violation: `Could not parse file for inspection: ${error instanceof Error ? error.message : String(error)}`,
-        severity: 'warning',
+        severity: 'error',
       });
     }
   }
