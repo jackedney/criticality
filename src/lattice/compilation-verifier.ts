@@ -509,7 +509,7 @@ export function verifyNoLogicLeakage(
         line: 0,
         functionName: 'N/A',
         violation: `Could not parse file for inspection: ${error instanceof Error ? error.message : String(error)}`,
-        severity: 'warning',
+        severity: 'error',
       });
     }
   }
