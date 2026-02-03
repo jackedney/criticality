@@ -60,6 +60,8 @@ export function createProject(tsConfigPath?: string): Project {
   const defaultOptions: ProjectOptions = {
     compilerOptions: {
       strict: true,
+      noUncheckedIndexedAccess: true,
+      exactOptionalPropertyTypes: true,
       target: 99, // ScriptTarget.ESNext
       module: 199, // ModuleKind.NodeNext
       moduleResolution: 99, // ModuleResolutionKind.NodeNext
@@ -909,15 +911,17 @@ export function inspectAst(
   const project = new Project({
     compilerOptions: {
       strict: true,
+      noUncheckedIndexedAccess: true,
+      exactOptionalPropertyTypes: true,
       target: 99, // ScriptTarget.ESNext
       module: 199, // ModuleKind.NodeNext
     },
   });
 
-  project.addSourceFilesAtPaths(filePath);
-  const sourceFile = project.getSourceFile(filePath);
-
-  if (!sourceFile) {
+  let sourceFile: SourceFile;
+  try {
+    sourceFile = project.addSourceFileAtPath(filePath);
+  } catch {
     return {
       functions: [],
       logicPatterns: [
