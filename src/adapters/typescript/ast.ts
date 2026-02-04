@@ -481,18 +481,38 @@ export function orderByDependency(functions: TodoFunction[], project: Project): 
     return [];
   }
 
-  // Get all source files from the project
-  const allFunctions: FunctionLike[] = [];
-  for (const sourceFile of project.getSourceFiles()) {
-    const filePath = sourceFile.getFilePath();
-    if (filePath.includes('node_modules') || filePath.endsWith('.d.ts')) {
-      continue;
+  // Only scan source files that actually contain the functions we're interested in.
+  // This avoids parsing/scanning unrelated files in the project.
+  const relevantNodes: FunctionLike[] = [];
+  const filesToCheck = new Map<string, Set<string>>();
+
+  for (const func of functions) {
+    if (!filesToCheck.has(func.filePath)) {
+      filesToCheck.set(func.filePath, new Set());
     }
-    allFunctions.push(...collectFunctions(sourceFile));
+    filesToCheck.get(func.filePath)?.add(func.name);
   }
 
-  // Build call graph from all functions
-  const callGraph = buildCallGraph(allFunctions);
+  for (const [filePath, funcNames] of filesToCheck) {
+    const sourceFile = project.getSourceFile(filePath);
+    if (!sourceFile) {
+      continue;
+    }
+
+    // Collect all functions in this file to find the AST nodes for our TodoFunctions
+    const fileFunctions = collectFunctions(sourceFile);
+
+    for (const funcNode of fileFunctions) {
+      if (funcNames.has(getFunctionName(funcNode))) {
+        relevantNodes.push(funcNode);
+      }
+    }
+  }
+
+  // Build call graph only from the relevant functions.
+  // We don't need to scan bodies of functions not in our list because topologicalSort
+  // ignores dependencies on functions outside the list.
+  const callGraph = buildCallGraph(relevantNodes);
 
   // Perform topological sort
   return topologicalSort(functions, callGraph);
@@ -741,7 +761,7 @@ export function injectFunctionBody(
  */
 export function findTodoFunctions(project: Project): TodoFunction[] {
   const todoFunctions: TodoFunction[] = [];
-  const allFunctions: FunctionLike[] = [];
+  const todoNodes: FunctionLike[] = [];
 
   for (const sourceFile of project.getSourceFiles()) {
     // Skip node_modules and declaration files
@@ -751,7 +771,6 @@ export function findTodoFunctions(project: Project): TodoFunction[] {
     }
 
     const functions = collectFunctions(sourceFile);
-    allFunctions.push(...functions);
 
     for (const func of functions) {
       if (hasTodoMarker(func)) {
@@ -762,12 +781,14 @@ export function findTodoFunctions(project: Project): TodoFunction[] {
           signature: extractSignature(func),
           hasTodoBody: true,
         });
+        todoNodes.push(func);
       }
     }
   }
 
-  // Build call graph and sort topologically
-  const callGraph = buildCallGraph(allFunctions);
+  // Build call graph from only TODO functions to save AST traversal overhead
+  // topologicalSort only considers dependencies between TODO functions anyway
+  const callGraph = buildCallGraph(todoNodes);
   return topologicalSort(todoFunctions, callGraph);
 }
 
