@@ -142,24 +142,26 @@ function generateTestBody(claim: Claim): string {
       lines.push('');
       lines.push('    // Act: Check session validity during valid period');
       lines.push('    const midSessionTime = sessionCreationTime + sessionDurationMs / 2;');
+      lines.push('    const midIsValid = false;');
       lines.push('    // TODO: Call session validation function');
       lines.push('    // const isValid = validateSession(midSessionTime);');
       lines.push('');
       lines.push('    // Assert: Session should be valid');
       lines.push('    // expect(isValid).toBe(true);');
-      lines.push("    console.log('Session valid at midpoint:', isValid);");
+      lines.push("    console.log('Session valid at midpoint:', midIsValid);");
     }
 
     if (desc.includes('expires') || desc.includes('invalid')) {
       lines.push('');
       lines.push('    // Act: Check session invalidity after expiration');
       lines.push('    const afterExpirationTime = sessionCreationTime + sessionDurationMs + 1000;');
+      lines.push('    const afterIsValid = false;');
       lines.push('    // TODO: Call session validation function');
       lines.push('    // const isValid = validateSession(afterExpirationTime);');
       lines.push('');
       lines.push('    // Assert: Session should be invalid');
       lines.push('    // expect(isValid).toBe(false);');
-      lines.push("    console.log('Session invalid after expiration:', isValid);");
+      lines.push("    console.log('Session invalid after expiration:', afterIsValid);");
     }
   } else if (desc.includes('timeout') && desc.includes('within')) {
     lines.push('    const timeoutMs = 5000;');
@@ -303,8 +305,7 @@ export function generateTemporalTest(claim: Claim, options: TemporalTestOptions 
 
     lines.push(`  it('${escapedTestName}', () => {`);
     lines.push(generateTestBody(claim));
-    lines.push('    }');
-    lines.push(`  }, ${String(timeout)});`);
+    lines.push(`  }, { timeout: ${String(timeout)} });`);
 
     if (claim.functions.length > 0) {
       lines.push('');
@@ -318,7 +319,7 @@ export function generateTemporalTest(claim: Claim, options: TemporalTestOptions 
           lines.push('   */');
         }
         lines.push(`  it('${escapedFunc} - temporal constraint', () => {`);
-        lines.push('    // TODO: Test ${func} specifically for temporal property');
+        lines.push(`    // TODO: Test ${func} specifically for temporal property`);
         lines.push('    // Arrange: Set up initial state');
         lines.push('    // Act: Call function with timing constraints');
         lines.push('    // Assert: Verify temporal property holds');
