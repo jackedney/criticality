@@ -6,7 +6,7 @@
 
 import { describe, it, expect } from 'vitest';
 import { parseSpec } from '../spec/parser.js';
-import { defineClusters } from './cluster-definer.js';
+import { defineClusters, validateClusterResult } from './cluster-definer.js';
 
 describe('cluster-definer', () => {
   describe('extractModulesFromSpec', () => {
@@ -36,10 +36,12 @@ fields = [
       const result = defineClusters(spec);
 
       expect(result.modules).toHaveLength(2);
-      expect(result.modules[0]?.name).toBe('Account');
-      expect(result.modules[0]?.dataModels).toEqual(['Account']);
-      expect(result.modules[1]?.name).toBe('Transaction');
-      expect(result.modules[1]?.dataModels).toEqual(['Transaction']);
+      const accountModule = result.modules.find((m) => m.name === 'Account');
+      expect(accountModule).toBeDefined();
+      expect(accountModule?.dataModels).toEqual(['Account']);
+      const transactionModule = result.modules.find((m) => m.name === 'Transaction');
+      expect(transactionModule).toBeDefined();
+      expect(transactionModule?.dataModels).toEqual(['Transaction']);
     });
   });
 
@@ -68,7 +70,8 @@ subject = "account.balance"
       const spec = parseSpec(specToml);
       const result = defineClusters(spec);
 
-      expect(result.modules[0]?.claimIds).toContain('balance_001');
+      const accountModule = result.modules.find((m) => m.name === 'Account');
+      expect(accountModule?.claimIds).toContain('balance_001');
     });
   });
 
@@ -134,11 +137,13 @@ subject = "authentication"
       const result = defineClusters(spec);
 
       expect(result.modules).toHaveLength(2);
-      expect(result.modules[0]?.name).toBe('Auth');
-      expect(result.modules[1]?.name).toBe('JWT');
+      const authModule = result.modules.find((m) => m.name === 'Auth');
+      const jwtModule = result.modules.find((m) => m.name === 'JWT');
+      expect(authModule).toBeDefined();
+      expect(jwtModule).toBeDefined();
 
-      expect(result.modules[0]?.claimIds).toEqual(['auth_001']);
-      expect(result.modules[1]?.claimIds).toEqual(['auth_001']);
+      expect(authModule?.claimIds).toEqual(['auth_001']);
+      expect(jwtModule?.claimIds).toEqual(['auth_001']);
 
       const integrationCluster = result.clusters.find((c) => c.isCrossModule);
       expect(integrationCluster).toBeDefined();
@@ -223,6 +228,49 @@ subject = "account.balance"
       expect(result.orphanCount).toBe(1);
       const utilityCluster = result.clusters.find((c) => c.id === 'utility');
       expect(utilityCluster).toBeUndefined();
+    });
+  });
+
+  describe('validateClusterResult', () => {
+    it('should reject clusters referencing non-existent module IDs', () => {
+      const specToml = `
+[meta]
+version = "1.0.0"
+created = "2025-01-23T10:00:00Z"
+
+[system]
+name = "test-system"
+
+[data_models.Account]
+fields = [
+    { name = "id", type = "AccountId" }
+]
+
+[claims.balance_001]
+text = "Account balance never goes negative"
+type = "invariant"
+testable = true
+subject = "account.balance"
+      `;
+
+      const spec = parseSpec(specToml);
+      const result = defineClusters(spec);
+
+      const invalidResult = {
+        ...result,
+        clusters: [
+          ...result.clusters,
+          {
+            id: 'invalid',
+            name: 'Invalid Cluster',
+            modules: ['nonexistent-module'],
+            claimIds: [],
+            isCrossModule: false,
+          },
+        ],
+      };
+
+      expect(validateClusterResult(invalidResult)).toBe(false);
     });
   });
 });

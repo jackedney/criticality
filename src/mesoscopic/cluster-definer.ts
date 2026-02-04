@@ -259,8 +259,12 @@ function groupModulesIntoClusters(
                 isCrossModule: true,
               });
 
-              allClaims.forEach((c) => assignedClaims.add(c));
-              allModules.forEach((m) => assignedModules.add(m));
+              allClaims.forEach((c) => {
+                assignedClaims.add(c);
+              });
+              allModules.forEach((m) => {
+                assignedModules.add(m);
+              });
               continue;
             }
           }
@@ -274,7 +278,9 @@ function groupModulesIntoClusters(
           isCrossModule: false,
         });
 
-        unassignedModuleClaims.forEach((c) => assignedClaims.add(c));
+        unassignedModuleClaims.forEach((c) => {
+          assignedClaims.add(c);
+        });
         assignedModules.add(module.id);
       }
     }
@@ -406,7 +412,7 @@ export function defineClusters(
 export function validateClusterResult(result: ClusterDefinitionResult): boolean {
   const allClaimIds = new Set([...result.assignedClaimIds, ...result.unassignedClaimIds]);
 
-  const allModules = new Set(result.clusters.flatMap((c) => c.modules));
+  const validModuleIds = new Set(result.modules.map((m) => m.id));
 
   for (const cluster of result.clusters) {
     if (cluster.modules.length === 0) {
@@ -420,7 +426,7 @@ export function validateClusterResult(result: ClusterDefinitionResult): boolean 
     }
 
     for (const moduleId of cluster.modules) {
-      if (!allModules.has(moduleId) && !result.modules.some((m) => m.id === moduleId)) {
+      if (!validModuleIds.has(moduleId)) {
         return false;
       }
     }
