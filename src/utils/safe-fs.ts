@@ -15,22 +15,8 @@
  * @packageDocumentation
  */
 
-import {
-  readFile,
-  writeFile,
-  access,
-  mkdir,
-  readdir,
-  stat,
-  unlink,
-  rename,
-  appendFile,
-  symlink,
-  mkdtemp,
-  copyFile,
-  rm,
-} from 'node:fs/promises';
-import { existsSync, readFileSync, readdirSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
+import * as fs from 'node:fs/promises';
+import * as fsSync from 'node:fs';
 import * as path from 'node:path';
 
 /**
@@ -113,32 +99,6 @@ export function validatePath(filePath: string): string {
  * Safely reads a file after validating the path.
  *
  * @param filePath - The path to the file to read.
- * @param encoding - The encoding to use or options with encoding specified.
- * @returns A promise that resolves to the file contents as a string.
- * @throws {PathValidationError} If the path is invalid.
- * @throws {Error} If the file cannot be read (e.g., file not found, permission denied).
- */
-export function safeReadFile(
-  filePath: string,
-  encoding: BufferEncoding | { encoding: BufferEncoding; flag?: string }
-): Promise<string>;
-/**
- * Safely reads a file after validating the path.
- *
- * @param filePath - The path to the file to read.
- * @param options - Options without encoding (returns Buffer).
- * @returns A promise that resolves to the file contents as a Buffer.
- * @throws {PathValidationError} If the path is invalid.
- * @throws {Error} If the file cannot be read (e.g., file not found, permission denied).
- */
-export function safeReadFile(
-  filePath: string,
-  options?: { encoding?: null; flag?: string } | null
-): Promise<Buffer>;
-/**
- * Safely reads a file after validating the path.
- *
- * @param filePath - The path to the file to read.
  * @param options - Optional encoding or file read options.
  * @returns A promise that resolves to the file contents.
  * @throws {PathValidationError} If the path is invalid.
@@ -150,7 +110,7 @@ export async function safeReadFile(
 ): Promise<string | Buffer> {
   const validatedPath = validatePath(filePath);
   // eslint-disable-next-line security/detect-non-literal-fs-filename -- path is validated by validatePath
-  return readFile(validatedPath, options);
+  return fs.readFile(validatedPath, options);
 }
 
 /**
@@ -173,7 +133,7 @@ export async function safeWriteFile(
 ): Promise<void> {
   const validatedPath = validatePath(filePath);
   // eslint-disable-next-line security/detect-non-literal-fs-filename -- path is validated by validatePath
-  return writeFile(validatedPath, data, options);
+  return fs.writeFile(validatedPath, data, options);
 }
 
 /**
@@ -186,7 +146,7 @@ export async function safeWriteFile(
 export async function safeExists(filePath: string): Promise<boolean> {
   const validatedPath = validatePath(filePath);
   try {
-    await access(validatedPath);
+    await fs.access(validatedPath);
     return true;
   } catch {
     return false;
@@ -203,35 +163,9 @@ export async function safeExists(filePath: string): Promise<boolean> {
 export function safeExistsSync(filePath: string): boolean {
   const validatedPath = validatePath(filePath);
   // eslint-disable-next-line security/detect-non-literal-fs-filename -- path is validated by validatePath
-  return existsSync(validatedPath);
+  return fsSync.existsSync(validatedPath);
 }
 
-/**
- * Synchronously reads a file after validating the path.
- *
- * @param filePath - The path to the file to read.
- * @param encoding - The encoding to use or options with encoding specified.
- * @returns The file contents as a string.
- * @throws {PathValidationError} If the path is invalid.
- * @throws {Error} If the file cannot be read (e.g., file not found, permission denied).
- */
-export function safeReadFileSync(
-  filePath: string,
-  encoding: BufferEncoding | { encoding: BufferEncoding; flag?: string }
-): string;
-/**
- * Synchronously reads a file after validating the path.
- *
- * @param filePath - The path to the file to read.
- * @param options - Options without encoding (returns Buffer).
- * @returns The file contents as a Buffer.
- * @throws {PathValidationError} If the path is invalid.
- * @throws {Error} If the file cannot be read (e.g., file not found, permission denied).
- */
-export function safeReadFileSync(
-  filePath: string,
-  options?: { encoding?: null; flag?: string } | null
-): Buffer;
 /**
  * Synchronously reads a file after validating the path.
  *
@@ -247,7 +181,7 @@ export function safeReadFileSync(
 ): string | Buffer {
   const validatedPath = validatePath(filePath);
   // eslint-disable-next-line security/detect-non-literal-fs-filename -- path is validated by validatePath
-  return readFileSync(validatedPath, options);
+  return fsSync.readFileSync(validatedPath, options);
 }
 
 /**
@@ -267,7 +201,7 @@ export function safeReaddirSync(
   const validatedPath = validatePath(filePath);
   return (
     // eslint-disable-next-line security/detect-non-literal-fs-filename -- path is validated by validatePath
-    readdirSync(
+    fsSync.readdirSync(
       validatedPath,
       // eslint-disable-next-line @typescript-eslint/no-unsafe-argument, @typescript-eslint/no-explicit-any -- type safety enforced by overload signatures
       options as any
@@ -290,7 +224,7 @@ export async function safeMkdir(
 ): Promise<string | undefined> {
   const validatedPath = validatePath(filePath);
   // eslint-disable-next-line security/detect-non-literal-fs-filename -- path is validated by validatePath
-  return mkdir(validatedPath, options);
+  return fs.mkdir(validatedPath, options);
 }
 
 /**
@@ -308,15 +242,12 @@ export function safeReaddir(
   filePath: string,
   options?: { encoding?: BufferEncoding | null; withFileTypes?: true; recursive?: boolean }
 ): Promise<import('node:fs').Dirent[]>;
-export async function safeReaddir(
-  filePath: string,
-  options?: { encoding?: BufferEncoding | null; withFileTypes?: true; recursive?: boolean }
-): Promise<string[] | import('node:fs').Dirent[]> {
+export async function safeReaddir(filePath: string, options?: unknown): Promise<unknown> {
   const validatedPath = validatePath(filePath);
 
   return (
     // eslint-disable-next-line security/detect-non-literal-fs-filename -- path is validated by validatePath
-    readdir(
+    fs.readdir(
       validatedPath,
       // eslint-disable-next-line @typescript-eslint/no-unsafe-argument, @typescript-eslint/no-explicit-any -- required for complex readdir options
       options as any
@@ -332,10 +263,10 @@ export async function safeReaddir(
  * @throws {PathValidationError} If the path is invalid.
  * @throws {Error} If the statistics cannot be retrieved (e.g., not found, permission denied).
  */
-export async function safeStat(filePath: string): Promise<ReturnType<typeof stat>> {
+export async function safeStat(filePath: string): Promise<ReturnType<typeof fs.stat>> {
   const validatedPath = validatePath(filePath);
   // eslint-disable-next-line security/detect-non-literal-fs-filename -- path is validated by validatePath
-  return stat(validatedPath);
+  return fs.stat(validatedPath);
 }
 
 /**
@@ -349,7 +280,7 @@ export async function safeStat(filePath: string): Promise<ReturnType<typeof stat
 export async function safeUnlink(filePath: string): Promise<void> {
   const validatedPath = validatePath(filePath);
   // eslint-disable-next-line security/detect-non-literal-fs-filename -- path is validated by validatePath
-  return unlink(validatedPath);
+  return fs.unlink(validatedPath);
 }
 
 /**
@@ -365,7 +296,7 @@ export async function safeRename(oldPath: string, newPath: string): Promise<void
   const validatedOldPath = validatePath(oldPath);
   const validatedNewPath = validatePath(newPath);
   // eslint-disable-next-line security/detect-non-literal-fs-filename -- paths are validated by validatePath
-  return rename(validatedOldPath, validatedNewPath);
+  return fs.rename(validatedOldPath, validatedNewPath);
 }
 
 /**
@@ -387,7 +318,7 @@ export function safeWriteFileSync(
 ): void {
   const validatedPath = validatePath(filePath);
   // eslint-disable-next-line security/detect-non-literal-fs-filename -- path is validated by validatePath
-  writeFileSync(validatedPath, data, options);
+  fsSync.writeFileSync(validatedPath, data, options);
 }
 
 /**
@@ -404,7 +335,7 @@ export function safeMkdirSync(
 ): string | undefined {
   const validatedPath = validatePath(filePath);
   // eslint-disable-next-line security/detect-non-literal-fs-filename -- path is validated by validatePath
-  return mkdirSync(validatedPath, options);
+  return fsSync.mkdirSync(validatedPath, options);
 }
 
 /**
@@ -421,7 +352,8 @@ export function safeRmSync(
 ): void {
   const validatedPath = validatePath(filePath);
 
-  rmSync(validatedPath, options);
+  // eslint-disable-next-line security/detect-non-literal-fs-filename -- path is validated by validatePath
+  fsSync.rmSync(validatedPath, options);
 }
 
 /**
@@ -446,10 +378,10 @@ export async function safeAppendFile(
 
   if (typeof options === 'string') {
     // eslint-disable-next-line security/detect-non-literal-fs-filename -- path is validated by validatePath
-    return appendFile(validatedPath, data, options);
+    return fs.appendFile(validatedPath, data, options);
   }
   // eslint-disable-next-line security/detect-non-literal-fs-filename -- path is validated by validatePath
-  return appendFile(validatedPath, data, options);
+  return fs.appendFile(validatedPath, data, options);
 }
 
 export async function safeAppendFileWithOptions(
@@ -459,53 +391,7 @@ export async function safeAppendFileWithOptions(
 ): Promise<void> {
   const validatedPath = validatePath(filePath);
   // eslint-disable-next-line security/detect-non-literal-fs-filename -- path is validated by validatePath
-  return appendFile(validatedPath, data, options);
-}
-
-/**
- * Safely creates a temporary directory after validating the path prefix.
- *
- * @param prefix - The prefix for the temporary directory name.
- * @returns A promise that resolves to the path of the created temporary directory.
- * @throws {PathValidationError} If the prefix is invalid.
- * @throws {Error} If the temporary directory cannot be created (e.g., permission denied).
- */
-export async function safeMkdirTemp(prefix: string): Promise<string> {
-  const validatedPrefix = validatePath(prefix);
-  return mkdtemp(validatedPrefix);
-}
-
-/**
- * Safely copies a file after validating both paths.
- *
- * @param src - The source file path.
- * @param dest - The destination file path.
- * @param mode - Optional copy mode (Node.js constants like fs.constants.COPYFILE_EXCL).
- * @returns A promise that resolves when the file is copied.
- * @throws {PathValidationError} If either path is invalid.
- * @throws {Error} If the file cannot be copied (e.g., source not found, permission denied).
- */
-export async function safeCopyFile(src: string, dest: string, mode?: number): Promise<void> {
-  const validatedSrc = validatePath(src);
-  const validatedDest = validatePath(dest);
-  return copyFile(validatedSrc, validatedDest, mode);
-}
-
-/**
- * Safely removes a file or directory after validating the path.
- *
- * @param filePath - The path to the file or directory to remove.
- * @param options - Options for removal.
- * @returns A promise that resolves when the path is removed.
- * @throws {PathValidationError} If the path is invalid.
- * @throws {Error} If the path cannot be removed (e.g., not found, permission denied).
- */
-export async function safeRm(
-  filePath: string,
-  options?: { force?: boolean; maxRetries?: number; recursive?: boolean; retryDelay?: number }
-): Promise<void> {
-  const validatedPath = validatePath(filePath);
-  return rm(validatedPath, options);
+  return fs.appendFile(validatedPath, data, options);
 }
 
 /**
@@ -527,6 +413,6 @@ export async function safeSymlink(
   const validatedPath = validatePath(path);
   return (
     // eslint-disable-next-line security/detect-non-literal-fs-filename -- paths are validated by validatePath
-    symlink(validatedTarget, validatedPath, type)
+    fs.symlink(validatedTarget, validatedPath, type)
   );
 }

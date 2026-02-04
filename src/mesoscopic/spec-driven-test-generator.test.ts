@@ -5,13 +5,14 @@
  */
 
 /* eslint-disable @typescript-eslint/strict-template-expressions */
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import type { ModelRouter } from '../router/types.js';
 import {
   generateSpecDrivenTests,
   type SpecDrivenTestOptions,
 } from './spec-driven-test-generator.js';
 import * as fs from 'node:fs/promises';
+import * as fsSync from 'node:fs';
 
 const mockRouter: ModelRouter = {
   prompt: async (): Promise<{
@@ -67,11 +68,18 @@ const mockRouter: ModelRouter = {
 
 describe('spec-driven-test-generator', () => {
   let tempDir: string;
+  let origWarn: typeof console.warn;
 
   beforeEach(async () => {
     const timestamp = Date.now();
     tempDir = `/tmp/criticality-test-${timestamp}`;
     await fs.mkdir(tempDir, { recursive: true });
+    origWarn = console.warn;
+  });
+
+  afterEach(() => {
+    console.warn = origWarn;
+    fsSync.rmSync(tempDir, { recursive: true, force: true });
   });
 
   it('should generate tests for invariant claims', async () => {
@@ -148,15 +156,12 @@ perf_001 = { type = "performance", text = "search operation completes quickly", 
     const specPath = `${tempDir}/spec.toml`;
     await fs.writeFile(specPath, specContent, 'utf-8');
 
-    const consoleWarn = console.warn;
     const warnings: string[] = [];
     console.warn = (...args: unknown[]) => {
       warnings.push(args.join(' '));
     };
 
     await generateSpecDrivenTests(specPath, new Map());
-
-    console.warn = consoleWarn;
 
     expect(warnings.some((w) => w.includes('perf_001'))).toBe(true);
     expect(warnings.some((w) => w.includes('no complexity threshold'))).toBe(true);
