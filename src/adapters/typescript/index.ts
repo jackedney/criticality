@@ -695,6 +695,6 @@ export {
 
 export {
   generateSpecDrivenTests,
-  SpecDrivenTestOptions,
   SpecDrivenTestError,
-} from './mesoscopic/spec-driven-test-generator.js';
+} from '../../mesoscopic/spec-driven-test-generator.js';
+export type { SpecDrivenTestOptions } from '../../mesoscopic/spec-driven-test-generator.js';

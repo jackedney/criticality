@@ -16,16 +16,15 @@ export type {
   ClusterDefinitionOptions,
 } from './types.js';
 
-export { ClusterDefinitionError } from './types.js';
+export type { ClusterDefinitionError } from './types.js';
 
-export {
-  generateSpecDrivenTests,
-  SpecDrivenTestOptions,
-  SpecDrivenTestError,
-} from './spec-driven-test-generator.js';
+export { generateSpecDrivenTests, SpecDrivenTestError } from './spec-driven-test-generator.js';
 
-export {
-  executeClusters,
+export type { SpecDrivenTestOptions } from './spec-driven-test-generator.js';
+
+export { executeClusters } from './cluster-executor.js';
+
+export type {
   ClusterExecutionOptions,
   ClusterExecutionResult,
   ClusterExecutionSummary,

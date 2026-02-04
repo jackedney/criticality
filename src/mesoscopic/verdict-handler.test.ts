@@ -85,8 +85,24 @@ describe('ClusterVerdict', () => {
 
     it('should return pass verdict when all claims passed', async () => {
       const claimResults: ClaimResult[] = [
-        { claimId: 'balance_001', status: 'passed', testCount: 5, passedCount: 5, failedCount: 0, failedTests: [], durationMs: 100 },
-        { claimId: 'balance_002', status: 'passed', testCount: 10, passedCount: 10, failedCount: 0, failedTests: [], durationMs: 200 },
+        {
+          claimId: 'balance_001',
+          status: 'passed',
+          testCount: 5,
+          passedCount: 5,
+          failedCount: 0,
+          failedTests: [],
+          durationMs: 100,
+        },
+        {
+          claimId: 'balance_002',
+          status: 'passed',
+          testCount: 10,
+          passedCount: 10,
+          failedCount: 0,
+          failedTests: [],
+          durationMs: 200,
+        },
       ];
 
       const cluster: ClusterDefinition = {
@@ -115,8 +131,24 @@ describe('ClusterVerdict', () => {
 
     it('should identify functions linked to violated claims via CLAIM_REF', async () => {
       const claimResults: ClaimResult[] = [
-        { claimId: 'balance_001', status: 'passed', testCount: 5, passedCount: 5, failedCount: 0, failedTests: [], durationMs: 100 },
-        { claimId: 'balance_002', status: 'failed', testCount: 10, passedCount: 7, failedCount: 3, failedTests: ['test1'], durationMs: 200 },
+        {
+          claimId: 'balance_001',
+          status: 'passed',
+          testCount: 5,
+          passedCount: 5,
+          failedCount: 0,
+          failedTests: [],
+          durationMs: 100,
+        },
+        {
+          claimId: 'balance_002',
+          status: 'failed',
+          testCount: 10,
+          passedCount: 7,
+          failedCount: 3,
+          failedTests: ['test1'],
+          durationMs: 200,
+        },
       ];
 
       const cluster: ClusterDefinition = {
@@ -151,7 +183,15 @@ describe('ClusterVerdict', () => {
 
     it('should trigger fallback when no CLAIM_REF links exist', async () => {
       const claimResults: ClaimResult[] = [
-        { claimId: 'balance_003', status: 'failed', testCount: 10, passedCount: 7, failedCount: 3, failedTests: ['test1'], durationMs: 200 },
+        {
+          claimId: 'balance_003',
+          status: 'failed',
+          testCount: 10,
+          passedCount: 7,
+          failedCount: 3,
+          failedTests: ['test1'],
+          durationMs: 200,
+        },
       ];
 
       const cluster: ClusterDefinition = {
@@ -180,7 +220,6 @@ describe('ClusterVerdict', () => {
         expect.stringContaining('No CLAIM_REF links found - triggering fallback')
       );
     });
-  });
 
     it('should return pass verdict when all claims passed', async () => {
       const claimResults: ClaimResult[] = [

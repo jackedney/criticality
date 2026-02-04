@@ -39,48 +39,13 @@ export interface SpecDrivenTestOptions {
   includeJsDoc?: boolean;
   /** Whether to skip untestable claims (default: true) */
   skipUntestable?: boolean;
-  /** Path to baseline file for performance regression detection */
-  baselinePath?: string;
   /** ModelRouter for using structurer_model for test synthesis */
   modelRouter?: ModelRouter;
   /** Whether to use structurer_model for test synthesis (default: false) */
   useStructurerModel?: boolean;
 }
 
-/**
- * Performance baseline data for regression detection.
- */
-export interface PerformanceBaseline {
-  /** Claim ID */
-  claimId: string;
-  /** Timestamp of baseline */
-  timestamp: string;
-  /** Average execution time at baseline */
-  avgTime: number;
-  /** Input size at baseline */
-  size: number;
-  /** Memory usage at baseline (if available) */
-  memoryUsage?: number;
-}
-
-/**
- * Performance regression detection result.
- */
-export interface RegressionResult {
-  /** Whether regression was detected */
-  regressed: boolean;
-  /** Current metrics */
-  current: { avgTime: number; size: number };
-  /** Baseline metrics */
-  baseline: PerformanceBaseline;
-  /** Percentage change (positive = regression) */
-  percentChange: number;
-  /** Whether regression exceeds threshold */
-  exceedsThreshold: boolean;
-}
-
 const DEFAULT_TIMEOUT = 60000;
-const REGRESSION_THRESHOLD = 0.15;
 
 /**
  * Extended Claim with testable flag from SpecClaim.
@@ -124,8 +89,21 @@ function linkClaimsToFunctions(
 ): Map<string, TestableClaim> {
   const linkedClaims = new Map<string, TestableClaim>();
 
+  const claimToFunctionsMap = new Map<string, string[]>();
+
+  for (const [functionId, claimIds] of functionClaimRefs) {
+    for (const claimId of claimIds) {
+      const functions = claimToFunctionsMap.get(claimId);
+      if (functions !== undefined) {
+        functions.push(functionId);
+      } else {
+        claimToFunctionsMap.set(claimId, [functionId]);
+      }
+    }
+  }
+
   for (const [claimId, claim] of claims) {
-    const linkedFunctions = functionClaimRefs.get(claimId) ?? [];
+    const linkedFunctions = claimToFunctionsMap.get(claimId) ?? [];
     linkedClaims.set(claimId, {
       ...claim,
       functions: linkedFunctions,
@@ -215,29 +193,6 @@ The test should verify the claim using appropriate testing strategies:
 - performance: measure execution time and verify complexity
 
 Output ONLY the test code. No explanations.`;
-}
-
-/**
- * Loads performance baseline from file.
- *
- * @param baselinePath - Path to baseline file.
- * @returns Map of claim ID to baseline data.
- */
-async function loadBaseline(baselinePath: string): Promise<Map<string, PerformanceBaseline>> {
-  const baseline = new Map<string, PerformanceBaseline>();
-
-  try {
-    const content = await readFile(baselinePath, 'utf-8');
-    const data = JSON.parse(content) as PerformanceBaseline[];
-
-    for (const entry of data) {
-      baseline.set(entry.claimId, entry);
-    }
-  } catch (error) {
-    console.warn(`[SpecDrivenTestGenerator] Failed to load baseline from ${baselinePath}:`, error);
-  }
-
-  return baseline;
 }
 
 /**
@@ -448,17 +403,6 @@ export async function generateSpecDrivenTests(
 
     const linkedClaims = linkClaimsToFunctions(claims, functionClaimRefs);
 
-    // Load baseline if path provided for regression detection
-    let baseline: Map<string, PerformanceBaseline> | undefined;
-    if (options.baselinePath !== undefined) {
-      baseline = await loadBaseline(options.baselinePath);
-      if (baseline.size > 0) {
-        console.log(
-          `[SpecDrivenTestGenerator] Loaded ${baseline.size} baseline entries for regression detection`
-        );
-      }
-    }
-
     const generatedTests = await generateTestsForCluster(
       Array.from(linkedClaims.values()),
       options
@@ -513,4 +457,4 @@ async function readFile(path: string, encoding = 'utf-8'): Promise<string> {
   return buffer as string;
 }
 
-export { DEFAULT_TIMEOUT, REGRESSION_THRESHOLD };
+export { DEFAULT_TIMEOUT };

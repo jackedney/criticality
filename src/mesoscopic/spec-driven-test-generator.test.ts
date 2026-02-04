@@ -5,7 +5,7 @@
  */
 
 /* eslint-disable @typescript-eslint/strict-template-expressions */
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import type { ModelRouter } from '../router/types.js';
 import {
   generateSpecDrivenTests,
@@ -72,6 +72,10 @@ describe('spec-driven-test-generator', () => {
     const timestamp = Date.now();
     tempDir = `/tmp/criticality-test-${timestamp}`;
     await fs.mkdir(tempDir, { recursive: true });
+  });
+
+  afterEach(async () => {
+    await fs.rm(tempDir, { recursive: true, force: true });
   });
 
   it('should generate tests for invariant claims', async () => {
