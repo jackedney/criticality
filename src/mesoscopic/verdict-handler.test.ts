@@ -126,7 +126,7 @@ describe('ClusterVerdict', () => {
       expect(result.verdict.violatedClaims).toEqual(['balance_002']);
     });
 
-    it('should trigger fallback when no CLAIM_REF links exist', async () => {
+    it('should trigger fallback when no CLAIM_REF links exist', () => {
       const claimResults: ClaimResult[] = [
         {
           claimId: 'balance_003',
