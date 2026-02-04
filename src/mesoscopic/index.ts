@@ -14,8 +14,9 @@ export type {
   ClusterDefinition,
   ClusterDefinitionResult,
   ClusterDefinitionOptions,
-  ClusterDefinitionError,
 } from './types.js';
+
+export { ClusterDefinitionError } from './types.js';
 
 export {
   generateSpecDrivenTests,
