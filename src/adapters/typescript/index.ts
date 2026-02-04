@@ -683,19 +683,18 @@ export {
   generateTemporalTests,
   generateTemporalTest,
   type TemporalTestOptions,
-  DEFAULT_TIMEOUT,
+  DEFAULT_TIMEOUT as TEMPORAL_DEFAULT_TIMEOUT,
 } from './temporal-test-generator.js';
 
 export {
   generateNegativeTests,
   generateNegativeTest,
   type NegativeTestOptions,
-  DEFAULT_TIMEOUT,
+  DEFAULT_TIMEOUT as NEGATIVE_DEFAULT_TIMEOUT,
 } from './negative-test-generator.js';
 
 export {
   generateSpecDrivenTests,
   SpecDrivenTestOptions,
   SpecDrivenTestError,
-  generateSpecDrivenTests,
 } from './mesoscopic/spec-driven-test-generator.js';
