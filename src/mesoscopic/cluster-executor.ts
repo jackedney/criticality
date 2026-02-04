@@ -107,10 +107,16 @@ function mapTestsToClaims(
 ): Map<string, ClaimResult> {
   const claimResults = new Map<string, ClaimResult>();
 
+  function escapeRegExp(string: string): string {
+    return string.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  }
+
   for (const claimId of claimIds) {
+    const escapedClaimId = escapeRegExp(claimId);
+    const claimIdRegex = new RegExp(`\\b${escapedClaimId}\\b`, 'i');
+
     const testsForClaim = testRunResult.tests.filter((test) => {
-      const testName = test.fullName.toLowerCase();
-      return testName.includes(claimId.toLowerCase());
+      return claimIdRegex.test(test.fullName);
     });
 
     let totalDurationMs = 0;
@@ -275,7 +281,12 @@ async function executeClusterWithRetry(
             failureType: failure.type,
             message: 'Infrastructure failure. Retrying...',
           });
-          await new Promise((resolve) => setTimeout(resolve, 1000 * attempt));
+          const baseDelayMs = 1000;
+          const maxDelayMs = 30000;
+          const exponentialDelay = Math.min(maxDelayMs, baseDelayMs * 2 ** (attempt - 1));
+          const jitter = Math.random() * 0.2 * exponentialDelay;
+          const delayMs = exponentialDelay + jitter;
+          await new Promise((resolve) => setTimeout(resolve, delayMs));
           return executeClusterWithRetry(cluster, options, attempt + 1);
         }
 
@@ -393,19 +404,36 @@ export async function executeClusters(
   }
 
   const totalDurationMs = Date.now() - startTime;
-  const totalClaims = clusterResults.flatMap((r) => r.claimResults).length;
-  const passedClaims = clusterResults
-    .flatMap((r) => r.claimResults)
-    .filter((r) => r.status === 'passed').length;
-  const failedClaims = clusterResults
-    .flatMap((r) => r.claimResults)
-    .filter((r) => r.status === 'failed').length;
-  const skippedClaims = clusterResults
-    .flatMap((r) => r.claimResults)
-    .filter((r) => r.status === 'skipped').length;
-  const errorClaims = clusterResults
-    .flatMap((r) => r.claimResults)
-    .filter((r) => r.status === 'error').length;
+
+  const summary = clusterResults.reduce(
+    (acc, clusterResult) => {
+      for (const claimResult of clusterResult.claimResults) {
+        acc.totalClaims++;
+        switch (claimResult.status) {
+          case 'passed':
+            acc.passedClaims++;
+            break;
+          case 'failed':
+            acc.failedClaims++;
+            break;
+          case 'skipped':
+            acc.skippedClaims++;
+            break;
+          case 'error':
+            acc.errorClaims++;
+            break;
+        }
+      }
+      return acc;
+    },
+    { totalClaims: 0, passedClaims: 0, failedClaims: 0, skippedClaims: 0, errorClaims: 0 }
+  );
+
+  const totalClaims = summary.totalClaims;
+  const passedClaims = summary.passedClaims;
+  const failedClaims = summary.failedClaims;
+  const skippedClaims = summary.skippedClaims;
+  const errorClaims = summary.errorClaims;
 
   const success = failedClaims === 0 && errorClaims === 0;
 
