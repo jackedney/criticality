@@ -57,7 +57,7 @@ function extractForbiddenAction(claim: Claim): string | null {
   const desc = claim.description.toLowerCase();
 
   const patterns = [
-    /cannot\s+(\w+)/i,
+    /cannot\s+(?!be\s+)(\w+)/i,
     /must\s+not\s+(\w+)/i,
     /forbidden\s+to\s+(\w+)/i,
     /should\s+not\s+(\w+)/i,
@@ -89,9 +89,10 @@ function extractForbiddenOutcome(claim: Claim): string | null {
   const desc = claim.description.toLowerCase();
 
   const patterns = [
+    /^([\w\s]+?)\s+cannot\s+be\s+\w+/i,
     /cannot\s+result\s+in\s+(\w+)/i,
     /must\s+not\s+cause\s+(\w+)/i,
-    /never\s+(produces?|results?\s+in)\s+(\w+)/i,
+    /never\s+(?:produces?|results?\s+in)\s+(\w+)/i,
     /forbidden\s+to\s+(\w+)/i,
     /prevents?\s+(\w+)/i,
     /blocks?\s+(\w+)/i,
@@ -157,10 +158,9 @@ function isDataIntegrityClaim(claim: Claim): boolean {
 /**
  * Generates import statements for negative test file.
  *
- * @param hasExpectThrows - Whether expect().toThrow() is used.
  * @returns The import statements as a string.
  */
-function generateImports(hasExpectThrows: boolean): string {
+function generateImports(): string {
   const lines: string[] = [];
 
   const vitestImports = ['describe', 'it', 'expect'];
@@ -193,7 +193,9 @@ function generateTestBody(claim: Claim): string {
   if (forbiddenAction !== null) {
     lines.push(`    const action = '${forbiddenAction}'; // Forbidden action from claim`);
   } else if (forbiddenOutcome !== null) {
-    lines.push(`    const expectedFailure = '${forbiddenOutcome}'; // Forbidden outcome from claim`);
+    lines.push(
+      `    const expectedFailure = '${forbiddenOutcome}'; // Forbidden outcome from claim`
+    );
   } else if (isSecurity) {
     lines.push('    // Security test: Attempt malicious input');
     lines.push('    const maliciousInput = {}; // TODO: Add malicious payload');
@@ -333,7 +335,7 @@ export function generateNegativeTest(claim: Claim, options: NegativeTestOptions 
     lines.push('');
   }
 
-  lines.push(generateImports(forbiddenAction !== null || isSecurity));
+  lines.push(generateImports());
   lines.push('');
 
   const testName = generateTestName(claim);
@@ -347,7 +349,9 @@ export function generateNegativeTest(claim: Claim, options: NegativeTestOptions 
     lines.push('');
     lines.push(`  it.skip('${escapedTestName}', () => {`);
     lines.push('    // This test is skipped because no functions are linked to this claim.');
-    lines.push(`    // Add CLAIM_REF: ${claim.id} to functions that should enforce this negative constraint.`);
+    lines.push(
+      `    // Add CLAIM_REF: ${claim.id} to functions that should enforce this negative constraint.`
+    );
     lines.push('    throw new Error("Test not implemented: no linked functions");');
     lines.push('  });');
   } else {
@@ -370,7 +374,7 @@ export function generateNegativeTest(claim: Claim, options: NegativeTestOptions 
     lines.push(generateTestBody(claim));
     lines.push('    },');
     lines.push(`    { timeout: ${String(timeout)} }`);
-    lines.push('  );`);
+    lines.push('  );');
 
     if (claim.functions.length > 1) {
       lines.push('');
