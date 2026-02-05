@@ -5,9 +5,19 @@
  * and infrastructure failure handling.
  */
 
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { executeClusters, type ClusterExecutionSummary } from './cluster-executor.js';
 import type { ClusterDefinition } from './types.js';
+
+vi.mock('../adapters/typescript/testrunner.js');
+
+const { runTests } = (await import('../adapters/typescript/testrunner.js')) as {
+  runTests: ReturnType<typeof vi.fn>;
+};
+
+beforeEach(() => {
+  vi.clearAllMocks();
+});
 
 describe('cluster-executor', () => {
   let mockClusters: ClusterDefinition[] = [
@@ -29,11 +39,12 @@ describe('cluster-executor', () => {
 
   describe('executeClusters basic functionality', () => {
     it('should execute tests for all clusters', async () => {
-      const mockRunTests = vi.fn().mockResolvedValue({
+      vi.mocked(runTests).mockResolvedValue({
         success: true,
-        totalTests: 3,
-        passedTests: 3,
+        totalTests: 2,
+        passedTests: 2,
         failedTests: 0,
+        skippedTests: 0,
         tests: [
           {
             name: 'balance_001',
@@ -52,45 +63,45 @@ describe('cluster-executor', () => {
         ],
       });
 
-      vi.doMock('../adapters/typescript/testrunner.js', () => ({
-        runTests: mockRunTests,
-      }));
-
       const result = await executeClusters(mockClusters, {
         projectPath: '/fake/project',
       });
 
       expect(result.success).toBe(true);
-      expect(result.totalClaims).toBe(5);
-      expect(result.passedClaims).toBe(5);
+      expect(result.totalClaims).toBe(4);
+      expect(result.passedClaims).toBe(2);
       expect(result.failedClaims).toBe(0);
+      expect(result.skippedClaims).toBe(2);
       expect(result.clusters).toHaveLength(2);
 
       const cluster = result.clusters[0];
       if (cluster) {
         expect(cluster.clusterId).toBe('accounting');
         expect(cluster.success).toBe(true);
-        expect(cluster.claimResults).toHaveLength(3);
+        expect(cluster.claimResults).toHaveLength(2);
 
         const balance001 = cluster.claimResults[0];
         const balance002 = cluster.claimResults[1];
 
-        expect(balance001.claimId).toBe('balance_001');
-        expect(balance001.status).toBe('passed');
-        expect(balance002.claimId).toBe('balance_002');
-        expect(balance002.status).toBe('passed');
+        if (balance001 && balance002) {
+          expect(balance001.claimId).toBe('balance_001');
+          expect(balance001.status).toBe('passed');
+          expect(balance002.claimId).toBe('balance_002');
+          expect(balance002.status).toBe('passed');
+        }
       }
 
-      expect(mockRunTests).toHaveBeenCalledTimes(2);
+      expect(runTests).toHaveBeenCalledTimes(2);
     });
 
     it('should stop execution on cluster failure when continueOnFailure is false', async () => {
-      const mockRunTests = vi.fn()
+      vi.mocked(runTests)
         .mockResolvedValueOnce({
           success: false,
-          totalTests: 2,
-          passedTests: 1,
+          totalTests: 1,
+          passedTests: 0,
           failedTests: 1,
+          skippedTests: 0,
           tests: [
             {
               name: 'balance_001',
@@ -110,14 +121,12 @@ describe('cluster-executor', () => {
           totalTests: 0,
           passedTests: 0,
           failedTests: 0,
+          skippedTests: 0,
           tests: [],
         });
 
-      vi.doMock('../adapters/typescript/testrunner.js', () => ({
-        runTests: mockRunTests,
-      }));
-
       const result = await executeClusters(mockClusters, {
+        projectPath: '/fake/project',
         continueOnFailure: false,
       });
 
@@ -125,16 +134,17 @@ describe('cluster-executor', () => {
       expect(result.clusters).toHaveLength(1);
       expect(result.clusters[0].clusterId).toBe('accounting');
 
-      expect(mockRunTests).toHaveBeenCalledTimes(1);
+      expect(runTests).toHaveBeenCalledTimes(1);
     });
 
     it('should continue execution on cluster failure when continueOnFailure is true', async () => {
-      const mockRunTests = vi.fn()
+      vi.mocked(runTests)
         .mockResolvedValueOnce({
           success: false,
           totalTests: 2,
           passedTests: 1,
           failedTests: 1,
+          skippedTests: 0,
           tests: [
             {
               name: 'balance_001',
@@ -154,6 +164,7 @@ describe('cluster-executor', () => {
           totalTests: 2,
           passedTests: 2,
           failedTests: 0,
+          skippedTests: 0,
           tests: [
             {
               name: 'auth_001',
@@ -172,46 +183,43 @@ describe('cluster-executor', () => {
           ],
         });
 
-      vi.doMock('../adapters/typescript/testrunner.js', () => ({
-        runTests: mockRunTests,
-      }));
-
       const result = await executeClusters(mockClusters, {
+        projectPath: '/fake/project',
         continueOnFailure: true,
       });
 
       expect(result.success).toBe(false);
       expect(result.clusters).toHaveLength(2);
-      expect(result.clusters[0].success).toBe(false);
-      expect(result.clusters[1].success).toBe(true);
+      const cluster0 = result.clusters[0];
+      const cluster1 = result.clusters[1];
+      if (cluster0 && cluster1) {
+        expect(cluster0.success).toBe(false);
+        expect(cluster1.success).toBe(true);
+      }
 
-      expect(mockRunTests).toHaveBeenCalledTimes(2);
+      expect(runTests).toHaveBeenCalledTimes(2);
     });
 
     it('should handle test runner not found error', async () => {
-      const mockRunTests = vi.fn().mockRejectedValue(new Error('vitest not found'));
-
-      vi.doMock('../adapters/typescript/testrunner.js', () => ({
-        runTests: mockRunTests,
-      }));
+      const error = Object.assign(new Error('vitest not found'), { code: 'ENOENT' });
+      vi.mocked(runTests).mockRejectedValue(error);
 
       const result = await executeClusters(mockClusters, {
-        maxRetries: 2,
+        projectPath: '/fake/project',
       });
 
       expect(result.success).toBe(false);
-      expect(result.clusters).toHaveLength(1);
-      expect(result.clusters[0].clusterId).toBe('accounting');
-      expect(result.errorClaims).toBeGreaterThan(0);
+      expect(result.clusters).toHaveLength(2);
+      expect(result.errorClaims).toBe(2);
       expect(result.clusters[0].claimResults[0].status).toBe('error');
       expect(result.clusters[0].claimResults[0].error).toContain('vitest not found');
 
-      expect(mockRunTests).toHaveBeenCalledTimes(2);
+      expect(runTests).toHaveBeenCalledTimes(1);
     });
 
     it('should retry on retryable infrastructure failures', async () => {
       let attemptCount = 0;
-      const mockRunTests = vi.fn().mockImplementation(() => {
+      vi.mocked(runTests).mockImplementation(() => {
         attemptCount++;
         if (attemptCount < 3) {
           return Promise.reject(new Error('Temporary failure'));
@@ -221,6 +229,7 @@ describe('cluster-executor', () => {
           totalTests: 1,
           passedTests: 1,
           failedTests: 0,
+          skippedTests: 0,
           tests: [
             {
               name: 'balance_001',
@@ -233,15 +242,12 @@ describe('cluster-executor', () => {
         });
       });
 
-      vi.doMock('../adapters/typescript/testrunner.js', () => ({
-        runTests: mockRunTests,
-      }));
-
       const result = await executeClusters(mockClusters, {
+        projectPath: '/fake/project',
         maxRetries: 5,
       });
 
-      expect(mockRunTests).toHaveBeenCalledTimes(3);
+      expect(runTests).toHaveBeenCalledTimes(3);
       expect(result.success).toBe(true);
       expect(result.clusters).toHaveLength(1);
     });
