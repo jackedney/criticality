@@ -57,7 +57,12 @@ export interface VerdictResult {
   readonly recordedClaims: readonly string[];
 }
 
-export type FunctionClaimMapping = Record<string, string[]>;
+export interface FunctionClaimData {
+  readonly filePath: string;
+  readonly claimRefs: readonly string[];
+}
+
+export type FunctionClaimMapping = Record<string, FunctionClaimData>;
 
 /**
  * Extracts violated claim IDs from cluster execution results.
@@ -103,16 +108,23 @@ function buildFunctionClaimMapping(project: Project, projectPath: string): Funct
       if (contract.claimRefs.length > 0) {
         const functionName = contract.functionName;
 
-        if (!Object.prototype.hasOwnProperty.call(mapping, functionName)) {
-          mapping[functionName] = [];
-        }
+        const existingData = mapping[functionName];
 
-        const existingRefs = mapping[functionName];
+        if (existingData === undefined) {
+          mapping[functionName] = { filePath, claimRefs: contract.claimRefs };
+        } else {
+          const existingRefsSet = new Set(existingData.claimRefs);
 
-        for (const claimRef of contract.claimRefs) {
-          if (!existingRefs.includes(claimRef)) {
-            existingRefs.push(claimRef);
+          for (const claimRef of contract.claimRefs) {
+            if (!existingRefsSet.has(claimRef)) {
+              existingRefsSet.add(claimRef);
+            }
           }
+
+          mapping[functionName] = {
+            filePath: existingData.filePath,
+            claimRefs: Array.from(existingRefsSet),
+          };
         }
       }
     }
@@ -131,45 +143,27 @@ function buildFunctionClaimMapping(project: Project, projectPath: string): Funct
  */
 function identifyFunctionsToReinject(
   violatedClaims: readonly string[],
-  functionClaimMapping: FunctionClaimMapping,
-  cluster: ClusterDefinition
+  functionClaimMapping: FunctionClaimMapping
 ): FunctionToReinject[] {
   const functionsToReinject: FunctionToReinject[] = [];
   const violatedClaimsSet = new Set(violatedClaims);
 
-  for (const [functionName, claimRefs] of Object.entries(functionClaimMapping)) {
-    const claimRefArray = claimRefs;
-    const violatedRefs = claimRefArray.filter((claimId) => violatedClaimsSet.has(claimId));
+  for (const [functionName, claimData] of Object.entries(functionClaimMapping)) {
+    const claimRefs = claimData.claimRefs;
+    const filePath = claimData.filePath;
+    const violatedRefs = claimRefs.filter((claimId) => violatedClaimsSet.has(claimId));
 
     if (violatedRefs.length > 0) {
       functionsToReinject.push({
         functionName,
-        filePath: getFunctionFilePath(functionName, cluster),
+        filePath,
         violatedClaims: violatedRefs,
-        allClaimRefs: claimRefArray,
+        allClaimRefs: claimRefs,
       });
     }
   }
 
   return functionsToReinject;
-}
-
-/**
- * Gets the file path for a function name within a cluster.
- *
- * @param functionName - The function name to find.
- * @param cluster - The cluster definition.
- * @returns The file path where the function is expected to be.
- */
-function getFunctionFilePath(functionName: string, cluster: ClusterDefinition): string {
-  const modulePaths = cluster.modules;
-
-  if (modulePaths.length === 0) {
-    return path.join('', `${functionName}.ts`);
-  }
-
-  const firstModule = modulePaths[0] ?? '';
-  return path.join(firstModule, `${functionName}.ts`);
 }
 
 /**
@@ -241,11 +235,7 @@ export function handleClusterVerdict(options: VerdictOptions): VerdictResult {
 
   const functionClaimMapping = buildFunctionClaimMapping(project, options.projectPath);
 
-  const functionsToReinject = identifyFunctionsToReinject(
-    violatedClaims,
-    functionClaimMapping,
-    options.cluster
-  );
+  const functionsToReinject = identifyFunctionsToReinject(violatedClaims, functionClaimMapping);
 
   const fallbackTriggered = functionsToReinject.length === 0;
 
@@ -266,7 +256,7 @@ export function handleClusterVerdict(options: VerdictOptions): VerdictResult {
     fallbackTriggered,
   };
 
-  const recordedClaims = fallbackTriggered ? options.cluster.claimIds : violatedClaims;
+  const recordedClaims = violatedClaims;
 
   logger('[ClusterVerdict] Verdict processing complete');
 
