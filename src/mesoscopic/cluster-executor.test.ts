@@ -11,16 +11,14 @@ import type { ClusterDefinition } from './types.js';
 
 vi.mock('../adapters/typescript/testrunner.js');
 
-const { runTests } = (await import('../adapters/typescript/testrunner.js')) as {
-  runTests: ReturnType<typeof vi.fn>;
-};
+const { runTests } = (await import('../adapters/typescript/testrunner.js')) as any;
 
 beforeEach(() => {
   vi.clearAllMocks();
 });
 
 describe('cluster-executor', () => {
-  let mockClusters: ClusterDefinition[] = [
+  const mockClusters: ClusterDefinition[] = [
     {
       id: 'accounting',
       name: 'accounting',
@@ -219,10 +217,11 @@ describe('cluster-executor', () => {
 
     it('should retry on retryable infrastructure failures', async () => {
       let attemptCount = 0;
-      vi.mocked(runTests).mockImplementation(() => {
+      (runTests as ReturnType<typeof vi.fn>).mockImplementation(() => {
         attemptCount++;
         if (attemptCount < 3) {
-          return Promise.reject(new Error('Temporary failure'));
+          const error = new Error('Temporary failure');
+          return Promise.reject<void>(error);
         }
         return Promise.resolve({
           success: true,
