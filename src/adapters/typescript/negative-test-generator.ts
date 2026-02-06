@@ -74,7 +74,7 @@ function extractForbiddenOutcome(claim: Claim): string | null {
   const desc = claim.description.toLowerCase();
 
   const patterns = [
-    /^([\w\s]+?)\s+cannot\s+be\s+\w+/i,
+    /^(?:[\w\s]+?)\s+cannot\s+be\s+(\w+)/i,
     /cannot\s+result\s+in\s+(\w+)/i,
     /must\s+not\s+cause\s+(\w+)/i,
     /never\s+(?:produces?|results?\s+in)\s+(\w+)/i,

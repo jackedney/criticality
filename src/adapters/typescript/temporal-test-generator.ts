@@ -149,7 +149,9 @@ function generateTestBody(claim: Claim): string {
       lines.push("    console.log('Session invalid after expiration:', afterIsValid);");
     }
   } else if (desc.includes('timeout') && desc.includes('within')) {
+    lines.push('    // eslint-disable-next-line @typescript-eslint/no-unused-vars');
     lines.push('    const timeoutMs = 5000;');
+    lines.push('    // eslint-disable-next-line @typescript-eslint/no-unused-vars');
     lines.push('    const startTime = Date.now();');
     lines.push('');
     lines.push('    // Act: Start operation that should complete within timeout');
@@ -161,6 +163,7 @@ function generateTestBody(claim: Claim): string {
     lines.push('    // const elapsed = Date.now() - startTime;');
     lines.push('    // expect(elapsed).toBeLessThan(timeoutMs);');
   } else if (desc.includes('once') && desc.includes('set')) {
+    lines.push('    // eslint-disable-next-line @typescript-eslint/no-unused-vars');
     lines.push('    let valueSet = false;');
     lines.push('');
     lines.push('    // Act: Set value multiple times');
@@ -172,7 +175,9 @@ function generateTestBody(claim: Claim): string {
     lines.push('    // Assert: Value was only set once');
     lines.push('    // expect(valueSet).toBe(true);');
   } else {
+    lines.push('    // eslint-disable-next-line @typescript-eslint/no-unused-vars');
     lines.push('    const initialState = {}; // TODO: Set up based on claim');
+    lines.push('    // eslint-disable-next-line @typescript-eslint/no-unused-vars');
     lines.push('    const triggerEvent = {}; // TODO: Define trigger event');
     lines.push('');
     lines.push('    // Act: Trigger temporal scenario');

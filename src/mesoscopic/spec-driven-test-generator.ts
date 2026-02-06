@@ -90,21 +90,22 @@ function linkClaimsToFunctions(
 ): Map<string, TestableClaim> {
   const linkedClaims = new Map<string, TestableClaim>();
 
-  const claimToFunctionsMap = new Map<string, string[]>();
+  const claimToFunctionsMap = new Map<string, Set<string>>();
 
   for (const [functionId, claimIds] of functionClaimRefs) {
     for (const claimId of claimIds) {
       const functions = claimToFunctionsMap.get(claimId);
       if (functions !== undefined) {
-        functions.push(functionId);
+        functions.add(functionId);
       } else {
-        claimToFunctionsMap.set(claimId, [functionId]);
+        claimToFunctionsMap.set(claimId, new Set([functionId]));
       }
     }
   }
 
   for (const [claimId, claim] of claims) {
-    const linkedFunctions = claimToFunctionsMap.get(claimId) ?? [];
+    const functionSet = claimToFunctionsMap.get(claimId);
+    const linkedFunctions = functionSet !== undefined ? Array.from(functionSet).sort() : [];
     linkedClaims.set(claimId, {
       ...claim,
       functions: linkedFunctions,

@@ -1,3 +1,5 @@
+# Code Review
+
 In `@src/adapters/typescript/negative-test-generator.ts`:
 - Around line 30-38: Extract the duplicated escapeString implementation into a
 shared utility and update callers to import it: create a new utility (e.g.,
