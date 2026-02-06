@@ -54,6 +54,7 @@ function extractModulesFromSpec(spec: Spec): Module[] {
 
   for (const ifaceName of interfaceNames) {
     const interfaces = spec.interfaces ?? {};
+    // eslint-disable-next-line security/detect-object-injection -- ifaceName is from spec keys, not user input
     const iface = interfaces[ifaceName];
 
     if (!iface) {
@@ -66,7 +67,9 @@ function extractModulesFromSpec(spec: Spec): Module[] {
         const returnType = method.returns;
 
         const allTypeNames = [...params, returnType].flatMap((paramOrReturn) => {
-          const match = /^(\w+)(?:<[^>]+>)?$/.exec(paramOrReturn);
+          // Match type names with optional generic parameters (e.g., "Result<T>")
+          // eslint-disable-next-line security/detect-unsafe-regex -- Input from spec files, not user input
+          const match = /^(\w+)(?:<[^<>]+>)?$/.exec(paramOrReturn);
           if (match) {
             const typeName = match[1];
             return typeName !== undefined ? [typeName] : [];

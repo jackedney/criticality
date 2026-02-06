@@ -11,6 +11,7 @@
  * @packageDocumentation
  */
 
+/* eslint-disable security/detect-non-literal-fs-filename -- Test code with temp directories */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import * as fs from 'node:fs/promises';
 import type { ClusterDefinition } from './types.js';

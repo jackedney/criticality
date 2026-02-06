@@ -2,6 +2,7 @@
  * Tests for interview state persistence.
  */
 
+/* eslint-disable security/detect-object-injection -- Test code with controlled indices */
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import * as fc from 'fast-check';
 import { mkdtemp, rm } from 'node:fs/promises';

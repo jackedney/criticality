@@ -109,9 +109,11 @@ function buildFunctionClaimMapping(project: Project, projectPath: string): Funct
       if (contract.claimRefs.length > 0) {
         const functionName = contract.functionName;
 
+        // eslint-disable-next-line security/detect-object-injection -- functionName from AST, not user input
         const existingData = mapping[functionName];
 
         if (existingData === undefined) {
+          // eslint-disable-next-line security/detect-object-injection -- functionName from AST, not user input
           mapping[functionName] = { filePath, claimRefs: contract.claimRefs };
         } else {
           const existingRefsSet = new Set(existingData.claimRefs);
@@ -122,6 +124,7 @@ function buildFunctionClaimMapping(project: Project, projectPath: string): Funct
             }
           }
 
+          // eslint-disable-next-line security/detect-object-injection -- functionName from AST, not user input
           mapping[functionName] = {
             filePath: existingData.filePath,
             claimRefs: Array.from(existingRefsSet),
@@ -231,6 +234,7 @@ export function handleClusterVerdict(options: VerdictOptions): VerdictResult {
   );
 
   const tsConfigFilePath = path.join(options.projectPath, 'tsconfig.json');
+  // eslint-disable-next-line security/detect-non-literal-fs-filename -- Path constructed from validated projectPath
   if (!fs.existsSync(tsConfigFilePath)) {
     throw new Error(`tsconfig.json not found at ${tsConfigFilePath}`);
   }

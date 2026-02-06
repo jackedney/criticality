@@ -129,6 +129,7 @@ async function generateTestsWithModel(
   const tests = new Map<string, string>();
 
   if (options.modelRouter === undefined || options.useStructurerModel === false) {
+    // eslint-disable-next-line no-console -- Intentional warning for development feedback
     console.warn(
       '[SpecDrivenTestGenerator] ModelRouter not provided or useStructurerModel disabled. Using template-based generation.'
     );
@@ -160,11 +161,13 @@ Output ONLY the test code. No explanations or markdown blocks.`,
       if (result.success) {
         tests.set(claim.id, result.response.content);
       } else {
+        // eslint-disable-next-line no-console -- Error reporting for failed test generation
         console.error(
           `[SpecDrivenTestGenerator] Failed to generate test for ${claim.id}: ${result.error.message}`
         );
       }
     } catch (error) {
+      // eslint-disable-next-line no-console -- Error reporting for test generation failures
       console.error(`[SpecDrivenTestGenerator] Error generating test for ${claim.id}:`, error);
     }
   }
@@ -214,6 +217,7 @@ async function generateTestsForCluster(
 
   // Use structurer_model if requested and available
   if (options.useStructurerModel === true && options.modelRouter !== undefined) {
+    // eslint-disable-next-line no-console -- Intentional log for development feedback
     console.log('[SpecDrivenTestGenerator] Using structurer_model for test synthesis');
     return generateTestsWithModel(claims, options);
   }
@@ -292,6 +296,7 @@ async function generateTestsForCluster(
     });
 
     for (const claim of performanceClaimsWithoutThreshold) {
+      // eslint-disable-next-line no-console -- Intentional warning for missing complexity thresholds
       console.warn(
         `[SpecDrivenTestGenerator] Performance claim ${claim.id} has no complexity threshold. Using default O(n) threshold.`
       );
@@ -440,8 +445,9 @@ export async function generateSpecDrivenTests(
  * @param encoding - File encoding (default: utf-8).
  * @returns Promise that resolves to file content.
  */
-async function readFile(path: string, encoding = 'utf-8'): Promise<string> {
-  const buffer = await fs.readFile(path, { encoding: encoding as BufferEncoding });
+async function readFile(filePath: string, encoding = 'utf-8'): Promise<string> {
+  // eslint-disable-next-line security/detect-non-literal-fs-filename -- Path is validated by caller
+  const buffer = await fs.readFile(filePath, { encoding: encoding as BufferEncoding });
   return buffer;
 }
 

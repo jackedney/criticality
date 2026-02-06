@@ -5,6 +5,7 @@
  */
 
 /* eslint-disable @typescript-eslint/restrict-template-expressions */
+/* eslint-disable security/detect-non-literal-fs-filename -- Test code with temp directories */
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import type { ModelRouter, ModelRouterResult, StreamChunk } from '../router/types.js';
 import {
