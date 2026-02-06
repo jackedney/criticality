@@ -152,6 +152,13 @@ export {
 } from './orchestrator.js';
 
 export {
+  // Phase execution types
+  type MassDefectPhaseContext,
+  // Phase execution functions
+  executeMassDefectPhase,
+} from './phase-execution.js';
+
+export {
   // CLI types
   type CliCommand,
   type CliOptions,
