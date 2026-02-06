@@ -9,6 +9,7 @@
  */
 
 export * from './types.js';
+export * from './reporter.js';
 export { loadCatalog } from './catalog-parser.js';
 export type { CatalogParseError, ParseResult } from './catalog-parser.js';
 export { TransformationCatalog } from './catalog.js';
