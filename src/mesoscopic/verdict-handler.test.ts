@@ -13,6 +13,7 @@
 
 /* eslint-disable security/detect-non-literal-fs-filename -- Test code with temp directories */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import * as fc from 'fast-check';
 import * as fs from 'node:fs/promises';
 import * as os from 'node:os';
 import * as path from 'node:path';
@@ -93,6 +94,44 @@ describe('ClusterVerdict', () => {
       expect(verdict.violatedClaims).toEqual(['balance_002']);
       expect(verdict.functionsToReinject).toEqual([]);
       expect(verdict.fallbackTriggered).toBe(true);
+    });
+
+    it('should maintain invariants for pass verdicts (property-based)', () => {
+      fc.assert(
+        fc.property(
+          fc.record({
+            pass: fc.constant(true),
+            violatedClaims: fc.constant([]),
+            functionsToReinject: fc.constant([]),
+            fallbackTriggered: fc.constant(false),
+          }),
+          (verdict: ClusterVerdict) => {
+            expect(verdict.pass).toBe(true);
+            expect(verdict.violatedClaims).toHaveLength(0);
+            expect(verdict.functionsToReinject).toHaveLength(0);
+            expect(verdict.fallbackTriggered).toBe(false);
+          }
+        )
+      );
+    });
+
+    it('should maintain invariants for fail verdicts with fallback (property-based)', () => {
+      fc.assert(
+        fc.property(
+          fc.record({
+            pass: fc.constant(false),
+            violatedClaims: fc.array(fc.string({ minLength: 1 }), { minLength: 1 }),
+            functionsToReinject: fc.constant([]),
+            fallbackTriggered: fc.constant(true),
+          }),
+          (verdict: ClusterVerdict) => {
+            expect(verdict.pass).toBe(false);
+            expect(verdict.violatedClaims.length).toBeGreaterThan(0);
+            expect(verdict.functionsToReinject).toHaveLength(0);
+            expect(verdict.fallbackTriggered).toBe(true);
+          }
+        )
+      );
     });
   });
 
@@ -261,38 +300,40 @@ export function withdraw(amount: number): number {
         path.join(os.tmpdir(), 'verdict-handler-no-tsconfig-')
       );
 
-      const claimResults: ClaimResult[] = [
-        {
-          claimId: 'balance_001',
-          status: 'failed',
-          testCount: 5,
-          passedCount: 3,
-          failedCount: 2,
-          failedTests: ['test1'],
-          durationMs: 100,
-        },
-      ];
+      try {
+        const claimResults: ClaimResult[] = [
+          {
+            claimId: 'balance_001',
+            status: 'failed',
+            testCount: 5,
+            passedCount: 3,
+            failedCount: 2,
+            failedTests: ['test1'],
+            durationMs: 100,
+          },
+        ];
 
-      const cluster: ClusterDefinition = {
-        id: 'cluster_001',
-        name: 'accounting',
-        modules: ['src/accounting'],
-        claimIds: ['balance_001'],
-        isCrossModule: false,
-      };
+        const cluster: ClusterDefinition = {
+          id: 'cluster_001',
+          name: 'accounting',
+          modules: ['src/accounting'],
+          claimIds: ['balance_001'],
+          isCrossModule: false,
+        };
 
-      const logger = vi.fn();
+        const logger = vi.fn();
 
-      expect(() =>
-        handleClusterVerdict({
-          projectPath: neverCommittedDir,
-          cluster,
-          claimResults,
-          logger,
-        })
-      ).toThrow(`tsconfig.json not found at ${path.join(neverCommittedDir, 'tsconfig.json')}`);
-
-      await fs.rm(neverCommittedDir, { recursive: true, force: true });
+        expect(() =>
+          handleClusterVerdict({
+            projectPath: neverCommittedDir,
+            cluster,
+            claimResults,
+            logger,
+          })
+        ).toThrow(`tsconfig.json not found at ${path.join(neverCommittedDir, 'tsconfig.json')}`);
+      } finally {
+        await fs.rm(neverCommittedDir, { recursive: true, force: true });
+      }
     });
 
     it('should return fail verdict with violated claims', () => {
