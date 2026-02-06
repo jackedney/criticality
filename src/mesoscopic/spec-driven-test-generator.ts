@@ -206,7 +206,6 @@ async function generateTestsForCluster(
   options: SpecDrivenTestOptions
 ): Promise<Map<string, string>> {
   const tests = new Map<string, string>();
-  const skippedClaims: { claimId: string; reason: string }[] = [];
 
   const { timeout = DEFAULT_TIMEOUT, includeJsDoc = true, skipUntestable = true } = options;
 
@@ -214,16 +213,6 @@ async function generateTestsForCluster(
   if (options.useStructurerModel === true && options.modelRouter !== undefined) {
     console.log('[SpecDrivenTestGenerator] Using structurer_model for test synthesis');
     return generateTestsWithModel(claims, options);
-  }
-
-  // Check testable flag and skip untestable claims
-  for (const claim of claims) {
-    if (claim.testable === false && skipUntestable) {
-      skippedClaims.push({
-        claimId: claim.id,
-        reason: 'Untestable claim (testable: false)',
-      });
-    }
   }
 
   // Generate tests by claim type (only for testable claims)
