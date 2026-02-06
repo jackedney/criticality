@@ -751,7 +751,9 @@ export function injectFunctionBody(
  */
 export function findTodoFunctions(project: Project): TodoFunction[] {
   const todoFunctions: TodoFunction[] = [];
-  const allFunctions: FunctionLike[] = [];
+  // Optimization: Only collect AST nodes for TODO functions, not all functions.
+  // This significantly reduces buildCallGraph overhead by avoiding traversal of completed functions.
+  const todoFunctionNodes: FunctionLike[] = [];
 
   for (const sourceFile of project.getSourceFiles()) {
     // Skip node_modules and declaration files
@@ -761,7 +763,6 @@ export function findTodoFunctions(project: Project): TodoFunction[] {
     }
 
     const functions = collectFunctions(sourceFile);
-    allFunctions.push(...functions);
 
     for (const func of functions) {
       if (hasTodoMarker(func)) {
@@ -772,12 +773,13 @@ export function findTodoFunctions(project: Project): TodoFunction[] {
           signature: extractSignature(func),
           hasTodoBody: true,
         });
+        todoFunctionNodes.push(func);
       }
     }
   }
 
-  // Build call graph and sort topologically
-  const callGraph = buildCallGraph(allFunctions);
+  // Build call graph using only TODO function nodes
+  const callGraph = buildCallGraph(todoFunctionNodes);
   return topologicalSort(todoFunctions, callGraph);
 }
 
