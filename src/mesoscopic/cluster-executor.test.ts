@@ -6,7 +6,7 @@
  */
 
 import { describe, it, expect, vi, beforeEach, type Mock } from 'vitest';
-import { executeClusters, type ClusterExecutionSummary } from './cluster-executor.js';
+import { executeClusters } from './cluster-executor.js';
 import type { ClusterDefinition } from './types.js';
 import type { runTests as runTestsType } from '../adapters/typescript/testrunner.js';
 
@@ -271,27 +271,119 @@ describe('cluster-executor', () => {
     });
   });
 
-  describe('ClusterExecutionSummary structure', () => {
-    it('should have correct structure', () => {
-      const summary = {
-        clusters: [],
+  describe('ClusterExecutionSummary runtime properties', () => {
+    it('should return correct claim counts when all claims pass', async () => {
+      vi.mocked(runTests).mockResolvedValue({
         success: true,
-        totalClaims: 10,
-        passedClaims: 8,
-        failedClaims: 2,
-        skippedClaims: 0,
-        errorClaims: 0,
-        totalDurationMs: 1000,
-      } as ClusterExecutionSummary;
+        totalTests: 2,
+        passedTests: 2,
+        failedTests: 0,
+        skippedTests: 0,
+        tests: [
+          {
+            name: 'claim_001',
+            fullName: 'test claim_001',
+            file: 'src/claim_001.test.ts',
+            status: 'passed',
+            durationMs: 50,
+          },
+          {
+            name: 'claim_002',
+            fullName: 'test claim_002',
+            file: 'src/claim_002.test.ts',
+            status: 'passed',
+            durationMs: 60,
+          },
+        ],
+      });
 
-      expect(summary).toHaveProperty('clusters');
-      expect(summary).toHaveProperty('success');
-      expect(summary).toHaveProperty('totalClaims');
-      expect(summary).toHaveProperty('passedClaims');
-      expect(summary).toHaveProperty('failedClaims');
-      expect(summary).toHaveProperty('skippedClaims');
-      expect(summary).toHaveProperty('errorClaims');
-      expect(summary).toHaveProperty('totalDurationMs');
+      const clusters: ClusterDefinition[] = [
+        {
+          id: 'test-cluster',
+          name: 'Test Cluster',
+          modules: ['module1'],
+          claimIds: ['claim_001', 'claim_002'],
+          isCrossModule: false,
+        },
+      ];
+
+      const result = await executeClusters(clusters, {
+        projectPath: '/fake/project',
+      });
+
+      expect(result).toHaveProperty('clusters');
+      expect(result).toHaveProperty('success');
+      expect(result).toHaveProperty('totalClaims');
+      expect(result).toHaveProperty('passedClaims');
+      expect(result).toHaveProperty('failedClaims');
+      expect(result).toHaveProperty('skippedClaims');
+      expect(result).toHaveProperty('errorClaims');
+      expect(result).toHaveProperty('totalDurationMs');
+
+      expect(result.success).toBe(true);
+      expect(result.totalClaims).toBe(2);
+      expect(result.passedClaims).toBe(2);
+      expect(result.failedClaims).toBe(0);
+      expect(result.skippedClaims).toBe(0);
+      expect(result.errorClaims).toBe(0);
+      expect(result.clusters).toHaveLength(1);
+      expect(typeof result.totalDurationMs).toBe('number');
+      expect(result.totalDurationMs).toBeGreaterThanOrEqual(0);
+    });
+
+    it('should return correct mixed claim counts with passing and failing claims', async () => {
+      vi.mocked(runTests).mockResolvedValue({
+        success: false,
+        totalTests: 3,
+        passedTests: 2,
+        failedTests: 1,
+        skippedTests: 0,
+        tests: [
+          {
+            name: 'pass_claim',
+            fullName: 'test pass_claim',
+            file: 'src/pass_claim.test.ts',
+            status: 'passed',
+            durationMs: 40,
+          },
+          {
+            name: 'fail_claim',
+            fullName: 'test fail_claim',
+            file: 'src/fail_claim.test.ts',
+            status: 'failed',
+            durationMs: 30,
+            error: { message: 'Assertion failed', stack: 'Error: ...' },
+          },
+          {
+            name: 'another_pass',
+            fullName: 'test another_pass',
+            file: 'src/another_pass.test.ts',
+            status: 'passed',
+            durationMs: 20,
+          },
+        ],
+      });
+
+      const clusters: ClusterDefinition[] = [
+        {
+          id: 'mixed-cluster',
+          name: 'Mixed Cluster',
+          modules: ['module1'],
+          claimIds: ['pass_claim', 'fail_claim', 'another_pass', 'missing_claim'],
+          isCrossModule: false,
+        },
+      ];
+
+      const result = await executeClusters(clusters, {
+        projectPath: '/fake/project',
+      });
+
+      expect(result.success).toBe(false);
+      expect(result.totalClaims).toBe(4);
+      expect(result.passedClaims).toBe(2);
+      expect(result.failedClaims).toBe(1);
+      expect(result.skippedClaims).toBe(1);
+      expect(result.errorClaims).toBe(0);
     });
   });
 });
