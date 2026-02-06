@@ -10,6 +10,8 @@
  * @packageDocumentation
  */
 
+import * as fs from 'node:fs/promises';
+
 import type { ModelRouter } from '../router/types.js';
 
 import { parseSpec, SpecParseError } from '../spec/index.js';
@@ -437,8 +439,6 @@ export async function generateSpecDrivenTests(
  * @param encoding - File encoding (default: utf-8).
  * @returns Promise that resolves to file content.
  */
-import * as fs from 'node:fs/promises';
-
 async function readFile(path: string, encoding = 'utf-8'): Promise<string> {
   const buffer = await fs.readFile(path, { encoding: encoding as BufferEncoding });
   return buffer;
