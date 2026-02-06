@@ -14,6 +14,7 @@
  * @packageDocumentation
  */
 
+import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { Project } from 'ts-morph';
 import { parseContracts } from '../adapters/typescript/contracts.js';
@@ -229,8 +230,13 @@ export function handleClusterVerdict(options: VerdictOptions): VerdictResult {
     `[ClusterVerdict] Found ${String(violatedClaims.length)} violated claim(s): ${violatedClaims.join(', ')}`
   );
 
+  const tsConfigFilePath = path.join(options.projectPath, 'tsconfig.json');
+  if (!fs.existsSync(tsConfigFilePath)) {
+    throw new Error(`tsconfig.json not found at ${tsConfigFilePath}`);
+  }
+
   const project = new Project({
-    tsConfigFilePath: path.join(options.projectPath, 'tsconfig.json'),
+    tsConfigFilePath,
   });
 
   const functionClaimMapping = buildFunctionClaimMapping(project, options.projectPath);

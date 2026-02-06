@@ -255,6 +255,44 @@ export function withdraw(amount: number): number {
       );
     });
 
+    it('should throw error with path context when tsconfig.json is missing', async () => {
+      const neverCommittedDir = `/tmp/verdict-handler-no-tsconfig-${String(Date.now())}`;
+      await fs.mkdir(neverCommittedDir, { recursive: true });
+
+      const claimResults: ClaimResult[] = [
+        {
+          claimId: 'balance_001',
+          status: 'failed',
+          testCount: 5,
+          passedCount: 3,
+          failedCount: 2,
+          failedTests: ['test1'],
+          durationMs: 100,
+        },
+      ];
+
+      const cluster: ClusterDefinition = {
+        id: 'cluster_001',
+        name: 'accounting',
+        modules: ['src/accounting'],
+        claimIds: ['balance_001'],
+        isCrossModule: false,
+      };
+
+      const logger = vi.fn();
+
+      expect(() =>
+        handleClusterVerdict({
+          projectPath: neverCommittedDir,
+          cluster,
+          claimResults,
+          logger,
+        })
+      ).toThrow(`tsconfig.json not found at ${neverCommittedDir}/tsconfig.json`);
+
+      await fs.rm(neverCommittedDir, { recursive: true, force: true });
+    });
+
     it('should return fail verdict with violated claims', () => {
       const claimResults: ClaimResult[] = [
         {
