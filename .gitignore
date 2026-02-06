@@ -51,4 +51,5 @@ logs/
 .serena/
 .claude/
 .opencode/
-\n# Archive\narchive/\n
+# Archive
+archive/
