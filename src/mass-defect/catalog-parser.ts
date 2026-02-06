@@ -17,13 +17,10 @@ import type {
   PatternDefinition,
   VerificationScope,
   PromptTemplate,
-  TransformationCatalog,
   SmellCategory,
   RiskLevel,
-  DetectedSmell,
-  FunctionContext,
-  TransformationType,
 } from './types.js';
+import { TransformationCatalog } from './catalog.js';
 
 /**
  * Error type for catalog parsing failures.
@@ -519,7 +516,7 @@ export async function loadCatalog(catalogDir: string): Promise<TransformationCat
     throw new Error(`Failed to load catalog:\n${errorMessages}`);
   }
 
-  return new CatalogImpl(smellsMap, patternsMap);
+  return new TransformationCatalog(smellsMap, patternsMap);
 }
 
 /**
@@ -547,127 +544,4 @@ async function loadTomlFiles(dir: string): Promise<Array<{ path: string; content
   }
 
   return files;
-}
-
-/**
- * Internal implementation of TransformationCatalog.
- */
-class CatalogImpl implements TransformationCatalog {
-  constructor(
-    private readonly smells: Map<string, SmellDefinition>,
-    private readonly patterns: Map<string, PatternDefinition>
-  ) {}
-
-  getSmell(id: string): SmellDefinition | null {
-    return this.smells.get(id) ?? null;
-  }
-
-  getPattern(id: string): PatternDefinition | null {
-    return this.patterns.get(id) ?? null;
-  }
-
-  getSmellsByCategory(category: SmellCategory): SmellDefinition[] {
-    return Array.from(this.smells.values()).filter((s) => s.category === category);
-  }
-
-  selectPatterns(
-    detectedSmells: DetectedSmell[],
-    functionContext: FunctionContext
-  ): TransformationType[] {
-    interface ScoredPattern {
-      patternId: string;
-      smellId: string;
-      risk: RiskLevel;
-      enablesCount: number;
-      severity: number;
-      prompt: string;
-    }
-
-    const candidates: ScoredPattern[] = [];
-
-    for (const detected of detectedSmells) {
-      const smell = this.getSmell(detected.smellId);
-      if (!smell) {
-        continue;
-      }
-
-      for (const ref of smell.applicablePatterns) {
-        if (functionContext.previouslyAttempted.includes(ref.patternId)) {
-          continue;
-        }
-
-        const pattern = this.getPattern(ref.patternId);
-        if (!pattern) {
-          continue;
-        }
-
-        candidates.push({
-          patternId: ref.patternId,
-          smellId: detected.smellId,
-          risk: ref.risk,
-          enablesCount: pattern.enables.length,
-          severity: detected.severity,
-          prompt: pattern.prompt.template,
-        });
-      }
-    }
-
-    const deduped = deduplicateByPatternId(candidates);
-
-    deduped.sort((a, b) => {
-      if (a.risk !== b.risk) {
-        return a.risk - b.risk;
-      }
-      return b.enablesCount - a.enablesCount;
-    });
-
-    return deduped.map((p) => ({
-      patternId: p.patternId,
-      smell: p.smellId,
-      risk: p.risk,
-      prompt: p.prompt,
-    }));
-  }
-}
-
-/**
- * Deduplicates patterns by ID, keeping the one with highest severity.
- */
-function deduplicateByPatternId(
-  candidates: Array<{
-    patternId: string;
-    smellId: string;
-    risk: RiskLevel;
-    enablesCount: number;
-    severity: number;
-    prompt: string;
-  }>
-): Array<{
-  patternId: string;
-  smellId: string;
-  risk: RiskLevel;
-  enablesCount: number;
-  severity: number;
-  prompt: string;
-}> {
-  const seen = new Map<
-    string,
-    {
-      patternId: string;
-      smellId: string;
-      risk: RiskLevel;
-      enablesCount: number;
-      severity: number;
-      prompt: string;
-    }
-  >();
-
-  for (const c of candidates) {
-    const existing = seen.get(c.patternId);
-    if (!existing || c.severity > existing.severity) {
-      seen.set(c.patternId, c);
-    }
-  }
-
-  return Array.from(seen.values());
 }
