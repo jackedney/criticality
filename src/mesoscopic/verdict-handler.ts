@@ -338,10 +338,7 @@ export function recordViolatedClaimsInLedger(
  * }
  * ```
  */
-export function processClusterVerdict(
-  options: VerdictOptions,
-  ledger: import('../ledger/ledger.js').Ledger
-): VerdictResult {
+export function processClusterVerdict(options: VerdictOptions, ledger: Ledger): VerdictResult {
   // eslint-disable-next-line no-console
   const logger = options.logger ?? console.log;
 
