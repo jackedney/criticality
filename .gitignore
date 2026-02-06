@@ -44,8 +44,10 @@ coverage/
 # Logs
 *.log
 logs/
-# Local agent and ralph metadata
+# Local agent and AI tool metadata
 .agents/
 .ralph/
 .serena/
+.claude/
+.opencode/
 \n# Archive\narchive/\n
