@@ -72,8 +72,8 @@ describe('Phase Execution', () => {
             },
           },
           projectRoot: '/tmp/test',
-          // eslint-disable-next-line @typescript-eslint/require-await
           router: {
+            // eslint-disable-next-line @typescript-eslint/require-await
             route: async () => ({ model: 'test', response: '' }),
           } as any,
         };
