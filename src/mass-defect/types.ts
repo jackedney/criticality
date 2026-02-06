@@ -246,3 +246,19 @@ export interface MassDefectConfig {
   /** Path to the transformation catalog directory. */
   catalogPath: string;
 }
+
+/**
+ * Result of applying a transformation.
+ */
+export interface TransformationResult {
+  /** Whether the transformation succeeded. */
+  success: boolean;
+  /** Pattern ID that was applied. */
+  patternId: string;
+  /** Original function code. */
+  originalCode: string;
+  /** Transformed function code (if successful). */
+  transformedCode?: string;
+  /** Error message (if failed). */
+  error?: string;
+}
