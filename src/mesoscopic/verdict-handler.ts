@@ -355,9 +355,10 @@ export function processClusterVerdict(options: VerdictOptions, ledger: Ledger): 
   logger('[ClusterVerdict] Starting cluster verdict processing...');
 
   const { verdict, recordedClaims } = handleClusterVerdict(options);
+  let recordedInLedger: string[] = [];
 
   if (recordedClaims.length > 0) {
-    const recordedInLedger = recordViolatedClaimsInLedger(recordedClaims, ledger);
+    recordedInLedger = recordViolatedClaimsInLedger(recordedClaims, ledger);
 
     logger(
       `[ClusterVerdict] Recorded ${String(recordedInLedger.length)} violated claim(s) in ledger: ${recordedInLedger.join(', ')}`
@@ -369,5 +370,5 @@ export function processClusterVerdict(options: VerdictOptions, ledger: Ledger): 
   logger(`[ClusterVerdict] Functions to re-inject: ${String(verdict.functionsToReinject.length)}`);
   logger(`[ClusterVerdict] Fallback triggered: ${String(verdict.fallbackTriggered)}`);
 
-  return { verdict, recordedClaims };
+  return { verdict, recordedClaims: recordedInLedger };
 }

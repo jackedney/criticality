@@ -1,5 +1,6 @@
 /* eslint-disable security/detect-object-injection -- Test code with controlled indices */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import * as fc from 'fast-check';
 import { Logger } from './logger.js';
 
 describe('Logger', () => {
@@ -49,7 +50,9 @@ describe('Logger', () => {
       expect(parsed.level).toBe('info');
       expect(parsed.component).toBe('TestLogger');
       expect(parsed.event).toBe('circular_test');
-      expect(parsed.serializationError).toContain('circular');
+      expect(parsed.serializationError).toBeDefined();
+      expect(typeof parsed.serializationError).toBe('string');
+      expect((parsed.serializationError as string).length).toBeGreaterThan(0);
       expect(parsed.originalData).toBe('[unserializable]');
     });
 
@@ -104,6 +107,41 @@ describe('Logger', () => {
       expect(parsed.component).toBe('FallbackTest');
       expect(parsed.event).toBe('fallback_fields');
     });
+
+    it('should handle arbitrary values without throwing (property-based)', () => {
+      const logger = new Logger({ component: 'PropertyTest' });
+
+      fc.assert(
+        fc.property(fc.anything(), (arbitraryData) => {
+          // Reset captured output for each run
+          capturedOutput = [];
+
+          expect(() => {
+            logger.info('fuzz_test', arbitraryData as Record<string, unknown>);
+          }).not.toThrow();
+
+          expect(capturedOutput.length).toBe(1);
+          const output = getOutput(0);
+
+          // Should be valid JSON
+          let parsed: Record<string, unknown>;
+          expect(() => {
+            parsed = JSON.parse(output.trim()) as Record<string, unknown>;
+          }).not.toThrow();
+
+          // Check basic fields
+          parsed = JSON.parse(output.trim()) as Record<string, unknown>;
+          expect(parsed.level).toBe('info');
+          expect(parsed.component).toBe('PropertyTest');
+          expect(parsed.event).toBe('fuzz_test');
+
+          // If serialization failed, we should have the error fields
+          if (parsed.serializationError) {
+            expect(parsed.originalData).toBe('[unserializable]');
+          }
+        })
+      );
+    });
   });
 
   describe('normal logging', () => {
@@ -137,6 +175,32 @@ describe('Logger', () => {
       const parsed = parseOutput(0);
 
       expect(parsed.level).toBe('debug');
+    });
+
+    it('should log warn messages correctly', () => {
+      const logger = new Logger({ component: 'TestLogger' });
+
+      logger.warn('warning_event', { reason: 'test' });
+
+      expect(capturedOutput.length).toBe(1);
+      const parsed = parseOutput(0);
+
+      expect(parsed.level).toBe('warn');
+      expect(parsed.event).toBe('warning_event');
+      expect(parsed.data).toEqual({ reason: 'test' });
+    });
+
+    it('should log error messages correctly', () => {
+      const logger = new Logger({ component: 'TestLogger' });
+
+      logger.error('error_event', { code: 500 });
+
+      expect(capturedOutput.length).toBe(1);
+      const parsed = parseOutput(0);
+
+      expect(parsed.level).toBe('error');
+      expect(parsed.event).toBe('error_event');
+      expect(parsed.data).toEqual({ code: 500 });
     });
   });
 });

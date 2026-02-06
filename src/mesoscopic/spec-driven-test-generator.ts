@@ -441,7 +441,7 @@ export async function generateSpecDrivenTests(
 /**
  * Reads a file and returns its content.
  *
- * @param path - Path to the file.
+ * @param filePath - Path to the file.
  * @param encoding - File encoding (default: utf-8).
  * @returns Promise that resolves to file content.
  */

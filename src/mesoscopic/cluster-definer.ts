@@ -169,8 +169,9 @@ function mapClaimsToModules(spec: Spec, modules: readonly Module[]): Map<string,
     if (referencedModules.size === 0) {
       const dataModelNames = Object.keys(spec.data_models ?? {});
       for (const modelName of dataModelNames) {
-        if (claimText.includes(modelName.toLowerCase()) || claimText.includes(modelName)) {
-          referencedModules.add(modelName.toLowerCase());
+        const lcName = modelName.toLowerCase();
+        if (claimText.includes(lcName)) {
+          referencedModules.add(lcName);
         }
       }
     }
@@ -178,8 +179,9 @@ function mapClaimsToModules(spec: Spec, modules: readonly Module[]): Map<string,
     if (referencedModules.size === 0) {
       const interfaceNames = Object.keys(spec.interfaces ?? {});
       for (const ifaceName of interfaceNames) {
-        if (claimText.includes(ifaceName.toLowerCase()) || claimText.includes(ifaceName)) {
-          referencedModules.add(ifaceName.toLowerCase());
+        const lcName = ifaceName.toLowerCase();
+        if (claimText.includes(lcName)) {
+          referencedModules.add(lcName);
         }
       }
     }
@@ -220,7 +222,7 @@ function groupModulesIntoClusters(
 
     const moduleClaims = claimMap.get(module.id);
 
-    if (moduleClaims?.length === 0) {
+    if (!moduleClaims || moduleClaims.length === 0) {
       if (options.createOrphanClusters) {
         clusters.push({
           id: module.id,
@@ -234,7 +236,7 @@ function groupModulesIntoClusters(
       continue;
     }
 
-    if (moduleClaims && moduleClaims.length >= options.minClaimsPerModule) {
+    if (moduleClaims.length >= options.minClaimsPerModule) {
       const unassignedModuleClaims = moduleClaims.filter((c) => !assignedClaims.has(c));
 
       if (unassignedModuleClaims.length > 0) {
@@ -365,8 +367,9 @@ export function defineClusters(
     const clusters = groupModulesIntoClusters(modules, claimMapFromModules, opts);
 
     const assignedClaimIds = clusters.flatMap((c) => c.claimIds);
+    const assignedClaimIdSet = new Set(assignedClaimIds);
     const allClaimIds = Object.keys(spec.claims ?? {});
-    const unassignedClaimIds = allClaimIds.filter((c) => !assignedClaimIds.includes(c));
+    const unassignedClaimIds = allClaimIds.filter((c) => !assignedClaimIdSet.has(c));
 
     const modulesWithClaims = modules.map((m) => ({
       ...m,
