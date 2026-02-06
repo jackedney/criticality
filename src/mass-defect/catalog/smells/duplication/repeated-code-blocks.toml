@@ -10,14 +10,12 @@ description = "Identical or similar code blocks appear multiple times, violating
 name = "jscpd"
 rule = "duplicate-code"
 
-[[detection.heuristics.patterns]]
-"Identical code sequences in multiple functions"
-
-[[detection.heuristics.patterns]]
-"Similar code blocks with slight variations"
-
-[[detection.heuristics.patterns]]
-"Copy-pasted code in different modules"
+[detection.heuristics]
+patterns = [
+  "Identical code sequences in multiple functions",
+  "Similar code blocks with slight variations",
+  "Copy-pasted code in different modules"
+]
 
 [[applicable_patterns]]
 pattern = "extract-helper"

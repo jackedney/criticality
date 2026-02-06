@@ -6,14 +6,16 @@ description = "Explicit null checks that could be simplified with optional chain
 
 [detection]
 
-[[detection.heuristics.patterns]]
-"Explicit null checks before property access"
+[[detection.tools]]
+name = "manual"
+rule = "none"
 
-[[detection.heuristics.patterns]]
-"if (obj !== null && obj !== undefined) patterns"
-
-[[detection.heuristics.patterns]]
-"Ternary operators for null fallbacks"
+[detection.heuristics]
+patterns = [
+  "Explicit null checks before property access",
+  "if (obj !== null && obj !== undefined) patterns",
+  "Ternary operators for null fallbacks"
+]
 
 [[applicable_patterns]]
 pattern = "optional-chaining"

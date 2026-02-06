@@ -10,14 +10,12 @@ description = "Literal values appear directly in code without named constants, r
 name = "eslint"
 rule = "no-magic-numbers"
 
-[[detection.heuristics.patterns]]
-"Numeric literals without semantic meaning"
-
-[[detection.heuristics.patterns]]
-"String literals repeated across the codebase"
-
-[[detection.heuristics.patterns]]
-"Hardcoded configuration values"
+[detection.heuristics]
+patterns = [
+  "Numeric literals without semantic meaning",
+  "String literals repeated across the codebase",
+  "Hardcoded configuration values"
+]
 
 [[applicable_patterns]]
 pattern = "extract-magic-value"

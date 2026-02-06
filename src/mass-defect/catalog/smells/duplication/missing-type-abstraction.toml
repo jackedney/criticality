@@ -6,14 +6,16 @@ description = "Complex types are repeated throughout the codebase instead of bei
 
 [detection]
 
-[[detection.heuristics.patterns]]
-"Repeated object type definitions"
+[[detection.tools]]
+name = "manual"
+rule = "none"
 
-[[detection.heuristics.patterns]]
-"Repeated interface definitions"
-
-[[detection.heuristics.patterns]]
-"Repeated union types or type aliases"
+[detection.heuristics]
+patterns = [
+  "Repeated object type definitions",
+  "Repeated interface definitions",
+  "Repeated union types or type aliases"
+]
 
 [[applicable_patterns]]
 pattern = "introduce-type-alias"

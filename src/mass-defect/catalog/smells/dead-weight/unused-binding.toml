@@ -10,14 +10,12 @@ description = "Variables, functions, or imports are declared but never used, add
 name = "eslint"
 rule = "no-unused-vars"
 
-[[detection.heuristics.patterns]]
-"Declared variables never referenced"
-
-[[detection.heuristics.patterns]]
-"Imported modules never used"
-
-[[detection.heuristics.patterns]]
-"Function parameters never referenced"
+[detection.heuristics]
+patterns = [
+  "Declared variables never referenced",
+  "Imported modules never used",
+  "Function parameters never referenced"
+]
 
 [[applicable_patterns]]
 pattern = "remove-unused-binding"

@@ -10,14 +10,12 @@ description = "Traditional for loops used where functional transformations would
 name = "eslint"
 rule = "no-restricted-syntax"
 
-[[detection.heuristics.patterns]]
-"Traditional for loops used for array transformations"
-
-[[detection.heuristics.patterns]]
-"Loops that could be replaced with map/filter/reduce"
-
-[[detection.heuristics.patterns]]
-"Loops building new arrays element by element"
+[detection.heuristics]
+patterns = [
+  "Traditional for loops used for array transformations",
+  "Loops that could be replaced with map/filter/reduce",
+  "Loops building new arrays element by element"
+]
 
 [[applicable_patterns]]
 pattern = "loop-to-map"

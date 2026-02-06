@@ -11,14 +11,12 @@ max_nesting_depth = 3
 name = "eslint"
 rule = "max-depth"
 
-[[detection.heuristics.patterns]]
-"Nested if statements at depth >= 4"
-
-[[detection.heuristics.patterns]]
-"Nested loops at depth >= 4"
-
-[[detection.heuristics.patterns]]
-"Nested switch statements at depth >= 4"
+[detection.heuristics]
+patterns = [
+  "Nested if statements at depth >= 4",
+  "Nested loops at depth >= 4",
+  "Nested switch statements at depth >= 4"
+]
 
 [[applicable_patterns]]
 pattern = "early-return"
