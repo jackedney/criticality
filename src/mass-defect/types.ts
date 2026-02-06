@@ -262,3 +262,29 @@ export interface TransformationResult {
   /** Error message (if failed). */
   error?: string;
 }
+
+/**
+ * Context for verification of a transformation.
+ */
+export interface VerificationContext {
+  /** File path where the function is located. */
+  filePath: string;
+  /** Name of the function being transformed. */
+  functionName: string;
+  /** Module name for filtering tests (used for risk levels 2-3). */
+  moduleName?: string;
+  /** Working directory for running tests. */
+  workingDir: string;
+}
+
+/**
+ * Result of verifying a transformation.
+ */
+export interface VerificationResult {
+  /** Whether the verification passed. */
+  passed: boolean;
+  /** Errors encountered during verification. */
+  errors: string[];
+  /** Number of tests run. */
+  testsRun: number;
+}

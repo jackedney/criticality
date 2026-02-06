@@ -18,3 +18,4 @@ export {
   createSourceFileFromString,
 } from './complexity-analyzer.js';
 export { applyTransformation } from './transformation-applier.js';
+export { verifyTransformation } from './semantic-verifier.js';
