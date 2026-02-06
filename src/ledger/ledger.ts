@@ -658,6 +658,7 @@ export class Ledger {
       throw new DecisionNotFoundError(oldDecisionId);
     }
 
+    // eslint-disable-next-line security/detect-object-injection -- safe: oldDecisionIndex is numeric from .findIndex()
     const oldDecision = this.decisions[oldDecisionIndex];
     if (oldDecision === undefined) {
       throw new DecisionNotFoundError(oldDecisionId);
@@ -698,6 +699,7 @@ export class Ledger {
     };
 
     // Replace in the array
+    // eslint-disable-next-line security/detect-object-injection -- safe: oldDecisionIndex is numeric from .findIndex()
     this.decisions[oldDecisionIndex] = updatedOldDecision;
 
     return {
@@ -987,6 +989,7 @@ export class Ledger {
     // Validate dependencies if provided (must be non-empty strings)
     if (input.dependencies !== undefined) {
       for (let i = 0; i < input.dependencies.length; i++) {
+        // eslint-disable-next-line security/detect-object-injection -- safe: i is bounded numeric loop counter
         const dep = input.dependencies[i];
         if (typeof dep !== 'string' || dep.trim() === '') {
           errors.push({
@@ -1001,6 +1004,7 @@ export class Ledger {
     // Validate supersedes if provided (must be non-empty strings)
     if (input.supersedes !== undefined) {
       for (let i = 0; i < input.supersedes.length; i++) {
+        // eslint-disable-next-line security/detect-object-injection -- safe: i is bounded numeric loop counter
         const sup = input.supersedes[i];
         if (typeof sup !== 'string' || sup.trim() === '') {
           errors.push({
@@ -1265,6 +1269,7 @@ export class Ledger {
       throw new DecisionNotFoundError(decisionId);
     }
 
+    // eslint-disable-next-line security/detect-object-injection -- safe: decisionIndex is numeric from .findIndex()
     const decision = this.decisions[decisionIndex];
     if (decision === undefined) {
       throw new DecisionNotFoundError(decisionId);
@@ -1300,6 +1305,7 @@ export class Ledger {
       ...decision,
       status: 'invalidated',
     };
+    // eslint-disable-next-line security/detect-object-injection -- safe: decisionIndex is numeric from .findIndex()
     this.decisions[decisionIndex] = updatedDecision;
 
     // If cascade is enabled, invalidate all dependents
@@ -1310,6 +1316,7 @@ export class Ledger {
         // Find the index of this dependent
         const depIndex = this.decisions.findIndex((d) => d.id === dependent.id);
         if (depIndex !== -1) {
+          // eslint-disable-next-line security/detect-object-injection -- safe: depIndex is numeric from .findIndex()
           const depDecision = this.decisions[depIndex];
           // Only invalidate if still active
           if (depDecision?.status === 'active') {
@@ -1317,6 +1324,7 @@ export class Ledger {
               ...depDecision,
               status: 'invalidated',
             };
+            // eslint-disable-next-line security/detect-object-injection -- safe: depIndex is numeric from .findIndex()
             this.decisions[depIndex] = updatedDep;
 
             affectedDecisions.push({
@@ -1377,6 +1385,7 @@ export class Ledger {
       throw new DecisionNotFoundError(decisionId);
     }
 
+    // eslint-disable-next-line security/detect-object-injection -- safe: decisionIndex is numeric from .findIndex()
     const decision = this.decisions[decisionIndex];
     if (decision === undefined) {
       throw new DecisionNotFoundError(decisionId);
@@ -1409,6 +1418,7 @@ export class Ledger {
     };
 
     // Replace in the array
+    // eslint-disable-next-line security/detect-object-injection -- safe: decisionIndex is numeric from .findIndex()
     this.decisions[decisionIndex] = updatedDecision;
 
     // Update last_modified

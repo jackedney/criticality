@@ -4,7 +4,7 @@
  * @packageDocumentation
  */
 
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, vi, afterEach } from 'vitest';
 import type { ModelRouter, ModelRouterResult, ModelRouterResponse } from '../router/types.js';
 import {
   parseContradictionOutput,
@@ -14,6 +14,7 @@ import {
   createContradictionStats,
   generateReportId,
   isValidContradictionReport,
+  tryParseYaml,
   REPORT_VERSION,
 } from './report-parser.js';
 import { ContradictionReportParseError } from './types.js';
@@ -27,6 +28,7 @@ function createMockRouter(responses: string[]): {
 } {
   let callIndex = 0;
   const promptMock = vi.fn().mockImplementation((): Promise<ModelRouterResult> => {
+    // eslint-disable-next-line security/detect-object-injection -- test code with controlled mock array
     const content = responses[callIndex] ?? '';
     callIndex++;
     const response: ModelRouterResponse = {
@@ -71,7 +73,7 @@ function createFailingRouter(): {
 
 describe('Report Parser', () => {
   describe('parseContradictionOutput', () => {
-    it('parses valid JSON output', () => {
+    it('parses valid JSON output', async () => {
       const content = JSON.stringify({
         hasContradictions: true,
         contradictions: [
@@ -90,7 +92,7 @@ describe('Report Parser', () => {
         summary: 'Found 1 critical contradiction',
       });
 
-      const result = parseContradictionOutput(content);
+      const result = await parseContradictionOutput(content);
 
       expect(result.success).toBe(true);
       if (result.success) {
@@ -102,7 +104,7 @@ describe('Report Parser', () => {
       }
     });
 
-    it('parses JSON from markdown code block', () => {
+    it('parses JSON from markdown code block', async () => {
       const content = `Here is my analysis:
 
 \`\`\`json
@@ -115,7 +117,7 @@ describe('Report Parser', () => {
 
 The composition appears consistent.`;
 
-      const result = parseContradictionOutput(content);
+      const result = await parseContradictionOutput(content);
 
       expect(result.success).toBe(true);
       if (result.success) {
@@ -124,14 +126,14 @@ The composition appears consistent.`;
       }
     });
 
-    it('extracts JSON from mixed content', () => {
+    it('extracts JSON from mixed content', async () => {
       const content = `I've analyzed the spec and found:
 
 {"hasContradictions": true, "contradictions": [{"type": "invariant", "severity": "warning", "description": "Test", "involved": [{"elementType": "claim", "id": "C1", "name": "Test", "text": "Test"}], "analysis": "Test", "minimalScenario": "Test", "suggestedResolutions": []}], "summary": "Found issue"}
 
 This needs attention.`;
 
-      const result = parseContradictionOutput(content);
+      const result = await parseContradictionOutput(content);
 
       expect(result.success).toBe(true);
       if (result.success) {
@@ -140,7 +142,7 @@ This needs attention.`;
       }
     });
 
-    it('handles snake_case field names', () => {
+    it('handles snake_case field names', async () => {
       const content = JSON.stringify({
         has_contradictions: true,
         contradictions: [
@@ -159,7 +161,7 @@ This needs attention.`;
         summary: 'Found warning',
       });
 
-      const result = parseContradictionOutput(content);
+      const result = await parseContradictionOutput(content);
 
       expect(result.success).toBe(true);
       if (result.success) {
@@ -169,7 +171,7 @@ This needs attention.`;
       }
     });
 
-    it('preserves provided contradiction IDs', () => {
+    it('preserves provided contradiction IDs', async () => {
       const content = JSON.stringify({
         hasContradictions: true,
         contradictions: [
@@ -187,7 +189,7 @@ This needs attention.`;
         summary: 'Test',
       });
 
-      const result = parseContradictionOutput(content);
+      const result = await parseContradictionOutput(content);
 
       expect(result.success).toBe(true);
       if (result.success) {
@@ -195,7 +197,7 @@ This needs attention.`;
       }
     });
 
-    it('generates ID for contradictions without ID', () => {
+    it('generates ID for contradictions without ID', async () => {
       const content = JSON.stringify({
         hasContradictions: true,
         contradictions: [
@@ -212,7 +214,7 @@ This needs attention.`;
         summary: 'Test',
       });
 
-      const result = parseContradictionOutput(content);
+      const result = await parseContradictionOutput(content);
 
       expect(result.success).toBe(true);
       if (result.success) {
@@ -221,7 +223,7 @@ This needs attention.`;
       }
     });
 
-    it('filters out invalid contradiction types', () => {
+    it('filters out invalid contradiction types', async () => {
       const content = JSON.stringify({
         hasContradictions: true,
         contradictions: [
@@ -247,7 +249,7 @@ This needs attention.`;
         summary: 'Test',
       });
 
-      const result = parseContradictionOutput(content);
+      const result = await parseContradictionOutput(content);
 
       expect(result.success).toBe(true);
       if (result.success) {
@@ -256,7 +258,7 @@ This needs attention.`;
       }
     });
 
-    it('filters out contradictions with missing required fields', () => {
+    it('filters out contradictions with missing required fields', async () => {
       const content = JSON.stringify({
         hasContradictions: true,
         contradictions: [
@@ -291,7 +293,7 @@ This needs attention.`;
         summary: 'Test',
       });
 
-      const result = parseContradictionOutput(content);
+      const result = await parseContradictionOutput(content);
 
       expect(result.success).toBe(true);
       if (result.success) {
@@ -299,7 +301,7 @@ This needs attention.`;
       }
     });
 
-    it('filters out contradictions with no involved elements', () => {
+    it('filters out contradictions with no involved elements', async () => {
       const content = JSON.stringify({
         hasContradictions: true,
         contradictions: [
@@ -325,7 +327,7 @@ This needs attention.`;
         summary: 'Test',
       });
 
-      const result = parseContradictionOutput(content);
+      const result = await parseContradictionOutput(content);
 
       expect(result.success).toBe(true);
       if (result.success) {
@@ -333,7 +335,7 @@ This needs attention.`;
       }
     });
 
-    it('handles optional location in involved elements', () => {
+    it('handles optional location in involved elements', async () => {
       const content = JSON.stringify({
         hasContradictions: true,
         contradictions: [
@@ -359,7 +361,7 @@ This needs attention.`;
         summary: 'Test',
       });
 
-      const result = parseContradictionOutput(content);
+      const result = await parseContradictionOutput(content);
 
       expect(result.success).toBe(true);
       if (result.success) {
@@ -368,10 +370,10 @@ This needs attention.`;
       }
     });
 
-    it('returns error for completely invalid content', () => {
+    it('returns error for completely invalid content', async () => {
       const content = 'This is not JSON or YAML at all, just plain text with no structure.';
 
-      const result = parseContradictionOutput(content);
+      const result = await parseContradictionOutput(content);
 
       expect(result.success).toBe(false);
       if (!result.success) {
@@ -380,10 +382,10 @@ This needs attention.`;
       }
     });
 
-    it('returns empty contradictions for empty JSON', () => {
+    it('returns empty contradictions for empty JSON', async () => {
       const content = '{}';
 
-      const result = parseContradictionOutput(content);
+      const result = await parseContradictionOutput(content);
 
       expect(result.success).toBe(true);
       if (result.success) {
@@ -392,7 +394,7 @@ This needs attention.`;
       }
     });
 
-    it('infers hasContradictions from array length', () => {
+    it('infers hasContradictions from array length', async () => {
       const content = JSON.stringify({
         // No hasContradictions flag
         contradictions: [
@@ -409,7 +411,7 @@ This needs attention.`;
         summary: 'Found issue',
       });
 
-      const result = parseContradictionOutput(content);
+      const result = await parseContradictionOutput(content);
 
       expect(result.success).toBe(true);
       if (result.success) {
@@ -691,7 +693,7 @@ This needs attention.`;
   });
 
   describe('Example from acceptance criteria: YAML report parsing', () => {
-    it('parses TEMPORAL_001 contradiction from YAML-like output', () => {
+    it('parses TEMPORAL_001 contradiction from YAML-like output', async () => {
       // LLMs sometimes output in YAML-like format
       const yamlContent = `hasContradictions: true
 contradictions:
@@ -714,7 +716,7 @@ contradictions:
       - Add session keep-alive
 summary: Found 1 critical temporal contradiction`;
 
-      const result = parseContradictionOutput(yamlContent);
+      const result = await parseContradictionOutput(yamlContent);
 
       expect(result.success).toBe(true);
       if (result.success) {
@@ -748,6 +750,313 @@ summary: Found 1 critical temporal contradiction`;
         expect(result.error.retryAttempts).toBe(2);
         // Error should contain useful information
         expect(result.error.rawContent).toBeDefined();
+      }
+    });
+  });
+
+  describe('js-yaml fallback', () => {
+    afterEach(() => {
+      vi.unstubAllEnvs();
+    });
+
+    it('uses default YAML parser when PARSE_WITH_JSYAML is not set', async () => {
+      vi.stubEnv('PARSE_WITH_JSYAML', undefined);
+      vi.resetModules();
+      const freshParser = await import('./report-parser.js');
+      const yamlContent = `hasContradictions: true
+contradictions:
+  - type: temporal
+    severity: critical
+    description: Test
+    involved:
+      - elementType: constraint
+        id: C1
+        name: T
+        text: T
+    analysis: A
+    minimalScenario: S
+    suggestedResolutions: []
+summary: Test`;
+
+      const result = await freshParser.parseContradictionOutput(yamlContent);
+
+      expect(result.success).toBe(true);
+    });
+
+    it('uses js-yaml parser when PARSE_WITH_JSYAML is set to true', async () => {
+      vi.stubEnv('PARSE_WITH_JSYAML', 'true');
+      vi.resetModules();
+      const freshParser = await import('./report-parser.js');
+      await freshParser.ensureYamlLoaded();
+      const yamlContent = `hasContradictions: true
+contradictions:
+  - type: temporal
+    severity: critical
+    description: Test
+    involved:
+      - elementType: constraint
+        id: C1
+        name: T
+        text: T
+    analysis: A
+    minimalScenario: S
+    suggestedResolutions: []
+summary: Test`;
+
+      const result = await freshParser.parseContradictionOutput(yamlContent);
+
+      expect(result.success).toBe(true);
+    });
+
+    it('parses YAML from markdown code block with js-yaml', async () => {
+      vi.stubEnv('PARSE_WITH_JSYAML', 'true');
+      vi.resetModules();
+      const freshParser = await import('./report-parser.js');
+      await freshParser.ensureYamlLoaded();
+      const yamlContent = `\`\`\`yaml
+hasContradictions: true
+contradictions:
+  - type: temporal
+    severity: critical
+    description: Test
+    involved:
+      - elementType: constraint
+        id: C1
+        name: T
+        text: T
+    analysis: A
+    minimalScenario: S
+    suggestedResolutions: []
+summary: Test
+\`\`\``;
+
+      const result = await freshParser.parseContradictionOutput(yamlContent);
+
+      expect(result.success).toBe(true);
+    });
+
+    it('rejects deeply nested dangerous keys and prevents prototype pollution', async () => {
+      vi.stubEnv('PARSE_WITH_JSYAML', 'true');
+      vi.resetModules();
+      const freshParser = await import('./report-parser.js');
+      const freshTypes = await import('./types.js');
+      await freshParser.ensureYamlLoaded();
+
+      const prototypeKeysBefore = Object.keys(Object.prototype);
+
+      const yamlContent = `hasContradictions: true
+contradictions:
+  - type: temporal
+    severity: critical
+    description: Test
+    involved:
+      - elementType: constraint
+        id: C1
+        name: Test
+        text: Test text
+        nested:
+          deep:
+            __proto__:
+              polluted: true
+            constructor:
+              prototype:
+                injected: value
+            prototype:
+              malicious: data
+    analysis: Test analysis
+    minimalScenario: Test scenario
+    suggestedResolutions: []
+summary: Test`;
+
+      const result = await freshParser.parseContradictionOutput(yamlContent);
+
+      expect(result.success).toBe(false);
+      if (!result.success) {
+        expect(result.error).toBeInstanceOf(freshTypes.ContradictionReportParseError);
+        expect(result.error.errorType).toBe('validation_error');
+      }
+
+      const prototypeKeysAfter = Object.keys(Object.prototype);
+      expect(prototypeKeysAfter).toEqual(prototypeKeysBefore);
+      expect(Object.prototype).not.toHaveProperty('polluted');
+      expect(Object.prototype).not.toHaveProperty('injected');
+      expect(Object.prototype).not.toHaveProperty('malicious');
+    });
+  });
+
+  describe('Prototype Pollution Protection', () => {
+    it('rejects YAML with __proto__ key', async () => {
+      const yamlContent = `__proto__: malicious
+hasContradictions: true
+contradictions: []`;
+
+      const result = await parseContradictionOutput(yamlContent);
+
+      expect(result.success).toBe(false);
+      if (!result.success) {
+        expect(result.error).toBeInstanceOf(ContradictionReportParseError);
+        expect(result.error.errorType).toBe('validation_error');
+        expect(result.error.message).toContain('Rejected dangerous key');
+      }
+    });
+
+    it('rejects YAML with constructor key', async () => {
+      const yamlContent = `constructor: malicious
+hasContradictions: true
+contradictions: []`;
+
+      const result = await parseContradictionOutput(yamlContent);
+
+      expect(result.success).toBe(false);
+      if (!result.success) {
+        expect(result.error).toBeInstanceOf(ContradictionReportParseError);
+        expect(result.error.errorType).toBe('validation_error');
+        expect(result.error.message).toContain('Rejected dangerous key');
+      }
+    });
+
+    it('rejects YAML with prototype key', async () => {
+      const yamlContent = `prototype: malicious
+hasContradictions: true
+contradictions: []`;
+
+      const result = await parseContradictionOutput(yamlContent);
+
+      expect(result.success).toBe(false);
+      if (!result.success) {
+        expect(result.error).toBeInstanceOf(ContradictionReportParseError);
+        expect(result.error.errorType).toBe('validation_error');
+        expect(result.error.message).toContain('Rejected dangerous key');
+      }
+    });
+
+    it('rejects dangerous keys in nested objects', async () => {
+      const yamlContent = `hasContradictions: true
+contradictions:
+  - type: temporal
+    severity: critical
+    description: Test
+    involved:
+      - elementType: constraint
+        id: C1
+        __proto__: malicious
+        name: Test
+        text: Test text
+    analysis: Test analysis
+    minimalScenario: Test scenario
+    suggestedResolutions: []
+summary: Test`;
+
+      const result = await parseContradictionOutput(yamlContent);
+
+      expect(result.success).toBe(false);
+      if (!result.success) {
+        expect(result.error).toBeInstanceOf(ContradictionReportParseError);
+        expect(result.error.errorType).toBe('validation_error');
+      }
+    });
+
+    it('rejects dangerous keys in nested arrays', async () => {
+      const yamlContent = `hasContradictions: true
+contradictions:
+  - type: temporal
+    severity: critical
+    description: Test
+    involved:
+      - elementType: constraint
+        id: C1
+        name: Test
+        text: Test text
+        constructor:
+          malicious: value
+    analysis: Test analysis
+    minimalScenario: Test scenario
+    suggestedResolutions: []
+summary: Test`;
+
+      const result = await parseContradictionOutput(yamlContent);
+
+      expect(result.success).toBe(false);
+      if (!result.success) {
+        expect(result.error).toBeInstanceOf(ContradictionReportParseError);
+        expect(result.error.errorType).toBe('validation_error');
+      }
+    });
+
+    it('ignores lines that do not match key pattern', async () => {
+      const yamlContent = `: emptyKey
+hasContradictions: true
+contradictions: []`;
+
+      const result = await parseContradictionOutput(yamlContent);
+
+      // Empty keys don't match the regex pattern, so they're ignored
+      // The valid key 'hasContradictions' should still parse
+      expect(result.success).toBe(true);
+      if (result.success) {
+        expect(result.hasContradictions).toBe(true);
+        expect(result.contradictions).toHaveLength(0);
+      }
+    });
+
+    it('parses valid YAML keys correctly', async () => {
+      const yamlContent = `hasContradictions: true
+contradictions:
+  - type: temporal
+    severity: critical
+    description: Test description
+    involved:
+      - elementType: constraint
+        id: C1
+        name: Test constraint
+        text: Constraint text
+    analysis: Test analysis
+    minimalScenario: Test scenario
+    suggestedResolutions:
+      - Resolution 1
+      - Resolution 2
+summary: Test summary`;
+
+      const result = await parseContradictionOutput(yamlContent);
+
+      expect(result.success).toBe(true);
+      if (result.success) {
+        expect(result.contradictions).toHaveLength(1);
+        expect(result.contradictions[0]?.type).toBe('temporal');
+        expect(result.contradictions[0]?.severity).toBe('critical');
+        expect(result.hasContradictions).toBe(true);
+        expect(result.summary).toBe('Test summary');
+      }
+    });
+
+    it('creates objects with null prototype to prevent prototype pollution', () => {
+      const yamlContent = `hasContradictions: true
+contradictions:
+  - type: temporal
+    severity: critical
+    description: Test
+    involved:
+      - elementType: constraint
+        id: C1
+        name: Test
+        text: Test text
+    analysis: Test analysis
+    minimalScenario: Test scenario
+    suggestedResolutions: []
+summary: Test`;
+
+      const parsed = tryParseYaml(yamlContent);
+
+      expect(parsed).not.toBeNull();
+      if (parsed && typeof parsed === 'object') {
+        const obj = parsed as Record<string, unknown>;
+        expect(Object.getPrototypeOf(obj)).toBe(null);
+
+        const contradictions = obj.contradictions;
+        expect(Array.isArray(contradictions)).toBe(true);
+        if (contradictions && Array.isArray(contradictions) && contradictions[0]) {
+          expect(Object.getPrototypeOf(contradictions[0])).toBe(null);
+        }
       }
     });
   });

@@ -113,10 +113,6 @@ export interface ContextSizeMetrics {
 export interface ContextExtractionOptions {
   /** Maximum depth for transitive type extraction. Default: 5. */
   readonly maxTypeDepth?: number;
-  /** Whether to include type members in extracted definitions. Default: true. */
-  readonly includeTypeMembers?: boolean;
-  /** Whether to detect and flatten circular references. Default: true. */
-  readonly flattenCircularReferences?: boolean;
   /** Maximum total types to extract (prevents explosion). Default: 50. */
   readonly maxTypes?: number;
 }
@@ -219,6 +215,17 @@ function isBuiltinType(typeName: string): boolean {
 }
 
 /**
+ * Type index mapping type names to their declarations and source files.
+ */
+type TypeIndex = Map<
+  string,
+  | { kind: 'type'; decl: TypeAliasDeclaration; sourceFile: SourceFile }
+  | { kind: 'interface'; decl: InterfaceDeclaration; sourceFile: SourceFile }
+  | { kind: 'enum'; decl: EnumDeclaration; sourceFile: SourceFile }
+  | { kind: 'class'; decl: ClassDeclaration; sourceFile: SourceFile }
+>;
+
+/**
  * Internal state for type extraction with cycle detection.
  */
 interface ExtractionState {
@@ -232,6 +239,8 @@ interface ExtractionState {
   depth: number;
   /** Options for extraction. */
   readonly options: Required<ContextExtractionOptions>;
+  /** Index of all type declarations in the project for fast lookup. */
+  readonly typeIndex: TypeIndex;
 }
 
 /**
@@ -435,21 +444,76 @@ function extractReferencedFromClass(classDecl: ClassDeclaration): Set<string> {
     }
   }
 
+  // From methods
+  for (const method of classDecl.getMethods()) {
+    // Return type
+    const returnType = method.getReturnTypeNode();
+    if (returnType !== undefined) {
+      for (const name of extractTypeNamesFromString(returnType.getText())) {
+        names.add(name);
+      }
+    }
+    // Parameter types
+    for (const param of method.getParameters()) {
+      const paramType = param.getTypeNode();
+      if (paramType !== undefined) {
+        for (const name of extractTypeNamesFromString(paramType.getText())) {
+          names.add(name);
+        }
+      }
+    }
+  }
+
+  // From constructors
+  for (const ctor of classDecl.getConstructors()) {
+    // Parameter types (constructors don't have return types)
+    for (const param of ctor.getParameters()) {
+      const paramType = param.getTypeNode();
+      if (paramType !== undefined) {
+        for (const name of extractTypeNamesFromString(paramType.getText())) {
+          names.add(name);
+        }
+      }
+    }
+  }
+
+  // From get accessors
+  for (const getAccessor of classDecl.getGetAccessors()) {
+    const returnType = getAccessor.getReturnTypeNode();
+    if (returnType !== undefined) {
+      for (const name of extractTypeNamesFromString(returnType.getText())) {
+        names.add(name);
+      }
+    }
+  }
+
+  // From set accessors
+  for (const setAccessor of classDecl.getSetAccessors()) {
+    for (const param of setAccessor.getParameters()) {
+      const paramType = param.getTypeNode();
+      if (paramType !== undefined) {
+        for (const name of extractTypeNamesFromString(paramType.getText())) {
+          names.add(name);
+        }
+      }
+    }
+  }
+
   return names;
 }
 
 /**
- * Finds a type declaration by name across the entire project.
+ * Builds a type index for fast type declaration lookup.
+ *
+ * Iterates through all source files once and registers all type declarations.
+ * Skips node_modules and .d.ts files.
+ *
+ * @param project - The ts-morph Project.
+ * @returns A Map from type name to type declaration info.
  */
-function findTypeDeclaration(
-  project: Project,
-  typeName: string
-):
-  | { kind: 'type'; decl: TypeAliasDeclaration; sourceFile: SourceFile }
-  | { kind: 'interface'; decl: InterfaceDeclaration; sourceFile: SourceFile }
-  | { kind: 'enum'; decl: EnumDeclaration; sourceFile: SourceFile }
-  | { kind: 'class'; decl: ClassDeclaration; sourceFile: SourceFile }
-  | undefined {
+function buildTypeIndex(project: Project): TypeIndex {
+  const index: TypeIndex = new Map();
+
   for (const sourceFile of project.getSourceFiles()) {
     // Skip node_modules and declaration files
     const filePath = sourceFile.getFilePath();
@@ -457,47 +521,57 @@ function findTypeDeclaration(
       continue;
     }
 
-    // Check type aliases
+    // Register type aliases
     for (const typeAlias of sourceFile.getTypeAliases()) {
-      if (typeAlias.getName() === typeName) {
-        return { kind: 'type', decl: typeAlias, sourceFile };
-      }
+      index.set(typeAlias.getName(), { kind: 'type', decl: typeAlias, sourceFile });
     }
 
-    // Check interfaces
+    // Register interfaces
     for (const iface of sourceFile.getInterfaces()) {
-      if (iface.getName() === typeName) {
-        return { kind: 'interface', decl: iface, sourceFile };
-      }
+      index.set(iface.getName(), { kind: 'interface', decl: iface, sourceFile });
     }
 
-    // Check enums
+    // Register enums
     for (const enumDecl of sourceFile.getEnums()) {
-      if (enumDecl.getName() === typeName) {
-        return { kind: 'enum', decl: enumDecl, sourceFile };
-      }
+      index.set(enumDecl.getName(), { kind: 'enum', decl: enumDecl, sourceFile });
     }
 
-    // Check classes
+    // Register classes
     for (const classDecl of sourceFile.getClasses()) {
-      if (classDecl.getName() === typeName) {
-        return { kind: 'class', decl: classDecl, sourceFile };
+      const name = classDecl.getName();
+      if (name !== undefined) {
+        index.set(name, { kind: 'class', decl: classDecl, sourceFile });
       }
     }
   }
 
-  return undefined;
+  return index;
+}
+
+/**
+ * Finds a type declaration by name using the type index.
+ */
+function findTypeDeclaration(
+  typeIndex: TypeIndex,
+  typeName: string
+):
+  | { kind: 'type'; decl: TypeAliasDeclaration; sourceFile: SourceFile }
+  | { kind: 'interface'; decl: InterfaceDeclaration; sourceFile: SourceFile }
+  | { kind: 'enum'; decl: EnumDeclaration; sourceFile: SourceFile }
+  | { kind: 'class'; decl: ClassDeclaration; sourceFile: SourceFile }
+  | undefined {
+  return typeIndex.get(typeName);
 }
 
 /**
  * Extracts a type definition and its transitive dependencies.
  *
- * @param project - The ts-morph Project.
+ * @param typeIndex - The type index for fast lookup.
  * @param typeName - The type name to extract.
  * @param state - Current extraction state (for cycle detection).
  */
 function extractTypeWithDependencies(
-  project: Project,
+  typeIndex: TypeIndex,
   typeName: string,
   state: ExtractionState
 ): void {
@@ -528,7 +602,7 @@ function extractTypeWithDependencies(
   }
 
   // Find the type declaration
-  const found = findTypeDeclaration(project, typeName);
+  const found = findTypeDeclaration(typeIndex, typeName);
   if (found === undefined) {
     return;
   }
@@ -574,7 +648,7 @@ function extractTypeWithDependencies(
 
   // Recursively extract referenced types first (if not in a cycle)
   for (const refTypeName of referencedTypes) {
-    extractTypeWithDependencies(project, refTypeName, state);
+    extractTypeWithDependencies(typeIndex, refTypeName, state);
   }
 
   // Check max types limit again after processing dependencies
@@ -745,8 +819,6 @@ export function extractContext(
 ): ExtractedContext {
   const resolvedOptions: Required<ContextExtractionOptions> = {
     maxTypeDepth: options.maxTypeDepth ?? 5,
-    includeTypeMembers: options.includeTypeMembers ?? true,
-    flattenCircularReferences: options.flattenCircularReferences ?? true,
     maxTypes: options.maxTypes ?? 50,
   };
 
@@ -783,6 +855,9 @@ export function extractContext(
   // Extract type names from signature
   const typeNames = extractTypeNamesFromSignature(signature);
 
+  // Build type index for fast lookup (once per extraction)
+  const typeIndex = buildTypeIndex(project);
+
   // Initialize extraction state
   const state: ExtractionState = {
     extracted: new Map(),
@@ -790,11 +865,12 @@ export function extractContext(
     cycleParticipants: new Set(),
     depth: 0,
     options: resolvedOptions,
+    typeIndex,
   };
 
   // Extract all types with transitive dependencies
   for (const typeName of typeNames) {
-    extractTypeWithDependencies(project, typeName, state);
+    extractTypeWithDependencies(typeIndex, typeName, state);
   }
 
   // Separate witnesses from regular types

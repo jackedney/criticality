@@ -68,6 +68,27 @@ const SEMVER_PATTERN = /^\d+\.\d+\.\d+$/;
 /** Regex pattern for system name (kebab-case). */
 const SYSTEM_NAME_PATTERN = /^[a-z][a-z0-9-]*$/;
 
+/** Keys that are prohibited due to prototype pollution concerns. */
+const PROHIBITED_KEYS = ['__proto__', 'constructor', 'prototype'];
+
+/**
+ * Validates that a key is safe for use as an object property.
+ *
+ * This prevents prototype pollution attacks by rejecting keys that could
+ * compromise the object prototype chain.
+ *
+ * @param key - The key to validate.
+ * @param keyPath - Path to the key for error messages.
+ * @throws SpecParseError if key is prohibited.
+ */
+function validateKey(key: string, keyPath: string): void {
+  if (PROHIBITED_KEYS.includes(key)) {
+    throw new SpecParseError(
+      `Prohibited key '${key}' found at '${keyPath}': keys ${PROHIBITED_KEYS.map((k) => `'${k}'`).join(', ')} are not allowed for security reasons`
+    );
+  }
+}
+
 /**
  * Validates that a value is a string.
  *
@@ -323,9 +344,10 @@ function parseEnums(
     return undefined;
   }
 
-  const enums: Record<string, SpecEnum> = {};
+  const enums = Object.create(null) as Record<string, SpecEnum>;
 
   for (const [enumName, enumDef] of Object.entries(raw)) {
+    validateKey(enumName, 'enums');
     const def = enumDef as Record<string, unknown>;
     if (!('variants' in def)) {
       throw new SpecParseError(`Missing required field: 'enums.${enumName}.variants'`);
@@ -339,6 +361,7 @@ function parseEnums(
       specEnum.description = validateString(def.description, `enums.${enumName}.description`);
     }
 
+    // eslint-disable-next-line security/detect-object-injection -- safe: key validated by validateKey()
     enums[enumName] = specEnum;
   }
 
@@ -390,9 +413,10 @@ function parseDataModels(
     return undefined;
   }
 
-  const dataModels: Record<string, SpecDataModel> = {};
+  const dataModels = Object.create(null) as Record<string, SpecDataModel>;
 
   for (const [modelName, modelDef] of Object.entries(raw)) {
+    validateKey(modelName, 'data_models');
     const def = modelDef as Record<string, unknown>;
     if (!('fields' in def)) {
       throw new SpecParseError(`Missing required field: 'data_models.${modelName}.fields'`);
@@ -427,6 +451,7 @@ function parseDataModels(
       );
     }
 
+    // eslint-disable-next-line security/detect-object-injection -- safe: key validated by validateKey()
     dataModels[modelName] = dataModel;
   }
 
@@ -481,9 +506,10 @@ function parseInterfaces(
     return undefined;
   }
 
-  const interfaces: Record<string, SpecInterface> = {};
+  const interfaces = Object.create(null) as Record<string, SpecInterface>;
 
   for (const [ifaceName, ifaceDef] of Object.entries(raw)) {
+    validateKey(ifaceName, 'interfaces');
     const def = ifaceDef as Record<string, unknown>;
     if (!('methods' in def)) {
       throw new SpecParseError(`Missing required field: 'interfaces.${ifaceName}.methods'`);
@@ -509,6 +535,7 @@ function parseInterfaces(
       iface.description = validateString(def.description, `interfaces.${ifaceName}.description`);
     }
 
+    // eslint-disable-next-line security/detect-object-injection -- safe: key validated by validateKey()
     interfaces[ifaceName] = iface;
   }
 
@@ -634,9 +661,11 @@ function parseClaims(
     return undefined;
   }
 
-  const claims: Record<string, SpecClaim> = {};
+  const claims = Object.create(null) as Record<string, SpecClaim>;
 
   for (const [claimName, claimDef] of Object.entries(raw)) {
+    validateKey(claimName, 'claims');
+    // eslint-disable-next-line security/detect-object-injection -- safe: key validated by validateKey()
     claims[claimName] = parseClaim(claimDef as Record<string, unknown>, `claims.${claimName}`);
   }
 
@@ -732,9 +761,10 @@ function parseWitnesses(
     return undefined;
   }
 
-  const witnesses: Record<string, SpecWitness> = {};
+  const witnesses = Object.create(null) as Record<string, SpecWitness>;
 
   for (const [witnessName, witnessDef] of Object.entries(raw)) {
+    validateKey(witnessName, 'witnesses');
     const def = witnessDef as Record<string, unknown>;
     if (!('name' in def)) {
       throw new SpecParseError(`Missing required field: 'witnesses.${witnessName}.name'`);
@@ -795,6 +825,7 @@ function parseWitnesses(
       );
     }
 
+    // eslint-disable-next-line security/detect-object-injection -- safe: key validated by validateKey()
     witnesses[witnessName] = witness;
   }
 
@@ -833,6 +864,22 @@ export function parseSpec(tomlContent: string): Spec {
     parsed = TOML.parse(tomlContent) as Record<string, unknown>;
   } catch (error) {
     const tomlError = error as Error;
+
+    // Check if error is about a prohibited key (e.g., constructor)
+    const tomlErrorMessage = tomlError.message;
+    const prohibitedKeyMatch = tomlErrorMessage.match(/Can't redefine existing key/);
+    if (prohibitedKeyMatch) {
+      // Try to extract which section/key from the toml content
+      const sectionMatch = tomlContent.match(/\[(\w+)\.(\w+)\]/);
+      if (sectionMatch && sectionMatch[2] && PROHIBITED_KEYS.includes(sectionMatch[2])) {
+        const section = sectionMatch[1] ?? 'unknown';
+        const key = sectionMatch[2];
+        throw new SpecParseError(
+          `Prohibited key '${key}' found at '${section}': keys ${PROHIBITED_KEYS.map((k) => `'${k}'`).join(', ')} are not allowed for security reasons`
+        );
+      }
+    }
+
     throw new SpecParseError(`Invalid TOML syntax: ${tomlError.message}`, tomlError);
   }
 

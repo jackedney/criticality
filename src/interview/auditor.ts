@@ -448,7 +448,7 @@ export async function auditRequirements(
   requirements: readonly ExtractedRequirement[],
   options: AuditorOptions
 ): Promise<AuditorResult> {
-  const { modelRouter } = options;
+  const { modelRouter, timeoutMs } = options;
 
   // If no requirements, return early with no issues
   if (requirements.length === 0) {
@@ -464,7 +464,8 @@ export async function auditRequirements(
   // Call auditor_model to analyze requirements
   const auditorResult = await modelRouter.prompt(
     'auditor',
-    `${createAuditorSystemPrompt()}\n\n${createAuditorUserPrompt(requirements)}`
+    `${createAuditorSystemPrompt()}\n\n${createAuditorUserPrompt(requirements)}`,
+    timeoutMs
   );
 
   if (!auditorResult.success) {
@@ -506,7 +507,7 @@ export async function getArchitectResponses(
   requirements: readonly ExtractedRequirement[],
   options: AuditorOptions
 ): Promise<readonly ArchitectResponse[]> {
-  const { modelRouter } = options;
+  const { modelRouter, timeoutMs } = options;
 
   if (issues.length === 0) {
     return [];
@@ -514,7 +515,8 @@ export async function getArchitectResponses(
 
   const architectResult = await modelRouter.prompt(
     'architect',
-    `${createArchitectResponseSystemPrompt()}\n\n${createArchitectResponseUserPrompt(issues, requirements)}`
+    `${createArchitectResponseSystemPrompt()}\n\n${createArchitectResponseUserPrompt(issues, requirements)}`,
+    timeoutMs
   );
 
   if (!architectResult.success) {
@@ -723,6 +725,7 @@ export function formatAuditResult(
     lines.push('');
 
     for (let i = 0; i < findings.length; i++) {
+      // eslint-disable-next-line security/detect-object-injection -- safe: i is bounded numeric loop counter
       const finding = findings[i];
       if (finding === undefined) {
         continue;

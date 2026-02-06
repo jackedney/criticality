@@ -13,10 +13,9 @@ import {
   type FunctionExpression,
   SyntaxKind,
   type SourceFile,
-  type Node,
 } from 'ts-morph';
-import * as fs from 'node:fs';
 import * as path from 'node:path';
+import { safeExistsSync } from '../../utils/safe-fs.js';
 
 /**
  * Error thrown when a tsconfig.json file cannot be found.
@@ -49,7 +48,7 @@ export function createProject(tsConfigPath?: string): Project {
   if (tsConfigPath !== undefined) {
     const resolvedPath = path.resolve(tsConfigPath);
 
-    if (!fs.existsSync(resolvedPath)) {
+    if (!safeExistsSync(resolvedPath)) {
       throw new TsConfigNotFoundError(resolvedPath);
     }
 
@@ -61,6 +60,8 @@ export function createProject(tsConfigPath?: string): Project {
   const defaultOptions: ProjectOptions = {
     compilerOptions: {
       strict: true,
+      noUncheckedIndexedAccess: true,
+      exactOptionalPropertyTypes: true,
       target: 99, // ScriptTarget.ESNext
       module: 199, // ModuleKind.NodeNext
       moduleResolution: 99, // ModuleResolutionKind.NodeNext
@@ -102,6 +103,19 @@ type FunctionLike = FunctionDeclaration | MethodDeclaration | ArrowFunction | Fu
  * - todo!() macro-style comment pattern
  */
 const TODO_PATTERNS = [/throw\s+new\s+Error\s*\(\s*['"]TODO['"]\s*\)/, /\/\/\s*todo!\s*\(\s*\)/i];
+
+/**
+ * Singleton project for validation to avoid repeated initialization overhead.
+ * Using in-memory file system for speed.
+ */
+const VALIDATION_PROJECT = new Project({
+  useInMemoryFileSystem: true,
+  compilerOptions: {
+    strict: true,
+    target: 99, // ScriptTarget.ESNext
+    module: 199, // ModuleKind.NodeNext
+  },
+});
 
 /**
  * Checks if a function body contains a TODO marker.
@@ -195,25 +209,12 @@ function collectFunctions(sourceFile: SourceFile): FunctionLike[] {
     functions.push(...classDecl.getMethods());
   }
 
-  // Recursively collect arrow functions and function expressions
-  function visitNode(node: Node): void {
-    if (
-      node.getKind() === SyntaxKind.ArrowFunction ||
-      node.getKind() === SyntaxKind.FunctionExpression
-    ) {
-      const funcNode = node as ArrowFunction | FunctionExpression;
-      functions.push(funcNode);
-    }
+  // Recursively collect arrow functions and function expressions using optimized traversal
+  const arrows = sourceFile.getDescendantsOfKind(SyntaxKind.ArrowFunction);
+  const expressions = sourceFile.getDescendantsOfKind(SyntaxKind.FunctionExpression);
 
-    for (const child of node.getChildren()) {
-      visitNode(child);
-    }
-  }
-
-  // Visit all statements to find arrow functions and function expressions
-  for (const statement of sourceFile.getStatements()) {
-    visitNode(statement);
-  }
+  functions.push(...arrows);
+  functions.push(...expressions);
 
   return functions;
 }
@@ -236,22 +237,19 @@ function buildCallGraph(functions: FunctionLike[]): Map<string, Set<string>> {
     // Find all call expressions in the function body
     const body = func.getBody();
     if (body) {
-      body.forEachDescendant((node) => {
-        if (node.getKind() === SyntaxKind.CallExpression) {
-          const callExpr = node.asKind(SyntaxKind.CallExpression);
-          if (callExpr) {
-            const expr = callExpr.getExpression();
-            // Get the identifier being called
-            if (expr.getKind() === SyntaxKind.Identifier) {
-              const calledName = expr.getText();
-              // Only track calls to functions in our set
-              if (functionNames.has(calledName) && calledName !== name) {
-                calls.add(calledName);
-              }
-            }
+      // Use getDescendantsOfKind for optimized traversal
+      const callExpressions = body.getDescendantsOfKind(SyntaxKind.CallExpression);
+      for (const callExpr of callExpressions) {
+        const expr = callExpr.getExpression();
+        // Get the identifier being called
+        if (expr.getKind() === SyntaxKind.Identifier) {
+          const calledName = expr.getText();
+          // Only track calls to functions in our set
+          if (functionNames.has(calledName) && calledName !== name) {
+            calls.add(calledName);
           }
         }
-      });
+      }
     }
 
     callGraph.set(name, calls);
@@ -364,6 +362,7 @@ function topologicalSort(
   // Build SCC-level dependency graph
   const nodeToScc = new Map<string, number>();
   for (let i = 0; i < sccs.length; i++) {
+    // eslint-disable-next-line security/detect-object-injection -- safe array access with numeric loop counter
     const scc = sccs[i];
     if (scc) {
       for (const node of scc) {
@@ -423,6 +422,7 @@ function topologicalSort(
     }
     processedSccs.add(sccIndex);
 
+    // eslint-disable-next-line security/detect-object-injection -- safe array access with validated numeric index
     const scc = sccs[sccIndex];
     if (scc) {
       // Add all functions in this SCC (already sorted for determinism)
@@ -481,18 +481,32 @@ export function orderByDependency(functions: TodoFunction[], project: Project): 
     return [];
   }
 
-  // Get all source files from the project
-  const allFunctions: FunctionLike[] = [];
-  for (const sourceFile of project.getSourceFiles()) {
-    const filePath = sourceFile.getFilePath();
-    if (filePath.includes('node_modules') || filePath.endsWith('.d.ts')) {
+  // Optimize: Only analyze files that contain the TODO functions we are interested in
+  // instead of scanning the entire project. This significantly reduces AST traversal overhead.
+  const relevantFiles = new Set(functions.map((f) => f.filePath));
+  const functionNames = new Set(functions.map((f) => f.name));
+  const relevantAstNodes: FunctionLike[] = [];
+
+  for (const filePath of relevantFiles) {
+    const sourceFile = project.getSourceFile(filePath);
+    if (!sourceFile) {
       continue;
     }
-    allFunctions.push(...collectFunctions(sourceFile));
+
+    // Collect all functions in the file, but only keep the ones we care about for the call graph
+    const fileFunctions = collectFunctions(sourceFile);
+    for (const func of fileFunctions) {
+      if (functionNames.has(getFunctionName(func))) {
+        relevantAstNodes.push(func);
+      }
+    }
   }
 
-  // Build call graph from all functions
-  const callGraph = buildCallGraph(allFunctions);
+  // Build call graph from only the relevant functions
+  // Note: buildCallGraph will only track calls TO functions present in the input array.
+  // Since we only pass the AST nodes for our TodoFunctions, it will track dependencies
+  // between TodoFunctions, which is exactly what topologicalSort needs.
+  const callGraph = buildCallGraph(relevantAstNodes);
 
   // Perform topological sort
   return topologicalSort(functions, callGraph);
@@ -583,15 +597,8 @@ function validateBodySyntax(
   isAsync: boolean,
   isGenerator: boolean
 ): string | undefined {
-  // Create a temporary project to parse the body
-  const tempProject = new Project({
-    useInMemoryFileSystem: true,
-    compilerOptions: {
-      strict: true,
-      target: 99, // ScriptTarget.ESNext
-      module: 199, // ModuleKind.NodeNext
-    },
-  });
+  // Use the singleton project to parse the body
+  const tempProject = VALIDATION_PROJECT;
 
   // Wrap body in a function to validate it as a function body
   let functionPrefix = 'function __validate__() ';
@@ -606,7 +613,10 @@ function validateBodySyntax(
   const wrappedBody = `${functionPrefix}{ ${body} }`;
 
   try {
-    const tempFile = tempProject.createSourceFile('__validate__.ts', wrappedBody);
+    // Use overwrite: true to handle repeated calls
+    const tempFile = tempProject.createSourceFile('__validate__.ts', wrappedBody, {
+      overwrite: true,
+    });
     const diagnostics = tempFile.getPreEmitDiagnostics();
 
     // Filter for syntax errors (not type errors)
@@ -633,6 +643,12 @@ function validateBodySyntax(
     return undefined;
   } catch (error) {
     return error instanceof Error ? error.message : 'Unknown parse error';
+  } finally {
+    // Clean up the source file to keep the project clean
+    const sourceFile = tempProject.getSourceFile('__validate__.ts');
+    if (sourceFile) {
+      tempProject.removeSourceFile(sourceFile);
+    }
   }
 }
 
@@ -897,7 +913,8 @@ const LOGIC_LEAKAGE_PATTERNS: {
  */
 export function inspectAst(
   filePath: string,
-  options: AstInspectionOptions = {}
+  options: AstInspectionOptions = {},
+  project?: Project
 ): AstInspectionResult {
   const {
     checkFunctionBodies = true,
@@ -905,31 +922,25 @@ export function inspectAst(
     detectLogicPatterns = true,
   } = options;
 
-  // Create a project and add the file
-  const project = new Project({
-    compilerOptions: {
-      strict: true,
-      target: 99, // ScriptTarget.ESNext
-      module: 199, // ModuleKind.NodeNext
-    },
-  });
+  let inspectionProject: Project;
 
-  project.addSourceFilesAtPaths(filePath);
-  const sourceFile = project.getSourceFile(filePath);
-
-  if (!sourceFile) {
-    return {
-      functions: [],
-      logicPatterns: [
-        {
-          line: 0,
-          description: `Could not parse file: ${filePath}`,
-          severity: 'error',
-        },
-      ],
-      passed: false,
-    };
+  if (project !== undefined) {
+    inspectionProject = project;
+  } else {
+    // Create a new project if one wasn't provided
+    inspectionProject = new Project({
+      compilerOptions: {
+        strict: true,
+        target: 99, // ScriptTarget.ESNext
+        module: 199, // ModuleKind.NodeNext
+        noUncheckedIndexedAccess: true,
+        exactOptionalPropertyTypes: true,
+      },
+    });
   }
+
+  const sourceFile =
+    inspectionProject.getSourceFile(filePath) ?? inspectionProject.addSourceFileAtPath(filePath);
 
   const inspectedFunctions: InspectedFunction[] = [];
   const logicPatterns: LogicPattern[] = [];
@@ -942,6 +953,22 @@ export function inspectAst(
     const line = func.getStartLineNumber();
     const body = func.getBody();
     const hasBody = body !== undefined;
+
+    // Compute strict isTodoBody: body must ONLY contain TODO patterns (nothing else)
+    let isTodoBody = false;
+    if (hasBody) {
+      const bodyText = body.getText();
+
+      // TODO-only patterns: entire body must match exactly
+      const todoOnlyPatterns = [
+        /^\{\s*\}$/, // Empty body {}
+        /^\{\s*throw\s+new\s+Error\s*\(\s*['"]TODO['"]\s*\)\s*;?\s*\}$/i, // Only throw new Error('TODO')
+      ];
+
+      isTodoBody = todoOnlyPatterns.some((pattern) => pattern.test(bodyText));
+    }
+
+    // hasTodoBody in InspectedFunction indicates presence of TODO marker
     const hasTodoBody = hasBody && hasTodoMarker(func);
 
     inspectedFunctions.push({
@@ -952,43 +979,39 @@ export function inspectAst(
     });
 
     // Check for non-TODO bodies when required
-    if (checkFunctionBodies && checkTodoPattern && hasBody && !hasTodoBody) {
+    // Run LOGIC_LEAKAGE_PATTERNS scan only when not isTodoBody (strict check)
+    if (checkFunctionBodies && checkTodoPattern && hasBody && !isTodoBody) {
       // This is a function with implementation - check if it's allowed
       // For Lattice output, only TODO bodies should exist
       // body is guaranteed to exist since hasBody is true
       const bodyText = body.getText();
 
-      // Allow empty bodies and single return statements of simple types
-      const allowedPatterns = [
-        /^\{\s*\}$/, // Empty body {}
-        /^\{\s*throw\s+new\s+Error\s*\(\s*['"]TODO['"]\s*\)\s*;?\s*\}$/i, // throw new Error('TODO')
-      ];
+      if (detectLogicPatterns) {
+        // Use unique context key including file path and line number
+        const contextKey = `${filePath}:${String(line)}:${name}`;
 
-      const isAllowed = allowedPatterns.some((pattern) => pattern.test(bodyText));
-
-      if (!isAllowed && detectLogicPatterns) {
         // Check for specific logic patterns
         for (const { pattern, description, severity } of LOGIC_LEAKAGE_PATTERNS) {
           if (pattern.test(bodyText)) {
             logicPatterns.push({
               line,
               description,
-              context: name,
+              context: contextKey,
               severity,
             });
           }
         }
 
-        // If no specific pattern matched but body is not TODO, flag it
+        // If no specific pattern matched but body is not TODO-only, flag it
         if (
-          logicPatterns.filter((p) => p.context === name).length === 0 &&
+          logicPatterns.filter((p) => p.context === contextKey).length === 0 &&
           !bodyText.includes("throw new Error('TODO')") &&
           !bodyText.includes('throw new Error("TODO")')
         ) {
           logicPatterns.push({
             line,
             description: 'Function has implementation body instead of TODO placeholder',
-            context: name,
+            context: contextKey,
             severity: 'error',
           });
         }

@@ -439,9 +439,9 @@ describe('inject_003: Escalation chain', () => {
 
   it('model context limits follow escalation order (increasing capacity)', () => {
     // Verify that larger/more capable models have higher context limits
-    const minimaxLimits = MODEL_CONTEXT_LIMITS['minimax-m2'];
-    const sonnetLimits = MODEL_CONTEXT_LIMITS['claude-sonnet-4-5'];
-    const opusLimits = MODEL_CONTEXT_LIMITS['claude-opus-4-5'];
+    const minimaxLimits = MODEL_CONTEXT_LIMITS.get('minimax-m2');
+    const sonnetLimits = MODEL_CONTEXT_LIMITS.get('claude-sonnet-4-5');
+    const opusLimits = MODEL_CONTEXT_LIMITS.get('claude-opus-4-5');
 
     // Ensure all limits are defined
     expect(minimaxLimits).toBeDefined();

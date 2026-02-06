@@ -15,6 +15,27 @@ import {
   type WitnessTypeParameter,
 } from '../adapters/typescript/witness.js';
 
+/** Keys that are prohibited due to prototype pollution concerns. */
+const PROHIBITED_KEYS = ['__proto__', 'constructor', 'prototype'];
+
+/**
+ * Validates that a key is safe for use as an object property.
+ *
+ * This prevents prototype pollution attacks by rejecting keys that could
+ * compromise object prototype chain.
+ *
+ * @param key - The key to validate.
+ * @param keyPath - Path to key for error messages.
+ * @throws Error if key is prohibited.
+ */
+function validateKey(key: string, keyPath: string): void {
+  if (PROHIBITED_KEYS.includes(key)) {
+    throw new Error(
+      `Prohibited key '${key}' found at '${keyPath}': keys ${PROHIBITED_KEYS.map((k) => `'${k}'`).join(', ')} are not allowed for security reasons`
+    );
+  }
+}
+
 /**
  * Constraint types that can be mapped to branded types.
  */
@@ -88,38 +109,170 @@ export interface TypeGeneratorOptions {
 }
 
 /**
+ * Sanitizes a number value for use in a TypeScript identifier.
+ *
+ * Converts invalid characters like '-' and '.' to identifier-safe tokens.
+ * Examples:
+ *   -5 -> Neg5
+ *   -10.5 -> Neg10P5
+ *   3.14 -> 3P14
+ *
+ * @param num - The number value as a string.
+ * @returns The sanitized identifier-safe string.
+ */
+function sanitizeNumberForIdentifier(num: string): string {
+  return num.replace(/-/g, 'Neg').replace(/\./g, 'P');
+}
+
+/**
+ * Splits generic type arguments, handling nested generics.
+ *
+ * @param args - The comma-separated type arguments.
+ * @returns Array of type argument strings.
+ */
+function splitGenericArgs(args: string): string[] {
+  const result: string[] = [];
+  let depth = 0;
+  let current = '';
+
+  for (const char of args) {
+    if (char === '<' || char === '(' || char === '{' || char === '[') {
+      depth++;
+      current += char;
+    } else if (char === '>' || char === ')' || char === '}' || char === ']') {
+      depth--;
+      current += char;
+    } else if (char === ',' && depth === 0) {
+      result.push(current.trim());
+      current = '';
+    } else {
+      current += char;
+    }
+  }
+
+  if (current.trim() !== '') {
+    result.push(current.trim());
+  }
+
+  return result;
+}
+
+/**
+ * Extracts all type identifiers from a composite type string.
+ *
+ * Handles arrays ("Status[]"), generics ("Map<string, UserStatus>"),
+ * unions ("A | B"), and nested combinations.
+ *
+ * @param typeStr - The type string to parse.
+ * @returns An array of extracted type identifiers.
+ */
+function parseTypeIdentifiers(typeStr: string): string[] {
+  const identifiers: string[] = [];
+  // Primitives and container types to exclude from extracted identifiers
+  const primitives = new Set([
+    'string',
+    'number',
+    'boolean',
+    'null',
+    'undefined',
+    'void',
+    'any',
+    'unknown',
+    'never',
+    'object',
+    'bigint',
+    'symbol',
+    // Container types
+    'map',
+    'set',
+    'array',
+    'promise',
+    'record',
+    'partial',
+    'required',
+    'readonly',
+    'pick',
+    'omit',
+    'exclude',
+    'extract',
+  ]);
+
+  // Remove array brackets to get base type
+  const cleaned = typeStr.replace(/\[\]/g, '');
+
+  // Split by union (|) and intersection (&) operators
+  const unionParts = cleaned.split(/\s*[|&]\s*/);
+
+  for (const part of unionParts) {
+    const trimmedPart = part.trim();
+    if (trimmedPart === '') {
+      continue;
+    }
+
+    // Check for generic type: TypeName<...>
+    const genericMatch = /^([A-Za-z_][A-Za-z0-9_]*)\s*<(.+)>$/.exec(trimmedPart);
+    if (genericMatch?.[1] !== undefined && genericMatch[2] !== undefined) {
+      const baseName = genericMatch[1];
+      const argsStr = genericMatch[2];
+
+      // Add base type if not primitive
+      if (!primitives.has(baseName.toLowerCase())) {
+        identifiers.push(baseName);
+      }
+
+      // Recursively extract identifiers from generic arguments
+      const args = splitGenericArgs(argsStr);
+      for (const arg of args) {
+        identifiers.push(...parseTypeIdentifiers(arg));
+      }
+    } else {
+      // Simple type (possibly with parentheses for grouping)
+      const simpleType = trimmedPart.replace(/[()]/g, '').trim();
+      if (simpleType !== '' && !primitives.has(simpleType.toLowerCase())) {
+        identifiers.push(simpleType);
+      }
+    }
+  }
+
+  return identifiers;
+}
+
+/**
  * Maps a spec field type to a TypeScript type.
  *
  * @param specType - The type from the spec.
  * @returns The corresponding TypeScript type.
  */
 function mapSpecTypeToTypeScript(specType: string): string {
-  // Handle common type mappings
-  const typeMap: Record<string, string> = {
-    string: 'string',
-    number: 'number',
-    boolean: 'boolean',
-    integer: 'number',
-    float: 'number',
-    decimal: 'number',
-    date: 'Date',
-    datetime: 'Date',
-    timestamp: 'Date',
-    uuid: 'string',
-    email: 'string',
-    url: 'string',
-    json: 'unknown',
-    any: 'unknown',
-    void: 'void',
-    null: 'null',
-    undefined: 'undefined',
-  };
+  // Handle common type mappings using null-prototype object
+  const typeMap = Object.create(null) as Record<string, string>;
+  typeMap.string = 'string';
+  typeMap.number = 'number';
+  typeMap.boolean = 'boolean';
+  typeMap.integer = 'number';
+  typeMap.float = 'number';
+  typeMap.decimal = 'number';
+  typeMap.date = 'Date';
+  typeMap.datetime = 'Date';
+  typeMap.timestamp = 'Date';
+  typeMap.uuid = 'string';
+  typeMap.email = 'string';
+  typeMap.url = 'string';
+  typeMap.json = 'unknown';
+  typeMap.any = 'unknown';
+  typeMap.void = 'void';
+  typeMap.null = 'null';
+  typeMap.undefined = 'undefined';
 
   const lowerType = specType.toLowerCase();
 
-  // Check direct mapping
-  if (typeMap[lowerType] !== undefined) {
-    return typeMap[lowerType];
+  // Check direct mapping using Object.hasOwn() to prevent prototype pollution
+  if (Object.hasOwn(typeMap, lowerType)) {
+    // eslint-disable-next-line security/detect-object-injection -- safe: lowerType derived from controlled specType string, validated by Object.hasOwn()
+    const mapped = typeMap[lowerType];
+    if (mapped !== undefined) {
+      return mapped;
+    }
   }
 
   // Handle array types: Type[] or Array<Type>
@@ -141,16 +294,35 @@ function mapSpecTypeToTypeScript(specType: string): string {
 
   // Handle Map types: Map<K, V>
   if (specType.startsWith('Map<') && specType.endsWith('>')) {
-    return specType; // Keep as-is for TypeScript
+    const inner = specType.slice(4, -1);
+    const [keyType, valueType] = splitGenericArgs(inner);
+    if (keyType !== undefined && valueType !== undefined) {
+      const mappedKey = mapSpecTypeToTypeScript(keyType);
+      const mappedValue = mapSpecTypeToTypeScript(valueType);
+      return `Map<${mappedKey}, ${mappedValue}>`;
+    }
+    return specType;
   }
 
   // Handle Set types: Set<T>
   if (specType.startsWith('Set<') && specType.endsWith('>')) {
-    return specType; // Keep as-is for TypeScript
+    const inner = specType.slice(4, -1);
+    return `Set<${mapSpecTypeToTypeScript(inner)}>`;
   }
 
   // Otherwise, assume it's a custom type (e.g., reference to another data model)
   return specType;
+}
+
+/**
+ * Parsed constraint info with additional string representation for range values.
+ */
+interface ParsedConstraint {
+  type: SupportedConstraintType | 'unsupported';
+  params: Record<string, string | number>;
+  original: string;
+  _minStr?: string;
+  _maxStr?: string;
 }
 
 /**
@@ -159,11 +331,7 @@ function mapSpecTypeToTypeScript(specType: string): string {
  * @param constraint - The constraint string from the spec.
  * @returns The parsed constraint info or null if unrecognized.
  */
-function parseConstraint(constraint: string): {
-  type: SupportedConstraintType | 'unsupported';
-  params: Record<string, string | number>;
-  original: string;
-} {
+function parseConstraint(constraint: string): ParsedConstraint {
   const trimmed = constraint.trim().toLowerCase();
   const original = constraint.trim();
 
@@ -206,10 +374,12 @@ function parseConstraint(constraint: string): {
   }
 
   // Range: range(min, max), [min, max], min..max
+  /* eslint-disable security/detect-unsafe-regex -- Short constraint strings from spec */
   const rangeMatch =
-    /^(?:range\s*\(|\[)?\s*(-?\d+(?:\.\d+)?)\s*[,.\s]+\s*(-?\d+(?:\.\d+)?)\s*(?:\)|\])?$/.exec(
+    /^(?:range[ \t]*\(|\[)?[ \t]*(-?\d+(?:\.\d+)?)[ \t]*(?:(?:\.\.)|,)[ \t]*(-?\d+(?:\.\d+)?)[ \t]*(?:\)|\])?$/.exec(
       trimmed
     );
+  /* eslint-enable security/detect-unsafe-regex */
   if (rangeMatch?.[1] !== undefined && rangeMatch[2] !== undefined) {
     return {
       type: 'range',
@@ -218,11 +388,14 @@ function parseConstraint(constraint: string): {
         max: parseFloat(rangeMatch[2]),
       },
       original,
+      _minStr: rangeMatch[1],
+      _maxStr: rangeMatch[2],
     };
   }
 
   // Pattern: pattern(regex), regex(pattern), /pattern/
-  const patternMatch = /^(?:pattern|regex)\s*\(\s*["'/]?(.+?)["'/]?\s*\)$/.exec(trimmed);
+  // Use original (not lowercased) string to preserve case in regex patterns
+  const patternMatch = /^(?:pattern|regex)\s*\(\s*["'/]?(.+?)["'/]?\s*\)$/i.exec(original);
   if (patternMatch?.[1] !== undefined) {
     return { type: 'pattern', params: { pattern: patternMatch[1] }, original };
   }
@@ -247,12 +420,16 @@ function parseConstraint(constraint: string): {
  * @param baseType - The base TypeScript type.
  * @param constraintType - The constraint type.
  * @param params - Constraint parameters.
+ * @param minStr - Original string representation of min value (for Range).
+ * @param maxStr - Original string representation of max value (for Range).
  * @returns The branded type name.
  */
 function constraintToBrandedTypeName(
   baseType: string,
   constraintType: SupportedConstraintType,
-  params: Record<string, string | number>
+  params: Record<string, string | number>,
+  minStr?: string,
+  maxStr?: string
 ): string {
   // Map base type to a clean suffix
   const baseTypeSuffix =
@@ -275,8 +452,11 @@ function constraintToBrandedTypeName(
       return `MaxLength${String(params.max)}${baseTypeSuffix}`;
     case 'min_length':
       return `MinLength${String(params.min)}${baseTypeSuffix}`;
-    case 'range':
-      return `Range${String(params.min)}To${String(params.max)}${baseTypeSuffix}`;
+    case 'range': {
+      const rangeMin = minStr ?? String(params.min);
+      const rangeMax = maxStr ?? String(params.max);
+      return `Range${sanitizeNumberForIdentifier(rangeMin)}To${sanitizeNumberForIdentifier(rangeMax)}${baseTypeSuffix}`;
+    }
     case 'pattern':
       return `Patterned${baseTypeSuffix}`;
     case 'unique':
@@ -331,6 +511,8 @@ function constraintToInvariant(
  * @param params - Constraint parameters.
  * @param description - Description for JSDoc.
  * @param options - Generation options.
+ * @param minStr - Original string representation of min value (for Range).
+ * @param maxStr - Original string representation of max value (for Range).
  * @returns The branded type result or null if not applicable.
  */
 function generateBrandedTypeForConstraint(
@@ -338,14 +520,16 @@ function generateBrandedTypeForConstraint(
   constraintType: SupportedConstraintType,
   params: Record<string, string | number>,
   description: string,
-  options: TypeGeneratorOptions
+  options: TypeGeneratorOptions,
+  minStr?: string,
+  maxStr?: string
 ): BrandedTypeResult | null {
   // Skip constraints that don't generate branded types
   if (constraintType === 'unique' || constraintType === 'required') {
     return null;
   }
 
-  const typeName = constraintToBrandedTypeName(baseType, constraintType, params);
+  const typeName = constraintToBrandedTypeName(baseType, constraintType, params, minStr, maxStr);
   const invariant = constraintToInvariant(constraintType, params);
 
   // Create witness definition
@@ -464,6 +648,9 @@ function generateInterfaceDefinition(
   lines.push(`export interface ${modelName} {`);
 
   for (const field of model.fields) {
+    // Validate field name to prevent prototype pollution
+    validateKey(field.name, `${modelName}.${field.name}`);
+
     // Generate field JSDoc
     if (includeJsDoc) {
       const hasConstraints = field.constraints !== undefined && field.constraints.length > 0;
@@ -554,7 +741,9 @@ function processFieldConstraints(
       parsed.type,
       parsed.params,
       description,
-      options
+      options,
+      parsed._minStr,
+      parsed._maxStr
     );
 
     if (brandedResult !== null) {
@@ -579,7 +768,8 @@ function generateWitnessBrandedTypes(
 ): BrandedTypeResult[] {
   const results: BrandedTypeResult[] = [];
 
-  for (const [_witnessKey, witness] of Object.entries(witnesses)) {
+  for (const [witnessKey, witness] of Object.entries(witnesses)) {
+    validateKey(witnessKey, `witnesses.${witnessKey}`);
     // Get base type
     const baseType = witness.base_type ?? 'unknown';
 
@@ -724,6 +914,7 @@ export function generateTypeDefinitions(
   // Generate enum definitions
   if (spec.enums !== undefined) {
     for (const [enumName, specEnum] of Object.entries(spec.enums)) {
+      validateKey(enumName, `enums.${enumName}`);
       const enumDef = generateEnumDefinition(enumName, specEnum, includeJsDoc);
       allEnums.push(enumDef);
     }
@@ -733,6 +924,7 @@ export function generateTypeDefinitions(
   if (spec.data_models !== undefined) {
     // First pass: collect all branded types from field constraints
     for (const [modelName, model] of Object.entries(spec.data_models)) {
+      validateKey(modelName, `data_models.${modelName}`);
       for (const field of model.fields) {
         const { brandedTypes, fieldType, warnings } = processFieldConstraints(
           modelName,
@@ -869,19 +1061,71 @@ export function generateDomainTypeDefinitions(
 
   if (spec.data_models !== undefined) {
     for (const modelName of domainModels) {
+      // eslint-disable-next-line security/detect-object-injection -- safe: modelName comes from domainModels parameter array
       const model = spec.data_models[modelName];
       if (model !== undefined) {
+        // eslint-disable-next-line security/detect-object-injection -- safe: modelName comes from domainModels parameter array
         filteredDataModels[modelName] = model;
       }
     }
   }
 
-  // Create filtered spec - only include data_models if we have any
+  // Collect all type references from domain models to determine which enums and witnesses to include
+  const referencedTypes = new Set<string>();
+  for (const modelName of Object.keys(filteredDataModels)) {
+    // eslint-disable-next-line security/detect-object-injection -- safe: modelName comes from Object.keys iteration over controlled source
+    const model = filteredDataModels[modelName];
+    if (model === undefined) {
+      continue;
+    }
+    for (const field of model.fields) {
+      // Parse field.type to extract all referenced type identifiers
+      // This handles arrays (Status[]), generics (Map<string, UserStatus>), unions (A | B), etc.
+      const identifiers = parseTypeIdentifiers(field.type);
+      for (const identifier of identifiers) {
+        referencedTypes.add(identifier);
+      }
+    }
+  }
+
+  // Filter enums - only include those referenced by domain models
+  const filteredEnums: Record<string, SpecEnum> = {};
+  if (spec.enums !== undefined) {
+    for (const [enumName, enumDef] of Object.entries(spec.enums)) {
+      if (referencedTypes.has(enumName)) {
+        // eslint-disable-next-line security/detect-object-injection -- safe: enumName comes from Object.entries iteration over controlled source
+        filteredEnums[enumName] = enumDef;
+      }
+    }
+  }
+
+  // Filter witnesses - only include those referenced by domain models
+  const filteredWitnesses: Record<string, SpecWitness> = {};
+  if (spec.witnesses !== undefined) {
+    for (const [witnessKey, witnessDef] of Object.entries(spec.witnesses)) {
+      if (referencedTypes.has(witnessDef.name)) {
+        // eslint-disable-next-line security/detect-object-injection -- safe: witnessKey comes from Object.entries iteration over controlled source
+        filteredWitnesses[witnessKey] = witnessDef;
+      }
+    }
+  }
+
+  // Create filtered spec
   const filteredSpec: Spec = { ...spec };
   if (Object.keys(filteredDataModels).length > 0) {
     filteredSpec.data_models = filteredDataModels;
   } else {
     delete filteredSpec.data_models;
+  }
+  if (Object.keys(filteredEnums).length > 0) {
+    filteredSpec.enums = filteredEnums;
+  } else {
+    delete filteredSpec.enums;
+  }
+  if (Object.keys(filteredWitnesses).length > 0) {
+    filteredSpec.witnesses = filteredWitnesses;
+  } else {
+    delete filteredSpec.witnesses;
   }
 
   return generateTypeDefinitions(filteredSpec, options);

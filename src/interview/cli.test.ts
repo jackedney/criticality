@@ -3,10 +3,10 @@
  */
 
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import { mkdir, rm } from 'node:fs/promises';
+import { mkdtemp, rm } from 'node:fs/promises';
 import { join } from 'node:path';
-import { tmpdir } from 'node:os';
-import { homedir } from 'node:os';
+import os from 'node:os';
+import { safeMkdir } from '../utils/safe-fs.js';
 import {
   formatSectionHeader,
   formatSubsectionHeader,
@@ -619,20 +619,23 @@ describe('Interview CLI', () => {
   });
 
   describe('InterviewCli', () => {
-    let testDir: string;
     let projectId: string;
     let mockReader: InputReader;
     let mockWriter: OutputWriter;
     let outputLines: string[];
     let inputQueue: string[];
+    let tempDir: string;
 
     beforeEach(async () => {
-      testDir = join(tmpdir(), `interview-cli-test-${String(Date.now())}`);
+      // Create temp directory and mock homedir to use it
+      tempDir = await mkdtemp(join(os.tmpdir(), 'criticality-test-'));
+      vi.spyOn(os, 'homedir').mockReturnValue(tempDir);
+
       projectId = `test-project-${String(Date.now())}`;
 
-      // Create mock project directory
+      // Create mock project directory inside temp homedir
       const interviewDir = getInterviewDir(projectId);
-      await mkdir(interviewDir, { recursive: true });
+      await safeMkdir(interviewDir, { recursive: true });
 
       outputLines = [];
       inputQueue = [];
@@ -658,12 +661,11 @@ describe('Interview CLI', () => {
     });
 
     afterEach(async () => {
-      // Clean up project directory
-      const critDir = join(homedir(), '.criticality', 'projects', projectId);
-      await rm(critDir, { recursive: true, force: true }).catch((): void => {
-        // Ignore cleanup errors
-      });
-      await rm(testDir, { recursive: true, force: true }).catch((): void => {
+      // Restore homedir mock before cleanup
+      vi.restoreAllMocks();
+
+      // Clean up temp directory
+      await rm(tempDir, { recursive: true, force: true }).catch((): void => {
         // Ignore cleanup errors
       });
     });
@@ -780,6 +782,103 @@ describe('Interview CLI', () => {
       const state = cli.getState();
       expect(state?.delegationPoints.length).toBe(1);
       expect(state?.delegationPoints[0]?.phase).toBe('Constraints');
+    });
+
+    it('re-prompts when user chooses Continue in delegable phase', async () => {
+      // Create state at Constraints phase (delegable)
+      const existingState: InterviewState = {
+        version: '1.0.0',
+        projectId,
+        currentPhase: 'Constraints',
+        completedPhases: ['Discovery', 'Architecture'],
+        extractedRequirements: [],
+        features: [],
+        delegationPoints: [],
+        transcriptEntryCount: 4,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      };
+      await saveInterviewState(existingState);
+
+      // Resume with 'continue', then provide actual answer
+      inputQueue = ['1', 'System must handle 1000 concurrent users', 'quit'];
+
+      const cli = new InterviewCli(projectId, mockReader, mockWriter);
+      await cli.run();
+
+      const state = cli.getState();
+      expect(state?.delegationPoints.length).toBe(0);
+
+      // Verify the actual answer was recorded, not 'continue'
+      const requirement = state?.extractedRequirements.find(
+        (req) => req.sourcePhase === 'Constraints'
+      );
+      expect(requirement).toBeDefined();
+      expect(requirement?.text).toBe('System must handle 1000 concurrent users');
+      expect(requirement?.text).not.toBe('continue');
+      expect(requirement?.text).not.toBe('1');
+    });
+
+    it('re-prompts when user types "continue" text', async () => {
+      // Create state at Constraints phase (delegable)
+      const existingState: InterviewState = {
+        version: '1.0.0',
+        projectId,
+        currentPhase: 'Constraints',
+        completedPhases: ['Discovery', 'Architecture'],
+        extractedRequirements: [],
+        features: [],
+        delegationPoints: [],
+        transcriptEntryCount: 4,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      };
+      await saveInterviewState(existingState);
+
+      // Type "continue", then provide actual answer
+      inputQueue = ['continue', 'Max response time 200ms', 'quit'];
+
+      const cli = new InterviewCli(projectId, mockReader, mockWriter);
+      await cli.run();
+
+      const state = cli.getState();
+
+      // Verify the actual answer was recorded, not 'continue'
+      const requirement = state?.extractedRequirements.find(
+        (req) => req.sourcePhase === 'Constraints'
+      );
+      expect(requirement).toBeDefined();
+      expect(requirement?.text).toBe('Max response time 200ms');
+      expect(requirement?.text).not.toBe('continue');
+    });
+
+    it('handles quit during Continue re-prompt', async () => {
+      // Create state at Constraints phase (delegable)
+      const existingState: InterviewState = {
+        version: '1.0.0',
+        projectId,
+        currentPhase: 'Constraints',
+        completedPhases: ['Discovery', 'Architecture'],
+        extractedRequirements: [],
+        features: [],
+        delegationPoints: [],
+        transcriptEntryCount: 4,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      };
+      await saveInterviewState(existingState);
+
+      // Resume with 'continue', then quit
+      inputQueue = ['1', 'quit'];
+
+      const cli = new InterviewCli(projectId, mockReader, mockWriter);
+      await cli.run();
+
+      const state = cli.getState();
+
+      // Verify phase was not completed
+      expect(state?.currentPhase).toBe('Constraints');
+      expect(state?.extractedRequirements.length).toBe(0);
     });
 
     it('handles resume confirmation - continue', async () => {

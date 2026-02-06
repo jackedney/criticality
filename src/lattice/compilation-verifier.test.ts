@@ -13,9 +13,10 @@
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import * as fs from 'node:fs/promises';
+import { mkdtemp, rm } from 'node:fs/promises';
 import * as path from 'node:path';
 import * as os from 'node:os';
+import { safeWriteFile, safeMkdir } from '../utils/safe-fs.js';
 import {
   CompilationVerifier,
   createCompilationVerifier,
@@ -24,6 +25,7 @@ import {
   parseRepairResponse,
   verifyNoLogicLeakage,
   formatVerificationReport,
+  FilesNotResolvedError,
   type CategorizedError,
 } from './compilation-verifier.js';
 import type { CompilerError, TypeCheckResult } from '../adapters/typescript/typecheck.js';
@@ -59,12 +61,12 @@ describe('CompilationVerifier', () => {
   let tempDir: string;
 
   beforeEach(async () => {
-    tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'compilation-verifier-test-'));
+    tempDir = await mkdtemp(path.join(os.tmpdir(), 'compilation-verifier-test-'));
     mockRunTypeCheck.mockReset();
   });
 
   afterEach(async () => {
-    await fs.rm(tempDir, { recursive: true, force: true });
+    await rm(tempDir, { recursive: true, force: true });
   });
 
   describe('categorizeError', () => {
@@ -284,7 +286,7 @@ export type Id = string;
   describe('verifyNoLogicLeakage', () => {
     it('should pass for files with only TODO bodies', async () => {
       const testFile = path.join(tempDir, 'valid.ts');
-      await fs.writeFile(
+      await safeWriteFile(
         testFile,
         `
 export function add(a: number, b: number): number {
@@ -305,7 +307,7 @@ export function subtract(a: number, b: number): number {
 
     it('should detect functions with implementation bodies', async () => {
       const testFile = path.join(tempDir, 'impl.ts');
-      await fs.writeFile(
+      await safeWriteFile(
         testFile,
         `
 export function add(a: number, b: number): number {
@@ -322,7 +324,7 @@ export function add(a: number, b: number): number {
 
     it('should detect fetch calls as logic leakage', async () => {
       const testFile = path.join(tempDir, 'fetch.ts');
-      await fs.writeFile(
+      await safeWriteFile(
         testFile,
         `
 export async function getData(): Promise<unknown> {
@@ -339,7 +341,7 @@ export async function getData(): Promise<unknown> {
 
     it('should detect console.log as logic leakage', async () => {
       const testFile = path.join(tempDir, 'console.ts');
-      await fs.writeFile(
+      await safeWriteFile(
         testFile,
         `
 export function debug(msg: string): void {
@@ -376,7 +378,7 @@ export function debug(msg: string): void {
     it('should verify successful compilation', async () => {
       // Create a valid TypeScript file
       const testFile = path.join(tempDir, 'valid.ts');
-      await fs.writeFile(
+      await safeWriteFile(
         testFile,
         `
 export interface User {
@@ -392,7 +394,7 @@ export function getUser(id: string): User {
 
       // Create a minimal tsconfig.json
       const tsConfigPath = path.join(tempDir, 'tsconfig.json');
-      await fs.writeFile(
+      await safeWriteFile(
         tsConfigPath,
         JSON.stringify({
           compilerOptions: {
@@ -427,7 +429,7 @@ export function getUser(id: string): User {
     it('should enter BLOCKED state after max repair attempts', async () => {
       // Create an invalid TypeScript file
       const testFile = path.join(tempDir, 'invalid.ts');
-      await fs.writeFile(
+      await safeWriteFile(
         testFile,
         `
 export function broken(): UndefinedType {
@@ -438,7 +440,7 @@ export function broken(): UndefinedType {
 
       // Create a minimal tsconfig.json
       const tsConfigPath = path.join(tempDir, 'tsconfig.json');
-      await fs.writeFile(
+      await safeWriteFile(
         tsConfigPath,
         JSON.stringify({
           compilerOptions: {
@@ -492,7 +494,7 @@ export function broken(): UndefinedType {
     it('should run AST inspection after successful compilation', async () => {
       // Create a valid TypeScript file with TODO body
       const testFile = path.join(tempDir, 'todo.ts');
-      await fs.writeFile(
+      await safeWriteFile(
         testFile,
         `
 export function process(): void {
@@ -503,7 +505,7 @@ export function process(): void {
 
       // Create a minimal tsconfig.json
       const tsConfigPath = path.join(tempDir, 'tsconfig.json');
-      await fs.writeFile(
+      await safeWriteFile(
         tsConfigPath,
         JSON.stringify({
           compilerOptions: {
@@ -538,7 +540,7 @@ export function process(): void {
     it('should detect logic leakage in AST inspection', async () => {
       // Create a file with implementation logic (not TODO)
       const testFile = path.join(tempDir, 'leaky.ts');
-      await fs.writeFile(
+      await safeWriteFile(
         testFile,
         `
 export function add(a: number, b: number): number {
@@ -549,7 +551,7 @@ export function add(a: number, b: number): number {
 
       // Create a minimal tsconfig.json
       const tsConfigPath = path.join(tempDir, 'tsconfig.json');
-      await fs.writeFile(
+      await safeWriteFile(
         tsConfigPath,
         JSON.stringify({
           compilerOptions: {
@@ -586,7 +588,7 @@ export function add(a: number, b: number): number {
     it('should use model router for repairs when provided', async () => {
       // Create an invalid TypeScript file with a missing import
       const testFile = path.join(tempDir, 'missing-import.ts');
-      await fs.writeFile(
+      await safeWriteFile(
         testFile,
         `
 import type { MissingType } from './missing.js';
@@ -599,7 +601,7 @@ export function process(data: MissingType): void {
 
       // Create a minimal tsconfig.json
       const tsConfigPath = path.join(tempDir, 'tsconfig.json');
-      await fs.writeFile(
+      await safeWriteFile(
         tsConfigPath,
         JSON.stringify({
           compilerOptions: {
@@ -747,6 +749,127 @@ export interface MissingType {
 
       expect(report).toContain('AST INSPECTION');
       expect(report).toContain('VIOLATIONS FOUND');
+    });
+  });
+
+  describe('path normalization', () => {
+    it('should derive file list when files is undefined', async () => {
+      const testFile = path.join(tempDir, 'derived.ts');
+      await safeWriteFile(
+        testFile,
+        `
+export function add(a: number, b: number): number {
+  throw new Error('TODO');
+}
+`
+      );
+
+      mockRunTypeCheck.mockResolvedValue(createTypeCheckResult());
+
+      const verifier = createCompilationVerifier({
+        projectPath: tempDir,
+        runAstInspection: true,
+        logger: vi.fn(),
+      });
+
+      const result = await verifier.verify();
+
+      expect(result.success).toBe(true);
+      expect(result.astInspection).toBeDefined();
+    });
+
+    it('should throw FilesNotResolvedError when no files found', async () => {
+      // Create empty directory
+      const emptyDir = path.join(tempDir, 'empty');
+      await safeMkdir(emptyDir, { recursive: true });
+
+      const verifier = createCompilationVerifier({
+        projectPath: emptyDir,
+        logger: vi.fn(),
+      });
+
+      await expect(verifier.verify()).rejects.toThrow(FilesNotResolvedError);
+    });
+
+    it('should apply repairs with relative paths correctly', async () => {
+      const testFile = path.join(tempDir, 'fix.ts');
+      await safeWriteFile(
+        testFile,
+        `
+export function broken(): void {
+  throw new Error('TODO');
+}
+`
+      );
+
+      const testConfigPath = path.join(tempDir, 'tsconfig.json');
+      await safeWriteFile(
+        testConfigPath,
+        JSON.stringify({
+          compilerOptions: {
+            strict: true,
+            target: 'ES2020',
+            module: 'ES2020',
+            moduleResolution: 'node',
+            noEmit: true,
+            skipLibCheck: true,
+          },
+          include: ['*.ts'],
+        })
+      );
+
+      // Mock type check that fails initially, then succeeds
+      const error: CompilerError = {
+        file: 'fix.ts',
+        line: 1,
+        column: 1,
+        code: 'TS2304',
+        message: "Cannot find name 'Test'",
+        typeDetails: null,
+      };
+      mockRunTypeCheck
+        .mockResolvedValueOnce(
+          createTypeCheckResult({
+            success: false,
+            errors: [error],
+            errorCount: 1,
+          })
+        )
+        .mockResolvedValueOnce(createTypeCheckResult());
+
+      const mockComplete = vi.fn().mockResolvedValue({
+        success: true,
+        response: {
+          content: `
+--- FILE: ./fix.ts ---
+export function fixed(): void {
+  throw new Error('TODO');
+}
+--- END FILE ---
+`,
+          usage: { promptTokens: 10, completionTokens: 50, totalTokens: 60 },
+          metadata: { modelId: 'test-model', provider: 'test', latencyMs: 100 },
+        },
+      } as ModelRouterResult);
+
+      const mockRouter: ModelRouter = {
+        prompt: vi.fn(),
+        complete: mockComplete,
+        stream: vi.fn() as unknown as ModelRouter['stream'],
+      };
+
+      const verifier = createCompilationVerifier({
+        projectPath: tempDir,
+        files: ['fix.ts'],
+        maxRepairAttempts: 2,
+        modelRouter: mockRouter,
+        logger: vi.fn(),
+      });
+
+      const result = await verifier.verify();
+
+      expect(mockComplete).toHaveBeenCalled();
+      expect(result.attempts.length).toBeGreaterThan(0);
     });
   });
 });

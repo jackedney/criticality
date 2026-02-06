@@ -484,6 +484,7 @@ describe('OpenCodeClient', () => {
       await client.prompt(alias, 'Hello');
 
       // Get the expected model from config
+      // eslint-disable-next-line security/detect-object-injection -- safe: alias is typed as ModelAlias with known literal keys
       const configModel = config.models[aliasToConfig[alias]];
       // Check that --model was called with some value (the model gets transformed)
       expect(mockExeca).toHaveBeenCalledWith(

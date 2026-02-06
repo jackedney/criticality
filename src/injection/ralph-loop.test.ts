@@ -12,20 +12,21 @@
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import * as fs from 'node:fs/promises';
+import * as fc from 'fast-check';
+import { mkdtemp, rm } from 'node:fs/promises';
 import * as path from 'node:path';
 import * as os from 'node:os';
 import { Project } from 'ts-morph';
+import { safeMkdir, safeWriteFile, safeReadFile } from '../utils/safe-fs.js';
 import {
   createRalphLoop,
   generateImplementationPrompt,
   parseImplementationResponse,
-  extractRequiredTypes,
-  extractWitnessTypes,
   buildFunctionContext,
   formatRalphLoopReport,
   type FunctionContext,
   type RalphLoopResult,
+  type ImplementationAttempt,
 } from './ralph-loop.js';
 import type { TodoFunction } from '../adapters/typescript/ast.js';
 import type { ModelRouter, ModelRouterResult, ModelRouterRequest } from '../router/types.js';
@@ -295,143 +296,6 @@ return sum;`;
   });
 });
 
-describe('extractRequiredTypes', () => {
-  let tempDir: string;
-  let project: Project;
-
-  beforeEach(async () => {
-    tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'ralph-loop-test-'));
-    project = new Project({
-      useInMemoryFileSystem: true,
-    });
-  });
-
-  afterEach(async () => {
-    await fs.rm(tempDir, { recursive: true, force: true });
-  });
-
-  it('should extract interface types from signature', () => {
-    project.createSourceFile(
-      '/test/file.ts',
-      `
-interface UserData {
-  name: string;
-  age: number;
-}
-
-function processUser(data: UserData): void {
-  throw new Error('TODO');
-}
-`
-    );
-
-    const todoFunction: TodoFunction = {
-      name: 'processUser',
-      filePath: '/test/file.ts',
-      line: 7,
-      signature: 'function processUser(data: UserData): void',
-      hasTodoBody: true,
-    };
-
-    const types = extractRequiredTypes(project, todoFunction);
-
-    expect(types.length).toBe(1);
-    expect(types[0]).toContain('interface UserData');
-  });
-
-  it('should extract type alias from signature', () => {
-    project.createSourceFile(
-      '/test/file.ts',
-      `
-type Result = { success: boolean; data?: string };
-
-function getResult(): Result {
-  throw new Error('TODO');
-}
-`
-    );
-
-    const todoFunction: TodoFunction = {
-      name: 'getResult',
-      filePath: '/test/file.ts',
-      line: 5,
-      signature: 'function getResult(): Result',
-      hasTodoBody: true,
-    };
-
-    const types = extractRequiredTypes(project, todoFunction);
-
-    expect(types.length).toBe(1);
-    expect(types[0]).toContain('type Result');
-  });
-
-  it('should not include built-in types', () => {
-    project.createSourceFile(
-      '/test/file.ts',
-      `
-function process(data: string): Promise<number> {
-  throw new Error('TODO');
-}
-`
-    );
-
-    const todoFunction: TodoFunction = {
-      name: 'process',
-      filePath: '/test/file.ts',
-      line: 2,
-      signature: 'function process(data: string): Promise<number>',
-      hasTodoBody: true,
-    };
-
-    const types = extractRequiredTypes(project, todoFunction);
-
-    expect(types.length).toBe(0);
-  });
-});
-
-describe('extractWitnessTypes', () => {
-  let project: Project;
-
-  beforeEach(() => {
-    project = new Project({
-      useInMemoryFileSystem: true,
-    });
-  });
-
-  it('should extract branded witness types', () => {
-    project.createSourceFile(
-      '/test/file.ts',
-      `
-type NonEmptyString = string & { readonly __brand: 'NonEmptyString' };
-type PositiveNumber = number & { readonly __brand: 'PositiveNumber' };
-type NormalType = string;
-`
-    );
-
-    const typeNames = new Set(['NonEmptyString', 'PositiveNumber', 'NormalType']);
-    const witnesses = extractWitnessTypes(project, '/test/file.ts', typeNames);
-
-    expect(witnesses.length).toBe(2);
-    expect(witnesses.some((w) => w.includes('NonEmptyString'))).toBe(true);
-    expect(witnesses.some((w) => w.includes('PositiveNumber'))).toBe(true);
-  });
-
-  it('should not extract non-branded types', () => {
-    project.createSourceFile(
-      '/test/file.ts',
-      `
-type NormalType = string;
-interface SomeInterface { name: string; }
-`
-    );
-
-    const typeNames = new Set(['NormalType', 'SomeInterface']);
-    const witnesses = extractWitnessTypes(project, '/test/file.ts', typeNames);
-
-    expect(witnesses.length).toBe(0);
-  });
-});
-
 describe('buildFunctionContext', () => {
   let project: Project;
 
@@ -510,20 +374,20 @@ describe('RalphLoop', () => {
   let tempDir: string;
 
   beforeEach(async () => {
-    tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'ralph-loop-test-'));
+    tempDir = await mkdtemp(path.join(os.tmpdir(), 'ralph-loop-test-'));
     mockRunTypeCheck.mockReset();
     mockRunTests.mockReset();
   });
 
   afterEach(async () => {
-    await fs.rm(tempDir, { recursive: true, force: true });
+    await rm(tempDir, { recursive: true, force: true });
   });
 
   it('should return success with no TODO functions', async () => {
     // Create project with no TODOs
     const srcDir = path.join(tempDir, 'src');
-    await fs.mkdir(srcDir, { recursive: true });
-    await fs.writeFile(
+    await safeMkdir(srcDir, { recursive: true });
+    await safeWriteFile(
       path.join(srcDir, 'index.ts'),
       `export function add(a: number, b: number): number {
   return a + b;
@@ -532,13 +396,15 @@ describe('RalphLoop', () => {
     );
 
     // Create tsconfig
-    await fs.writeFile(
+    await safeWriteFile(
       path.join(tempDir, 'tsconfig.json'),
       JSON.stringify({
         compilerOptions: {
           target: 'ES2020',
           module: 'NodeNext',
           strict: true,
+          noUncheckedIndexedAccess: true,
+          exactOptionalPropertyTypes: true,
         },
         include: ['src/**/*.ts'],
       })
@@ -563,8 +429,8 @@ describe('RalphLoop', () => {
   it('should implement TODO function successfully', async () => {
     // Create project with TODO function
     const srcDir = path.join(tempDir, 'src');
-    await fs.mkdir(srcDir, { recursive: true });
-    await fs.writeFile(
+    await safeMkdir(srcDir, { recursive: true });
+    await safeWriteFile(
       path.join(srcDir, 'math.ts'),
       `/**
  * @ensures result === a + b
@@ -576,17 +442,22 @@ export function add(a: number, b: number): number {
     );
 
     // Create tsconfig
-    await fs.writeFile(
+    await safeWriteFile(
       path.join(tempDir, 'tsconfig.json'),
       JSON.stringify({
         compilerOptions: {
           target: 'ES2020',
           module: 'NodeNext',
           strict: true,
+          noUncheckedIndexedAccess: true,
+          exactOptionalPropertyTypes: true,
         },
         include: ['src/**/*.ts'],
       })
     );
+
+    // Create eslint config
+    await safeWriteFile(path.join(tempDir, 'eslint.config.js'), 'export default [];\n');
 
     const mockRouter = createMockModelRouter('return a + b;');
     mockRunTypeCheck.mockResolvedValue(createSuccessTypeCheck());
@@ -612,7 +483,7 @@ export function add(a: number, b: number): number {
     const completeMock = vi.mocked(mockRouter.complete);
     const firstCall = completeMock.mock.calls[0];
     expect(firstCall).toBeDefined();
-    // eslint-disable-next-line @typescript-eslint/non-nullable-type-assertion-style -- using ?. after expect assertion
+
     const callArgs = firstCall?.[0] as ModelRouterRequest;
     expect(callArgs.modelAlias).toBe('worker');
     expect(callArgs.prompt).toContain('function add');
@@ -622,8 +493,8 @@ export function add(a: number, b: number): number {
   it('should reject implementation on compilation failure', async () => {
     // Create project with TODO function
     const srcDir = path.join(tempDir, 'src');
-    await fs.mkdir(srcDir, { recursive: true });
-    await fs.writeFile(
+    await safeMkdir(srcDir, { recursive: true });
+    await safeWriteFile(
       path.join(srcDir, 'math.ts'),
       `export function add(a: number, b: number): number {
   throw new Error('TODO');
@@ -632,13 +503,15 @@ export function add(a: number, b: number): number {
     );
 
     // Create tsconfig
-    await fs.writeFile(
+    await safeWriteFile(
       path.join(tempDir, 'tsconfig.json'),
       JSON.stringify({
         compilerOptions: {
           target: 'ES2020',
           module: 'NodeNext',
           strict: true,
+          noUncheckedIndexedAccess: true,
+          exactOptionalPropertyTypes: true,
         },
         include: ['src/**/*.ts'],
       })
@@ -664,15 +537,15 @@ export function add(a: number, b: number): number {
     expect(result.attempts[0]?.rejectionReason).toContain('Compilation failed');
 
     // Verify the original file is restored (rollback)
-    const content = await fs.readFile(path.join(srcDir, 'math.ts'), 'utf-8');
+    const content = await safeReadFile(path.join(srcDir, 'math.ts'), 'utf-8');
     expect(content).toContain("throw new Error('TODO')");
   });
 
   it('should reject implementation on test failure', async () => {
     // Create project with TODO function
     const srcDir = path.join(tempDir, 'src');
-    await fs.mkdir(srcDir, { recursive: true });
-    await fs.writeFile(
+    await safeMkdir(srcDir, { recursive: true });
+    await safeWriteFile(
       path.join(srcDir, 'math.ts'),
       `export function add(a: number, b: number): number {
   throw new Error('TODO');
@@ -681,7 +554,7 @@ export function add(a: number, b: number): number {
     );
 
     // Create test file
-    await fs.writeFile(
+    await safeWriteFile(
       path.join(srcDir, 'math.test.ts'),
       `import { add } from './math.js';
 import { describe, it, expect } from 'vitest';
@@ -695,17 +568,22 @@ describe('add', () => {
     );
 
     // Create tsconfig
-    await fs.writeFile(
+    await safeWriteFile(
       path.join(tempDir, 'tsconfig.json'),
       JSON.stringify({
         compilerOptions: {
           target: 'ES2020',
           module: 'NodeNext',
           strict: true,
+          noUncheckedIndexedAccess: true,
+          exactOptionalPropertyTypes: true,
         },
         include: ['src/**/*.ts'],
       })
     );
+
+    // Create eslint config
+    await safeWriteFile(path.join(tempDir, 'eslint.config.js'), 'export default [];\n');
 
     // Return wrong implementation
     const mockRouter = createMockModelRouter('return a - b;'); // Wrong!
@@ -729,8 +607,8 @@ describe('add', () => {
   it('should reject implementation with syntax error before injection (syntax validation)', async () => {
     // Create project with TODO function
     const srcDir = path.join(tempDir, 'src');
-    await fs.mkdir(srcDir, { recursive: true });
-    await fs.writeFile(
+    await safeMkdir(srcDir, { recursive: true });
+    await safeWriteFile(
       path.join(srcDir, 'sort.ts'),
       `export function sortArray(arr: number[]): number[] {
   throw new Error('TODO');
@@ -739,13 +617,15 @@ describe('add', () => {
     );
 
     // Create tsconfig
-    await fs.writeFile(
+    await safeWriteFile(
       path.join(tempDir, 'tsconfig.json'),
       JSON.stringify({
         compilerOptions: {
           target: 'ES2020',
           module: 'NodeNext',
           strict: true,
+          noUncheckedIndexedAccess: true,
+          exactOptionalPropertyTypes: true,
         },
         include: ['src/**/*.ts'],
       })
@@ -770,15 +650,15 @@ describe('add', () => {
     expect(result.attempts[0]?.rejectionReason).toContain('Failed to inject');
 
     // Verify the original file is NOT modified (syntax error caught before write)
-    const content = await fs.readFile(path.join(srcDir, 'sort.ts'), 'utf-8');
+    const content = await safeReadFile(path.join(srcDir, 'sort.ts'), 'utf-8');
     expect(content).toContain("throw new Error('TODO')");
   });
 
   it('should accept valid implementation like "return arr.sort()"', async () => {
     // Create project with TODO function
     const srcDir = path.join(tempDir, 'src');
-    await fs.mkdir(srcDir, { recursive: true });
-    await fs.writeFile(
+    await safeMkdir(srcDir, { recursive: true });
+    await safeWriteFile(
       path.join(srcDir, 'sort.ts'),
       `export function sortArray(arr: number[]): number[] {
   throw new Error('TODO');
@@ -787,17 +667,22 @@ describe('add', () => {
     );
 
     // Create tsconfig
-    await fs.writeFile(
+    await safeWriteFile(
       path.join(tempDir, 'tsconfig.json'),
       JSON.stringify({
         compilerOptions: {
           target: 'ES2020',
           module: 'NodeNext',
           strict: true,
+          noUncheckedIndexedAccess: true,
+          exactOptionalPropertyTypes: true,
         },
         include: ['src/**/*.ts'],
       })
     );
+
+    // Create eslint config
+    await safeWriteFile(path.join(tempDir, 'eslint.config.js'), 'export default [];\n');
 
     // Return valid implementation - example from acceptance criteria
     const mockRouter = createMockModelRouter('return arr.sort();');
@@ -817,7 +702,7 @@ describe('add', () => {
     expect(result.attempts[0]?.accepted).toBe(true);
 
     // Verify the implementation was injected
-    const content = await fs.readFile(path.join(srcDir, 'sort.ts'), 'utf-8');
+    const content = await safeReadFile(path.join(srcDir, 'sort.ts'), 'utf-8');
     expect(content).toContain('return arr.sort();');
     expect(content).not.toContain("throw new Error('TODO')");
   });
@@ -825,8 +710,8 @@ describe('add', () => {
   it('should handle model errors gracefully', async () => {
     // Create project with TODO function
     const srcDir = path.join(tempDir, 'src');
-    await fs.mkdir(srcDir, { recursive: true });
-    await fs.writeFile(
+    await safeMkdir(srcDir, { recursive: true });
+    await safeWriteFile(
       path.join(srcDir, 'math.ts'),
       `export function add(a: number, b: number): number {
   throw new Error('TODO');
@@ -835,17 +720,22 @@ describe('add', () => {
     );
 
     // Create tsconfig
-    await fs.writeFile(
+    await safeWriteFile(
       path.join(tempDir, 'tsconfig.json'),
       JSON.stringify({
         compilerOptions: {
           target: 'ES2020',
           module: 'NodeNext',
           strict: true,
+          noUncheckedIndexedAccess: true,
+          exactOptionalPropertyTypes: true,
         },
         include: ['src/**/*.ts'],
       })
     );
+
+    // Create eslint config
+    await safeWriteFile(path.join(tempDir, 'eslint.config.js'), 'export default [];\n');
 
     const mockRouter = createMockModelRouter(new Error('API rate limit exceeded'));
 
@@ -969,5 +859,214 @@ describe('formatRalphLoopReport', () => {
     expect(report).toContain('Compilation failed');
     expect(report).toContain('REMAINING TODO FUNCTIONS');
     expect(report).toContain('divide');
+  });
+
+  describe('property-based tests', () => {
+    it('should contain SUCCESS iff result.success is true', () => {
+      fc.assert(
+        fc.property(
+          fc.record({
+            success: fc.boolean(),
+            totalFunctions: fc.nat(),
+            implementedCount: fc.nat(),
+            failedCount: fc.nat(),
+            attempts: fc.constant([]),
+            totalDurationMs: fc.nat(),
+            remainingTodos: fc.constant([]),
+            circuitTripped: fc.boolean(),
+          }),
+          (result) => {
+            const report = formatRalphLoopReport(result);
+
+            if (result.success) {
+              expect(report).toContain('SUCCESS');
+              expect(report).not.toContain('INCOMPLETE');
+            } else {
+              expect(report).toContain('INCOMPLETE');
+              expect(report).not.toContain('SUCCESS');
+            }
+          }
+        )
+      );
+    });
+
+    it('should reflect counts in the report text', () => {
+      fc.assert(
+        fc.property(
+          fc.record({
+            success: fc.boolean(),
+            totalFunctions: fc.nat({ max: 100 }),
+            implementedCount: fc.nat({ max: 100 }),
+            failedCount: fc.nat({ max: 100 }),
+            attempts: fc.constant([]),
+            totalDurationMs: fc.nat(),
+            remainingTodos: fc.constant([]),
+            circuitTripped: fc.boolean(),
+          }),
+          (result) => {
+            const report = formatRalphLoopReport(result);
+
+            expect(report).toContain(`Total Functions: ${String(result.totalFunctions)}`);
+            expect(report).toContain(`Implemented: ${String(result.implementedCount)}`);
+            expect(report).toContain(`Failed: ${String(result.failedCount)}`);
+          }
+        )
+      );
+    });
+
+    it('should show [ACCEPTED] for accepted attempts and [REJECTED] for rejected ones', () => {
+      const todoFunctionArb = fc.record({
+        name: fc.string({ minLength: 1, maxLength: 20 }),
+        filePath: fc.constant('/test/file.ts'),
+        line: fc.nat({ max: 1000 }),
+        signature: fc.string({ minLength: 1 }),
+        hasTodoBody: fc.constant(true as const),
+      });
+
+      const attemptArb = fc
+        .record({
+          function: todoFunctionArb,
+          accepted: fc.boolean(),
+          generatedBody: fc.string(),
+          compilationResult: fc.oneof(
+            fc.constant(createSuccessTypeCheck()),
+            fc.constant(createFailedTypeCheck('error'))
+          ),
+          rejectionReason: fc.option(fc.string(), { nil: undefined }),
+          durationMs: fc.nat({ max: 10000 }),
+        })
+        .map((r): ImplementationAttempt => {
+          // Handle exactOptionalPropertyTypes - omit the key when undefined
+          const { rejectionReason, ...rest } = r;
+          if (rejectionReason === undefined) {
+            return rest;
+          }
+          return { ...rest, rejectionReason };
+        });
+
+      fc.assert(
+        fc.property(
+          fc.record({
+            success: fc.boolean(),
+            totalFunctions: fc.nat(),
+            implementedCount: fc.nat(),
+            failedCount: fc.nat(),
+            attempts: fc.array(attemptArb, { minLength: 1, maxLength: 10 }),
+            totalDurationMs: fc.nat(),
+            remainingTodos: fc.constant([]),
+            circuitTripped: fc.boolean(),
+          }),
+          (result) => {
+            const report = formatRalphLoopReport(result);
+
+            for (const attempt of result.attempts) {
+              if (attempt.accepted) {
+                expect(report).toContain(`[ACCEPTED] ${attempt.function.name}`);
+              } else {
+                expect(report).toContain(`[REJECTED] ${attempt.function.name}`);
+              }
+            }
+          }
+        )
+      );
+    });
+
+    it('should list all remaining todo function names under REMAINING TODO FUNCTIONS', () => {
+      const todoFunctionArb = fc.record({
+        name: fc.string({ minLength: 1, maxLength: 20 }),
+        filePath: fc.constant('/test/file.ts'),
+        line: fc.nat({ max: 1000 }),
+        signature: fc.string({ minLength: 1 }),
+        hasTodoBody: fc.constant(true as const),
+      });
+
+      fc.assert(
+        fc.property(
+          fc.record({
+            success: fc.boolean(),
+            totalFunctions: fc.nat(),
+            implementedCount: fc.nat(),
+            failedCount: fc.nat(),
+            attempts: fc.constant([]),
+            totalDurationMs: fc.nat(),
+            remainingTodos: fc.array(todoFunctionArb, { minLength: 1, maxLength: 10 }),
+            circuitTripped: fc.boolean(),
+          }),
+          (result) => {
+            const report = formatRalphLoopReport(result);
+
+            if (result.remainingTodos.length > 0) {
+              expect(report).toContain('REMAINING TODO FUNCTIONS');
+              for (const todo of result.remainingTodos) {
+                expect(report).toContain(todo.name);
+              }
+            }
+          }
+        )
+      );
+    });
+
+    it('should be consistent: counts match attempts array', () => {
+      const todoFunctionArb = fc.record({
+        name: fc.string({ minLength: 1, maxLength: 20 }),
+        filePath: fc.constant('/test/file.ts'),
+        line: fc.nat({ max: 1000 }),
+        signature: fc.string({ minLength: 1 }),
+        hasTodoBody: fc.constant(true as const),
+      });
+
+      const attemptArb = fc
+        .record({
+          function: todoFunctionArb,
+          accepted: fc.boolean(),
+          generatedBody: fc.string(),
+          compilationResult: fc.oneof(
+            fc.constant(createSuccessTypeCheck()),
+            fc.constant(createFailedTypeCheck('error'))
+          ),
+          rejectionReason: fc.option(fc.string(), { nil: undefined }),
+          durationMs: fc.nat({ max: 10000 }),
+        })
+        .map((r): ImplementationAttempt => {
+          // Handle exactOptionalPropertyTypes - omit the key when undefined
+          const { rejectionReason, ...rest } = r;
+          if (rejectionReason === undefined) {
+            return rest;
+          }
+          return { ...rest, rejectionReason };
+        });
+
+      fc.assert(
+        fc.property(fc.array(attemptArb, { maxLength: 20 }), (attempts) => {
+          const acceptedCount = attempts.filter((a) => a.accepted).length;
+          const rejectedCount = attempts.filter((a) => !a.accepted).length;
+
+          const result: RalphLoopResult = {
+            success: rejectedCount === 0,
+            totalFunctions: attempts.length,
+            implementedCount: acceptedCount,
+            failedCount: rejectedCount,
+            attempts,
+            totalDurationMs: attempts.reduce((sum, a) => sum + a.durationMs, 0),
+            remainingTodos: [],
+            circuitTripped: false,
+          };
+
+          const report = formatRalphLoopReport(result);
+
+          // Verify counts are reflected correctly
+          expect(report).toContain(`Total Functions: ${String(attempts.length)}`);
+          expect(report).toContain(`Implemented: ${String(acceptedCount)}`);
+          expect(report).toContain(`Failed: ${String(rejectedCount)}`);
+
+          // Verify status matches success flag
+          if (rejectedCount === 0) {
+            expect(report).toContain('SUCCESS');
+          } else {
+            expect(report).toContain('INCOMPLETE');
+          }
+        })
+      );
+    });
   });
 });

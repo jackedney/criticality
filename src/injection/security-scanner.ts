@@ -16,6 +16,22 @@ import { ESLint } from 'eslint';
 import type { VulnerabilityType, FailureType } from './escalation.js';
 
 /**
+ * Error thrown when a critical security vulnerability is detected and failFastOnCritical is true.
+ */
+export class FailFastError extends Error {
+  /** The critical vulnerabilities that caused the failure. */
+  readonly vulnerabilities: readonly VulnerabilityDetails[];
+
+  constructor(vulnerabilities: readonly VulnerabilityDetails[]) {
+    super(
+      `Critical security vulnerability detected: ${String(vulnerabilities.length)} critical issue(s) found`
+    );
+    this.name = 'FailFastError';
+    this.vulnerabilities = vulnerabilities;
+  }
+}
+
+/**
  * Type for ESLint lint result messages.
  */
 interface ESLintLintMessage {
@@ -213,6 +229,8 @@ const RULE_TO_CWE: Readonly<Record<string, keyof typeof CWE_MAPPINGS>> = {
   'security/detect-exec': 'command-injection',
   'security/detect-eval-with-expression': 'eval',
   'security/detect-implied-eval': 'eval',
+  'security/detect-no-csrf-before': 'no-csrf',
+  'security/detect-no-csrf-after': 'no-csrf',
 } as const;
 
 /**
@@ -239,8 +257,8 @@ function determineSeverity(
     return 'high';
   }
 
-  // Command injection is critical
-  if (vulnerabilityType === 'injection' && (ruleId.includes('exec') || ruleId.includes('eval'))) {
+  // Eval injection is critical
+  if (vulnerabilityType === 'injection' && ruleId.includes('eval')) {
     return 'critical';
   }
 
@@ -271,12 +289,15 @@ function parseESLintResult(result: ESLintLintResult, filePath: string): Vulnerab
       continue;
     }
 
+    // eslint-disable-next-line security/detect-object-injection -- ruleId is validated by startsWith('security/') check
     const vulnerabilityType = RULE_TO_VULNERABILITY[ruleId];
     if (vulnerabilityType === undefined) {
       continue;
     }
 
+    // eslint-disable-next-line security/detect-object-injection -- ruleId is validated by startsWith('security/') check
     const cweKey = RULE_TO_CWE[ruleId];
+    // eslint-disable-next-line security/detect-object-injection -- cweKey is validated above and CWE_MAPPINGS has known literal keys
     const cweInfo = cweKey !== undefined ? CWE_MAPPINGS[cweKey] : undefined;
     const severity = determineSeverity(ruleId, vulnerabilityType);
 
@@ -345,6 +366,12 @@ export async function runSecurityScan(options: SecurityScanOptions): Promise<Sec
       const filePath = result.filePath;
       const vulnerabilities = parseESLintResult(result, filePath);
       allVulnerabilities.push(...vulnerabilities);
+
+      const criticalVulnerabilities = vulnerabilities.filter((v) => v.severity === 'critical');
+      if (criticalVulnerabilities.length > 0 && options.failFastOnCritical !== false) {
+        logger('  [BLOCKING] Critical security vulnerability detected - aborting scan');
+        throw new FailFastError(criticalVulnerabilities);
+      }
     }
 
     const criticalVulnerabilities = allVulnerabilities.filter((v) => v.severity === 'critical');
@@ -371,13 +398,7 @@ export async function runSecurityScan(options: SecurityScanOptions): Promise<Sec
     return scanResult;
   } catch (error) {
     logger(`  Security scan error: ${error instanceof Error ? error.message : String(error)}`);
-
-    return {
-      hasVulnerabilities: false,
-      hasCriticalVulnerabilities: false,
-      vulnerabilities: [],
-      durationMs: Date.now() - startTime,
-    };
+    throw error;
   }
 }
 

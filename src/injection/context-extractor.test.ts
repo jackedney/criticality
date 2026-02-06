@@ -14,7 +14,8 @@
  */
 
 import { describe, it, expect, beforeEach } from 'vitest';
-import { Project } from 'ts-morph';
+import { Project, ScriptTarget, ModuleKind } from 'ts-morph';
+import * as fc from 'fast-check';
 import {
   extractContext,
   serializeContextForPrompt,
@@ -30,8 +31,10 @@ describe('extractContext', () => {
       useInMemoryFileSystem: true,
       compilerOptions: {
         strict: true,
-        target: 99, // ESNext
-        module: 199, // NodeNext
+        noUncheckedIndexedAccess: true,
+        exactOptionalPropertyTypes: true,
+        target: ScriptTarget.ESNext,
+        module: ModuleKind.NodeNext,
       },
     });
   });
@@ -651,6 +654,158 @@ function process(input: Level1): void {
     });
   });
 
+  describe('class method/constructor/accessor type extraction', () => {
+    it('should extract types from class methods', () => {
+      project.createSourceFile(
+        '/test/class-methods.ts',
+        `
+interface Data {
+  value: string;
+}
+
+interface Result {
+  success: boolean;
+}
+
+class Processor {
+  process(data: Data): Result {
+    throw new Error('TODO');
+  }
+}
+
+function createProcessor(): Processor {
+  throw new Error('TODO');
+}
+`
+      );
+
+      const todoFunction: TodoFunction = {
+        name: 'createProcessor',
+        filePath: '/test/class-methods.ts',
+        line: 14,
+        signature: 'function createProcessor(): Processor',
+        hasTodoBody: true,
+      };
+
+      const context = extractContext(project, todoFunction);
+
+      // Should extract Processor class which references Data and Result
+      const typeNames = context.requiredTypes.map((t) => t.name).sort();
+      expect(typeNames).toContain('Processor');
+      expect(typeNames).toContain('Data');
+      expect(typeNames).toContain('Result');
+    });
+
+    it('should extract types from class constructors', () => {
+      project.createSourceFile(
+        '/test/class-ctor.ts',
+        `
+interface Config {
+  timeout: number;
+}
+
+class Service {
+  constructor(config: Config) {
+    throw new Error('TODO');
+  }
+}
+
+function createService(config: Config): Service {
+  throw new Error('TODO');
+}
+`
+      );
+
+      const todoFunction: TodoFunction = {
+        name: 'createService',
+        filePath: '/test/class-ctor.ts',
+        line: 12,
+        signature: 'function createService(config: Config): Service',
+        hasTodoBody: true,
+      };
+
+      const context = extractContext(project, todoFunction);
+
+      // Should extract Service class which references Config
+      const typeNames = context.requiredTypes.map((t) => t.name).sort();
+      expect(typeNames).toContain('Service');
+      expect(typeNames).toContain('Config');
+    });
+
+    it('should extract types from class accessors', () => {
+      project.createSourceFile(
+        '/test/class-accessors.ts',
+        `
+interface Value {
+  amount: number;
+}
+
+class Account {
+  private _balance: Value;
+
+  get balance(): Value {
+    return this._balance;
+  }
+
+  set balance(value: Value) {
+    this._balance = value;
+  }
+}
+
+function getAccount(account: Account): Value {
+  throw new Error('TODO');
+}
+`
+      );
+
+      const todoFunction: TodoFunction = {
+        name: 'getAccount',
+        filePath: '/test/class-accessors.ts',
+        line: 18,
+        signature: 'function getAccount(account: Account): Value',
+        hasTodoBody: true,
+      };
+
+      const context = extractContext(project, todoFunction);
+
+      // Should extract Account class which references Value
+      const typeNames = context.requiredTypes.map((t) => t.name).sort();
+      expect(typeNames).toContain('Account');
+      expect(typeNames).toContain('Value');
+    });
+
+    it('should handle class with methods without types', () => {
+      project.createSourceFile(
+        '/test/class-no-types.ts',
+        `
+class Simple {
+  doSomething() {
+    throw new Error('TODO');
+  }
+}
+
+function createSimple(): Simple {
+  throw new Error('TODO');
+}
+`
+      );
+
+      const todoFunction: TodoFunction = {
+        name: 'createSimple',
+        filePath: '/test/class-no-types.ts',
+        line: 9,
+        signature: 'function createSimple(): Simple',
+        hasTodoBody: true,
+      };
+
+      const context = extractContext(project, todoFunction);
+
+      // Should still extract Simple class even with untyped methods
+      expect(context.requiredTypes).toHaveLength(1);
+      expect(context.requiredTypes[0]?.name).toBe('Simple');
+    });
+  });
+
   describe('context size tracking', () => {
     it('should track context size metrics', () => {
       project.createSourceFile(
@@ -825,8 +980,10 @@ describe('serializeContextForPrompt', () => {
       useInMemoryFileSystem: true,
       compilerOptions: {
         strict: true,
-        target: 99,
-        module: 199,
+        noUncheckedIndexedAccess: true,
+        exactOptionalPropertyTypes: true,
+        target: ScriptTarget.ESNext,
+        module: ModuleKind.NodeNext,
       },
     });
   });
@@ -907,8 +1064,10 @@ describe('shouldEscalateToLargerModel', () => {
       useInMemoryFileSystem: true,
       compilerOptions: {
         strict: true,
-        target: 99,
-        module: 199,
+        noUncheckedIndexedAccess: true,
+        exactOptionalPropertyTypes: true,
+        target: ScriptTarget.ESNext,
+        module: ModuleKind.NodeNext,
       },
     });
   });
@@ -1021,5 +1180,365 @@ function process(m: Medium): Medium {
 
     // With a very high threshold, should not escalate
     expect(shouldEscalateToLargerModel(context, 1000)).toBe(false);
+  });
+});
+
+describe('property-based tests', () => {
+  let project: Project;
+
+  beforeEach(() => {
+    project = new Project({
+      useInMemoryFileSystem: true,
+      compilerOptions: {
+        strict: true,
+        noUncheckedIndexedAccess: true,
+        exactOptionalPropertyTypes: true,
+        target: ScriptTarget.ESNext,
+        module: ModuleKind.NodeNext,
+      },
+    });
+  });
+
+  // Arbitrary for generating valid TypeScript type names
+  const typeNameArb = fc
+    .stringMatching(/^[A-Z][a-zA-Z0-9]*$/)
+    .filter((s) => s.length >= 1 && s.length <= 20);
+
+  // Arbitrary for generating simple TypeScript type strings
+  const simpleTypeArb = fc.oneof(
+    fc.constant('string'),
+    fc.constant('number'),
+    fc.constant('boolean'),
+    fc.constant('void'),
+    fc.constant('unknown'),
+    fc.constant('any')
+  );
+
+  // Arbitrary for generating interface definitions
+  const interfaceArb = fc
+    .tuple(
+      typeNameArb,
+      fc.array(
+        fc.tuple(fc.stringMatching(/^[a-z][a-zA-Z0-9]*$/), fc.oneof(simpleTypeArb, typeNameArb)),
+        { minLength: 0, maxLength: 5 }
+      )
+    )
+    .map(([name, props]) => {
+      const propStrings = props.map(([propName, propType]) => `  ${propName}: ${propType};`);
+      return {
+        name,
+        definition: `interface ${name} {\n${propStrings.join('\n')}\n}`,
+      };
+    });
+
+  // Arbitrary for generating type alias definitions
+  const typeAliasArb = fc
+    .tuple(typeNameArb, fc.oneof(simpleTypeArb, typeNameArb))
+    .map(([name, baseType]) => ({
+      name,
+      definition: `type ${name} = ${baseType};`,
+    }));
+
+  // Arbitrary for generating type definitions (interfaces or type aliases)
+  const typeDefArb = fc.oneof(interfaceArb, typeAliasArb);
+
+  // Arbitrary for generating function parameters
+  const paramArb = fc
+    .tuple(fc.stringMatching(/^[a-z][a-zA-Z0-9]*$/), fc.oneof(simpleTypeArb, typeNameArb))
+    .map(([name, type]) => ({ name, type }));
+
+  // Arbitrary for generating function signatures
+  const functionSignatureArb = fc
+    .tuple(
+      fc.stringMatching(/^[a-z][a-zA-Z0-9]*$/).filter((s) => s.length >= 3),
+      fc.array(paramArb, { minLength: 0, maxLength: 4 }),
+      fc.oneof(simpleTypeArb, typeNameArb, fc.constant('void'))
+    )
+    .map(([fnName, params, returnType]) => {
+      const paramStrings = params.map((p) => `${p.name}: ${p.type}`);
+      const signature = `function ${fnName}(${paramStrings.join(', ')}): ${returnType}`;
+      return { fnName, signature, params, returnType };
+    });
+
+  describe('extractContext type name extraction', () => {
+    it('should consistently extract all referenced type names from signatures', () => {
+      fc.assert(
+        fc.property(
+          fc.array(typeDefArb, { minLength: 1, maxLength: 5 }),
+          functionSignatureArb,
+          (typeDefs, fnSig) => {
+            // Build source file with type definitions and function
+            const typeDefsText = typeDefs.map((t) => t.definition).join('\n\n');
+            const usedTypeNames = new Set<string>();
+
+            // Collect type names used in parameters and return type
+            fnSig.params.forEach((p) => {
+              const match = typeDefs.find((t) => t.name === p.type);
+              if (match) {
+                usedTypeNames.add(match.name);
+              }
+            });
+            const returnMatch = typeDefs.find((t) => t.name === fnSig.returnType);
+            if (returnMatch) {
+              usedTypeNames.add(returnMatch.name);
+            }
+
+            if (usedTypeNames.size === 0) {
+              // Skip if no custom types are used
+              return true;
+            }
+
+            const sourceCode = `${typeDefsText}\n\nfunction ${fnSig.fnName}(${fnSig.params
+              .map((p) => `${p.name}: ${p.type}`)
+              .join(', ')}): ${fnSig.returnType} {\n  throw new Error('TODO');\n}`;
+
+            project.createSourceFile(`/test/property-${fnSig.fnName}.ts`, sourceCode, {
+              overwrite: true,
+            });
+
+            const todoFunction: TodoFunction = {
+              name: fnSig.fnName,
+              filePath: `/test/property-${fnSig.fnName}.ts`,
+              line: typeDefsText.split('\n').length + 3,
+              signature: fnSig.signature,
+              hasTodoBody: true,
+            };
+
+            const context = extractContext(project, todoFunction);
+            const serialized = serializeContextForPrompt(context);
+
+            // Property: All used type names should appear in either requiredTypes or serialized output
+            usedTypeNames.forEach((typeName) => {
+              const foundInTypes = context.requiredTypes.some((t) => t.name === typeName);
+              const foundInSerialized = serialized.includes(typeName);
+              expect(foundInTypes || foundInSerialized).toBe(true);
+            });
+
+            return true;
+          }
+        ),
+        { seed: 42, numRuns: 50, endOnFailure: true }
+      );
+    });
+
+    it('should include all extracted type names in serialized output', () => {
+      fc.assert(
+        fc.property(
+          fc.array(typeDefArb, { minLength: 1, maxLength: 5 }),
+          functionSignatureArb,
+          (typeDefs, fnSig) => {
+            const typeDefsText = typeDefs.map((t) => t.definition).join('\n\n');
+            const usedTypeNames = new Set<string>();
+
+            fnSig.params.forEach((p) => {
+              const match = typeDefs.find((t) => t.name === p.type);
+              if (match) {
+                usedTypeNames.add(match.name);
+              }
+            });
+            const returnMatch = typeDefs.find((t) => t.name === fnSig.returnType);
+            if (returnMatch) {
+              usedTypeNames.add(returnMatch.name);
+            }
+
+            if (usedTypeNames.size === 0) {
+              return true;
+            }
+
+            const sourceCode = `${typeDefsText}\n\nfunction ${fnSig.fnName}(${fnSig.params
+              .map((p) => `${p.name}: ${p.type}`)
+              .join(', ')}): ${fnSig.returnType} {\n  throw new Error('TODO');\n}`;
+
+            project.createSourceFile(`/test/serial-${fnSig.fnName}.ts`, sourceCode, {
+              overwrite: true,
+            });
+
+            const todoFunction: TodoFunction = {
+              name: fnSig.fnName,
+              filePath: `/test/serial-${fnSig.fnName}.ts`,
+              line: typeDefsText.split('\n').length + 3,
+              signature: fnSig.signature,
+              hasTodoBody: true,
+            };
+
+            const context = extractContext(project, todoFunction);
+            const serialized = serializeContextForPrompt(context);
+
+            // Property: serialized output must contain all type names from requiredTypes
+            context.requiredTypes.forEach((type) => {
+              expect(serialized).toContain(type.name);
+            });
+
+            return true;
+          }
+        ),
+        { seed: 123, numRuns: 50, endOnFailure: true }
+      );
+    });
+  });
+
+  describe('shouldEscalateToLargerModel monotonicity', () => {
+    it('should have monotonic behavior with increasing contract count', () => {
+      fc.assert(
+        fc.property(
+          fc.nat({ max: 10 }),
+          fc.nat({ max: 5 }),
+          functionSignatureArb,
+          (baseContracts, additionalContracts, fnSig) => {
+            // Generate two versions: one with baseContracts, one with baseContracts + additionalContracts
+            const contracts1 = Array.from({ length: baseContracts }, (_, i) => ({
+              tag: 'requires' as const,
+              condition: `condition${String(i)} > 0`,
+            }));
+
+            const contracts2 = Array.from(
+              { length: baseContracts + additionalContracts },
+              (_, i) => ({
+                tag: 'requires' as const,
+                condition: `condition${String(i)} > 0`,
+              })
+            );
+
+            const makeSource = (contracts: Array<{ tag: string; condition: string }>): string => {
+              const jsdoc =
+                contracts.length > 0
+                  ? `/**\n${contracts.map((c) => ` * @${c.tag} ${c.condition}`).join('\n')}\n */\n`
+                  : '';
+              return `${jsdoc}function ${fnSig.fnName}(${fnSig.params
+                .map((p) => `${p.name}: ${p.type}`)
+                .join(', ')}): ${fnSig.returnType} {\n  throw new Error('TODO');\n}`;
+            };
+
+            const source1 = makeSource(contracts1);
+            const source2 = makeSource(contracts2);
+
+            project.createSourceFile(`/test/mono1-${fnSig.fnName}.ts`, source1, {
+              overwrite: true,
+            });
+            project.createSourceFile(`/test/mono2-${fnSig.fnName}.ts`, source2, {
+              overwrite: true,
+            });
+
+            const todoFunction1: TodoFunction = {
+              name: fnSig.fnName,
+              filePath: `/test/mono1-${fnSig.fnName}.ts`,
+              line: contracts1.length > 0 ? contracts1.length + 2 : 1,
+              signature: fnSig.signature,
+              hasTodoBody: true,
+            };
+
+            const todoFunction2: TodoFunction = {
+              name: fnSig.fnName,
+              filePath: `/test/mono2-${fnSig.fnName}.ts`,
+              line: contracts2.length > 0 ? contracts2.length + 2 : 1,
+              signature: fnSig.signature,
+              hasTodoBody: true,
+            };
+
+            const context1 = extractContext(project, todoFunction1);
+            const context2 = extractContext(project, todoFunction2);
+
+            const score1 = context1.sizeMetrics.totalCharacters;
+            const score2 = context2.sizeMetrics.totalCharacters;
+
+            // Property: Adding contracts should not decrease the complexity score
+            // (represented by totalCharacters as a proxy)
+            if (additionalContracts > 0) {
+              expect(score2).toBeGreaterThanOrEqual(score1);
+            }
+
+            return true;
+          }
+        ),
+        { seed: 789, numRuns: 50, endOnFailure: true }
+      );
+    });
+
+    it('should have monotonic escalation behavior with increasing type complexity', () => {
+      fc.assert(
+        fc.property(
+          fc.nat({ max: 3 }),
+          fc.nat({ max: 3 }),
+          functionSignatureArb,
+          (baseTypeCount, additionalTypeCount, fnSig) => {
+            // Create a chain of dependent types
+            const makeTypeChain = (count: number): { types: string[]; usedType: string } => {
+              if (count === 0) {
+                return { types: [], usedType: 'number' };
+              }
+
+              const types: string[] = [];
+              for (let i = 0; i < count; i++) {
+                if (i === 0) {
+                  types.push(`interface Type${String(i)} { value: number; }`);
+                } else {
+                  types.push(`interface Type${String(i)} { value: Type${String(i - 1)}; }`);
+                }
+              }
+              return { types, usedType: `Type${String(count - 1)}` };
+            };
+
+            const chain1 = makeTypeChain(baseTypeCount);
+            const chain2 = makeTypeChain(baseTypeCount + additionalTypeCount);
+
+            const makeSource = (chain: { types: string[]; usedType: string }): string => {
+              const typeDefs = chain.types.join('\n');
+              return `${typeDefs}${typeDefs ? '\n\n' : ''}function ${fnSig.fnName}(param: ${
+                chain.usedType
+              }): void {\n  throw new Error('TODO');\n}`;
+            };
+
+            const source1 = makeSource(chain1);
+            const source2 = makeSource(chain2);
+
+            project.createSourceFile(`/test/complex1-${fnSig.fnName}.ts`, source1, {
+              overwrite: true,
+            });
+            project.createSourceFile(`/test/complex2-${fnSig.fnName}.ts`, source2, {
+              overwrite: true,
+            });
+
+            const todoFunction1: TodoFunction = {
+              name: fnSig.fnName,
+              filePath: `/test/complex1-${fnSig.fnName}.ts`,
+              line: chain1.types.length + (chain1.types.length > 0 ? 2 : 0) + 1,
+              signature: `function ${fnSig.fnName}(param: ${chain1.usedType}): void`,
+              hasTodoBody: true,
+            };
+
+            const todoFunction2: TodoFunction = {
+              name: fnSig.fnName,
+              filePath: `/test/complex2-${fnSig.fnName}.ts`,
+              line: chain2.types.length + (chain2.types.length > 0 ? 2 : 0) + 1,
+              signature: `function ${fnSig.fnName}(param: ${chain2.usedType}): void`,
+              hasTodoBody: true,
+            };
+
+            const context1 = extractContext(project, todoFunction1);
+            const context2 = extractContext(project, todoFunction2);
+
+            // Property: More types should result in higher or equal type count
+            if (additionalTypeCount > 0) {
+              expect(context2.requiredTypes.length).toBeGreaterThanOrEqual(
+                context1.requiredTypes.length
+              );
+            }
+
+            // Property: More types should not decrease escalation likelihood
+            // If context1 escalates, context2 should also escalate (with same threshold)
+            const threshold = 50;
+            const escalates1 = shouldEscalateToLargerModel(context1, threshold);
+            const escalates2 = shouldEscalateToLargerModel(context2, threshold);
+
+            if (escalates1 && additionalTypeCount > 0) {
+              expect(escalates2).toBe(true);
+            }
+
+            return true;
+          }
+        ),
+        { seed: 456, numRuns: 50, endOnFailure: true }
+      );
+    });
   });
 });

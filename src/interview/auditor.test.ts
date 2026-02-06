@@ -113,8 +113,11 @@ describe('Auditor', () => {
   describe('ISSUE_TYPE_DESCRIPTIONS', () => {
     it('has descriptions for all issue types', () => {
       for (const type of AUDITOR_ISSUE_TYPES) {
+        // eslint-disable-next-line security/detect-object-injection -- safe: type is AuditorIssueType enum with known literal keys
         expect(ISSUE_TYPE_DESCRIPTIONS[type]).toBeDefined();
+        // eslint-disable-next-line security/detect-object-injection -- safe: type is AuditorIssueType enum with known literal keys
         expect(typeof ISSUE_TYPE_DESCRIPTIONS[type]).toBe('string');
+        // eslint-disable-next-line security/detect-object-injection -- safe: type is AuditorIssueType enum with known literal keys
         expect(ISSUE_TYPE_DESCRIPTIONS[type].length).toBeGreaterThan(0);
       }
     });

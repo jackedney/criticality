@@ -13,6 +13,7 @@
  */
 
 import type { ModelAlias } from '../router/types.js';
+import { TypedMap } from '../utils/typed-map.js';
 
 // ============================================================================
 // Failure Types
@@ -143,7 +144,7 @@ export interface FunctionAttempts {
   /** The function identifier (name or qualified name). */
   readonly functionId: string;
   /** Attempts per model tier. */
-  readonly attemptsByTier: Readonly<Record<ModelTier, number>>;
+  readonly attemptsByTier: TypedMap<ModelTier, number>;
   /** Total attempts across all tiers. */
   readonly totalAttempts: number;
   /** The last failure type encountered. */
@@ -161,11 +162,10 @@ export interface FunctionAttempts {
 export function createFunctionAttempts(functionId: string): FunctionAttempts {
   return {
     functionId,
-    attemptsByTier: {
-      worker: 0,
-      fallback: 0,
-      architect: 0,
-    },
+    attemptsByTier: new TypedMap<ModelTier, number>()
+      .set('worker', 0)
+      .set('fallback', 0)
+      .set('architect', 0),
     totalAttempts: 0,
     syntaxHintProvided: false,
   };
@@ -184,10 +184,13 @@ export function recordAttempt(
   tier: ModelTier,
   failure?: FailureType
 ): FunctionAttempts {
-  const newAttemptsByTier = {
-    ...attempts.attemptsByTier,
-    [tier]: attempts.attemptsByTier[tier] + 1,
-  };
+  const currentCount = attempts.attemptsByTier.get(tier) ?? 0;
+  const newAttemptsByTier = new TypedMap<ModelTier, number>();
+  const entriesArray = Array.from(attempts.attemptsByTier.entries());
+  for (const [k, v] of entriesArray) {
+    newAttemptsByTier.set(k, v);
+  }
+  newAttemptsByTier.set(tier, currentCount + 1);
 
   const base = {
     functionId: attempts.functionId,
@@ -363,7 +366,7 @@ export function determineEscalation(
   currentTier: ModelTier,
   config: EscalationConfig = DEFAULT_ESCALATION_CONFIG
 ): EscalationDecision {
-  const currentAttempts = attempts.attemptsByTier[currentTier];
+  const currentAttempts = attempts.attemptsByTier.get(currentTier) ?? 0;
 
   // Check for max attempts exceeded
   if (attempts.totalAttempts >= config.maxAttemptsPerFunction) {
@@ -414,7 +417,7 @@ function handleSyntaxFailure(
   currentTier: ModelTier,
   config: EscalationConfig
 ): EscalationDecision {
-  const currentAttempts = attempts.attemptsByTier[currentTier];
+  const currentAttempts = attempts.attemptsByTier.get(currentTier) ?? 0;
 
   // Fatal syntax errors always escalate
   if (!failure.recoverable) {

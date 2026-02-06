@@ -7,10 +7,10 @@
  * @packageDocumentation
  */
 
-import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
 import type { Spec, SpecDataModel, SpecInterface } from '../spec/types.js';
 import { parseSpec } from '../spec/parser.js';
+import { safeReadFile, safeReaddir, safeWriteFile, safeMkdir, safeStat } from '../utils/safe-fs.js';
 import type {
   DomainBoundary,
   DomainModule,
@@ -20,6 +20,11 @@ import type {
   ProjectConventions,
 } from './types.js';
 import { ModuleGeneratorError } from './types.js';
+import {
+  mapSpecTypeToTypeScript,
+  parseSpecParameter,
+  parseSpecReturnType,
+} from './function-generator.js';
 
 /**
  * Default options for module generation.
@@ -30,6 +35,21 @@ const DEFAULT_OPTIONS: Required<ModuleGeneratorOptions> = {
   detectConventions: true,
   generatePlaceholders: true,
 };
+
+/**
+ * Checks if a directory exists.
+ *
+ * @param dirPath - The path to check.
+ * @returns true if the path exists and is a directory, false otherwise.
+ */
+async function directoryExists(dirPath: string): Promise<boolean> {
+  try {
+    const stat = await safeStat(dirPath);
+    return stat.isDirectory();
+  } catch {
+    return false;
+  }
+}
 
 /**
  * Detects project conventions from an existing codebase.
@@ -45,37 +65,24 @@ export async function detectProjectConventions(projectRoot: string): Promise<Pro
   };
 
   try {
-    // Check if src directory exists
     const srcPath = path.join(projectRoot, 'src');
-    const srcExists = await fs
-      .stat(srcPath)
-      .then((s) => s.isDirectory())
-      .catch(() => false);
+    const srcExists = await directoryExists(srcPath);
 
     if (!srcExists) {
-      // Check for lib directory as alternative
       const libPath = path.join(projectRoot, 'lib');
-      const libExists = await fs
-        .stat(libPath)
-        .then((s) => s.isDirectory())
-        .catch(() => false);
+      const libExists = await directoryExists(libPath);
 
       if (libExists) {
         return { ...conventions, sourceDir: 'lib' };
       }
 
-      // No source directory found, return defaults
       return conventions;
     }
 
-    // Check for domain directory patterns
     const domainPatterns = ['domain', 'domains', 'modules', 'features'];
     for (const pattern of domainPatterns) {
       const domainPath = path.join(srcPath, pattern);
-      const domainExists = await fs
-        .stat(domainPath)
-        .then((s) => s.isDirectory())
-        .catch(() => false);
+      const domainExists = await directoryExists(domainPath);
 
       if (domainExists) {
         return { ...conventions, domainDir: pattern };
@@ -83,14 +90,14 @@ export async function detectProjectConventions(projectRoot: string): Promise<Pro
     }
 
     // Check for barrel file convention by looking for index.ts files
-    const files = await fs.readdir(srcPath).catch(() => []);
+    const files = await safeReaddir(srcPath).catch(() => []);
     const hasBarrelFiles = files.some((f) => f === 'index.ts' || f === 'index.js');
 
     // Check for .js extension in imports by reading a sample TypeScript file
     let usesJsExtension = true;
     for (const file of files) {
       if (file.endsWith('.ts') && !file.endsWith('.d.ts')) {
-        const content = await fs.readFile(path.join(srcPath, file), 'utf-8').catch(() => '');
+        const content = await safeReadFile(path.join(srcPath, file), 'utf-8').catch(() => '');
         if (content.includes("from './") || content.includes('from "./')) {
           // Check if imports use .js extension
           usesJsExtension = content.includes(".js'") || content.includes('.js"');
@@ -450,7 +457,7 @@ function generateTypesFile(
         }
         lines.push(`   */`);
       }
-      lines.push(`  readonly ${field.name}: ${field.type};`);
+      lines.push(`  readonly ${field.name}: ${mapSpecTypeToTypeScript(field.type)};`);
     }
 
     lines.push(`}`);
@@ -494,6 +501,12 @@ function generateInterfacesFile(
     lines.push(`export interface ${interfaceName} {`);
 
     for (const method of iface.methods) {
+      // Parse parameters
+      const parsedParams = method.params?.map((p) => parseSpecParameter(p)) ?? [];
+
+      // Parse return type
+      const parsedReturnType = parseSpecReturnType(method.returns);
+
       // Generate method signature with JSDoc
       lines.push(`  /**`);
       if (method.description !== undefined) {
@@ -502,13 +515,8 @@ function generateInterfacesFile(
       }
 
       // Document parameters
-      if (method.params !== undefined && method.params.length > 0) {
-        for (const param of method.params) {
-          const [paramName] = param.split(':').map((s) => s.trim());
-          if (paramName !== undefined) {
-            lines.push(`   * @param ${paramName} - TODO: Add description`);
-          }
-        }
+      for (const param of parsedParams) {
+        lines.push(`   * @param ${param.name} - TODO: Add description`);
       }
 
       // Document return type
@@ -518,16 +526,30 @@ function generateInterfacesFile(
       if (method.contracts !== undefined && method.contracts.length > 0) {
         lines.push(`   *`);
         for (const contract of method.contracts) {
-          lines.push(
-            `   * @${contract.toLowerCase().startsWith('requires') ? 'requires' : contract.toLowerCase().startsWith('ensures') ? 'ensures' : 'contract'} ${contract}`
-          );
+          // Determine contract type from content
+          const lowerContract = contract.toLowerCase();
+          if (lowerContract.startsWith('requires')) {
+            lines.push(`   * @requires ${contract}`);
+          } else if (lowerContract.startsWith('ensures')) {
+            lines.push(`   * @ensures ${contract}`);
+          } else if (lowerContract.startsWith('invariant')) {
+            lines.push(`   * @invariant ${contract}`);
+          } else if (lowerContract.startsWith('complexity')) {
+            lines.push(`   * @complexity ${contract}`);
+          } else if (lowerContract.startsWith('purity')) {
+            lines.push(`   * @purity ${contract}`);
+          } else {
+            lines.push(`   * @contract ${contract}`);
+          }
         }
       }
       lines.push(`   */`);
 
       // Generate method signature
-      const params = method.params?.join(', ') ?? '';
-      lines.push(`  ${method.name}(${params}): ${method.returns};`);
+      const params = parsedParams
+        .map((p) => `${p.name}${p.isOptional ? '?' : ''}: ${p.type}`)
+        .join(', ');
+      lines.push(`  ${method.name}(${params}): ${parsedReturnType.type};`);
       lines.push(``);
     }
 
@@ -560,8 +582,10 @@ function generateDomainModule(
   const domainDataModels: Record<string, SpecDataModel> = {};
   if (spec.data_models !== undefined) {
     for (const modelName of domain.dataModels) {
+      // eslint-disable-next-line security/detect-object-injection -- safe: modelName comes from domain.dataModels which is internal config
       const model = spec.data_models[modelName];
       if (model !== undefined) {
+        // eslint-disable-next-line security/detect-object-injection -- safe: modelName comes from domain.dataModels which is internal config
         domainDataModels[modelName] = model;
       }
     }
@@ -581,8 +605,10 @@ function generateDomainModule(
   const domainInterfaces: Record<string, SpecInterface> = {};
   if (spec.interfaces !== undefined) {
     for (const interfaceName of domain.interfaces) {
+      // eslint-disable-next-line security/detect-object-injection -- safe: interfaceName comes from domain.interfaces which is internal config
       const iface = spec.interfaces[interfaceName];
       if (iface !== undefined) {
+        // eslint-disable-next-line security/detect-object-injection -- safe: interfaceName comes from domain.interfaces which is internal config
         domainInterfaces[interfaceName] = iface;
       }
     }
@@ -696,8 +722,10 @@ export async function generateModuleStructure(
   options?: ModuleGeneratorOptions,
   projectRoot?: string
 ): Promise<ModuleStructureResult> {
-  // Merge options with defaults
-  const opts: Required<ModuleGeneratorOptions> = {
+  // Merge options with defaults (use mutable copy for convention detection)
+  const opts: {
+    -readonly [K in keyof Required<ModuleGeneratorOptions>]: Required<ModuleGeneratorOptions>[K];
+  } = {
     ...DEFAULT_OPTIONS,
     ...options,
   };
@@ -725,6 +753,13 @@ export async function generateModuleStructure(
   if (opts.detectConventions && projectRoot !== undefined) {
     try {
       conventions = await detectProjectConventions(projectRoot);
+      // Update opts with detected conventions only if caller didn't provide them
+      if (options?.baseDir === undefined) {
+        opts.baseDir = conventions.sourceDir;
+      }
+      if (options?.domainDir === undefined && conventions.domainDir !== undefined) {
+        opts.domainDir = conventions.domainDir;
+      }
     } catch {
       // Use defaults if detection fails
     }
@@ -804,11 +839,11 @@ export async function writeModuleStructure(
     const fullPath = path.join(targetDir, file.relativePath);
 
     // Ensure directory exists
-    await fs.mkdir(path.dirname(fullPath), { recursive: true });
+    await safeMkdir(path.dirname(fullPath), { recursive: true });
 
     // Write file
     try {
-      await fs.writeFile(fullPath, file.content, 'utf-8');
+      await safeWriteFile(fullPath, file.content, 'utf-8');
     } catch (error) {
       const err = error instanceof Error ? error : new Error(String(error));
       throw new ModuleGeneratorError(
@@ -849,7 +884,7 @@ export async function generateAndWriteModuleStructure(
   // Read spec file
   let specContent: string;
   try {
-    specContent = await fs.readFile(specPath, 'utf-8');
+    specContent = await safeReadFile(specPath, 'utf-8');
   } catch (error) {
     const err = error instanceof Error ? error : new Error(String(error));
     throw new ModuleGeneratorError(

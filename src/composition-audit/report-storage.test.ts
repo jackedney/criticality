@@ -5,10 +5,18 @@
  */
 
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import { mkdir, rm, readFile, writeFile } from 'node:fs/promises';
+import * as fc from 'fast-check';
+import { mkdir, rm, readFile, writeFile, utimes } from 'node:fs/promises';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
-import type { ContradictionReport } from './types.js';
+import * as yamlModule from 'js-yaml';
+import type {
+  ContradictionReport,
+  Contradiction,
+  ContradictionType,
+  ContradictionSeverity,
+  InvolvedElement,
+} from './types.js';
 import {
   saveContradictionReport,
   loadContradictionReport,
@@ -25,12 +33,15 @@ import {
 } from './report-storage.js';
 import { createContradictionReport } from './report-parser.js';
 
+import { realpathSync } from 'node:fs';
+
 // Mock homedir to use temp directory
 vi.mock('node:os', async (): Promise<typeof import('node:os')> => {
   const actual = await vi.importActual<typeof import('node:os')>('node:os');
   return {
     ...actual,
-    homedir: () => join(tmpdir(), 'criticality-test-storage'),
+    // eslint-disable-next-line security/detect-non-literal-fs-filename -- test file: path constructed from temp directory
+    homedir: () => realpathSync(join(tmpdir(), 'criticality-test-storage')),
   };
 });
 
@@ -40,7 +51,12 @@ describe('Report Storage', () => {
 
   beforeEach(async () => {
     testDir = join(tmpdir(), 'criticality-test-storage');
+    // eslint-disable-next-line security/detect-non-literal-fs-filename -- test file: path constructed from temp directory
     await mkdir(testDir, { recursive: true });
+    // eslint-disable-next-line security/detect-non-literal-fs-filename -- test file: path constructed from temp directory
+    await mkdir(join(testDir, '.criticality'), { recursive: true });
+    // eslint-disable-next-line security/detect-non-literal-fs-filename -- test file: path constructed from temp directory
+    await mkdir(join(testDir, '.criticality', 'projects'), { recursive: true });
   });
 
   afterEach(async () => {
@@ -121,6 +137,91 @@ describe('Report Storage', () => {
       expect(compact.length).toBeLessThan(pretty.length);
       expect(compact).not.toContain('\n');
     });
+
+    it('preserves structure through serialization/deserialization', () => {
+      const arbContradictionType = fc.constantFrom<ContradictionType>(
+        'temporal',
+        'resource',
+        'invariant',
+        'precondition_gap',
+        'postcondition_conflict'
+      );
+      const arbSeverity = fc.constantFrom<ContradictionSeverity>('critical', 'warning');
+      const arbElementType = fc.constantFrom<InvolvedElement['elementType']>(
+        'constraint',
+        'contract',
+        'witness',
+        'claim'
+      );
+
+      const arbInvolvedElement: fc.Arbitrary<InvolvedElement> = fc.oneof(
+        fc.record({
+          elementType: arbElementType,
+          id: fc.string(),
+          name: fc.string(),
+          text: fc.string(),
+        }),
+        fc.record({
+          elementType: arbElementType,
+          id: fc.string(),
+          name: fc.string(),
+          text: fc.string(),
+          location: fc.string(),
+        })
+      );
+
+      const arbContradiction: fc.Arbitrary<Contradiction> = fc.record({
+        id: fc.string(),
+        type: arbContradictionType,
+        severity: arbSeverity,
+        description: fc.string(),
+        involved: fc.array(arbInvolvedElement),
+        analysis: fc.string(),
+        minimalScenario: fc.string(),
+        suggestedResolutions: fc.array(fc.string()),
+      });
+
+      fc.assert(
+        fc.property(fc.array(arbContradiction), (contradictions) => {
+          const report = createContradictionReport(
+            testProjectId,
+            contradictions,
+            'Property test summary',
+            false
+          );
+          const json = serializeReportToJson(report, true);
+          const parsed = JSON.parse(json) as ContradictionReport;
+
+          expect(parsed.contradictions).toHaveLength(contradictions.length);
+          expect(parsed.id).toBeDefined();
+          expect(parsed.projectId).toBe(testProjectId);
+          expect(parsed.version).toBeDefined();
+          expect(parsed.generatedAt).toBeDefined();
+          expect(parsed.summary).toBe('Property test summary');
+          expect(parsed.crossVerified).toBe(false);
+          expect(parsed.stats.total).toBe(contradictions.length);
+          expect(parsed.stats.critical).toBe(
+            contradictions.filter((c) => c.severity === 'critical').length
+          );
+          expect(parsed.stats.warning).toBe(
+            contradictions.filter((c) => c.severity === 'warning').length
+          );
+
+          for (let i = 0; i < contradictions.length; i++) {
+            const original = contradictions.at(i);
+            const restored = parsed.contradictions.at(i);
+            expect(restored).toBeDefined();
+            if (restored && original) {
+              expect(restored.id).toBe(original.id);
+              expect(restored.type).toBe(original.type);
+              expect(restored.severity).toBe(original.severity);
+              expect(restored.description).toBe(original.description);
+              expect(restored.involved).toHaveLength(original.involved.length);
+            }
+          }
+        })
+      );
+    });
   });
 
   describe('serializeReportToYaml', () => {
@@ -131,7 +232,8 @@ describe('Report Storage', () => {
       expect(yaml).toContain('id:');
       expect(yaml).toContain('projectId:');
       expect(yaml).toContain('stats:');
-      expect(yaml).toContain('# Contradiction Report');
+      expect(yaml).toContain('version:');
+      expect(yaml).toContain('generatedAt:');
     });
 
     it('serializes contradictions correctly', () => {
@@ -165,9 +267,9 @@ describe('Report Storage', () => {
 
       const yaml = serializeReportToYaml(report);
 
-      expect(yaml).toContain('\\"quotes\\"');
-      expect(yaml).toContain('\\n');
-      expect(yaml).toContain('\\t');
+      const parsed = yamlModule.load(yaml) as ContradictionReport;
+      expect(parsed.contradictions[0]?.description).toBe('Test with "quotes" and\nnewlines');
+      expect(parsed.contradictions[0]?.involved[0]?.name).toBe('Test\ttab');
     });
   });
 
@@ -177,6 +279,7 @@ describe('Report Storage', () => {
       const path = await saveContradictionReport(report);
 
       expect(path).toContain('.json');
+      // eslint-disable-next-line security/detect-non-literal-fs-filename -- test file: path returned from saveContradictionReport
       const content = await readFile(path, 'utf-8');
       const parsed = JSON.parse(content) as ContradictionReport;
       expect(parsed.projectId).toBe(testProjectId);
@@ -187,6 +290,7 @@ describe('Report Storage', () => {
       const path = await saveContradictionReport(report, { format: 'yaml' });
 
       expect(path).toContain('.yaml');
+      // eslint-disable-next-line security/detect-non-literal-fs-filename -- test file: path returned from saveContradictionReport
       const content = await readFile(path, 'utf-8');
       expect(content).toContain('id:');
       expect(content).toContain('projectId:');
@@ -197,6 +301,7 @@ describe('Report Storage', () => {
       await saveContradictionReport(report);
 
       const latestPath = getLatestReportPath(testProjectId, 'json');
+      // eslint-disable-next-line security/detect-non-literal-fs-filename -- test file: path from getLatestReportPath helper
       const content = await readFile(latestPath, 'utf-8');
       const parsed = JSON.parse(content) as ContradictionReport;
       expect(parsed.id).toBe(report.id);
@@ -239,8 +344,10 @@ describe('Report Storage', () => {
     it('throws validation_error for invalid content', async () => {
       // Create invalid report file
       const auditDir = getAuditDir(testProjectId);
+      // eslint-disable-next-line security/detect-non-literal-fs-filename -- test file: path from getAuditDir helper
       await mkdir(auditDir, { recursive: true });
       const reportPath = join(auditDir, 'INVALID_REPORT.json');
+      // eslint-disable-next-line security/detect-non-literal-fs-filename -- test file: path constructed from test audit directory
       await writeFile(reportPath, '{"invalid": true}', 'utf-8');
 
       await expect(loadContradictionReport(testProjectId, 'INVALID_REPORT')).rejects.toThrow(
@@ -265,12 +372,9 @@ describe('Report Storage', () => {
       expect(latest?.id).toBe(report.id);
     });
 
-    it('returns most recent after multiple saves', async () => {
+    it('returns last saved report', async () => {
       const report1 = createTestReport();
       await saveContradictionReport(report1);
-
-      // Wait a tiny bit to ensure different timestamps
-      await new Promise((resolve) => setTimeout(resolve, 10));
 
       const report2 = createTestReport();
       await saveContradictionReport(report2);
@@ -313,16 +417,20 @@ describe('Report Storage', () => {
       const report1 = createTestReport();
       await saveContradictionReport(report1);
 
-      await new Promise((resolve) => setTimeout(resolve, 10));
-
       const report2 = createTestReport();
       await saveContradictionReport(report2);
+
+      // Set report1's mtime to be older than report2
+      const report1Path = getReportPath(testProjectId, report1.id, 'json');
+      const now = new Date();
+      // eslint-disable-next-line security/detect-non-literal-fs-filename -- test file: path from getReportPath helper
+      await utimes(report1Path, now, new Date(now.getTime() - 10000));
 
       const reports = await listContradictionReports(testProjectId);
 
       // Newest first
-      expect(reports[0]).toBe(report2.id);
-      expect(reports[1]).toBe(report1.id);
+      expect(reports.at(0)).toBe(report2.id);
+      expect(reports.at(1)).toBe(report1.id);
     });
   });
 

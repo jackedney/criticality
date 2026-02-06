@@ -8,6 +8,7 @@
  * @packageDocumentation
  */
 
+import { TypedMap } from '../utils/typed-map.js';
 import { execa, type ExecaError } from 'execa';
 import type { Config } from '../config/types.js';
 import type {
@@ -140,6 +141,14 @@ export async function checkOpenCodeInstalled(executablePath = 'opencode'): Promi
   }
 }
 
+const MODEL_ALIAS_MAP = TypedMap.fromObject({
+  architect: 'architect_model',
+  auditor: 'auditor_model',
+  structurer: 'structurer_model',
+  worker: 'worker_model',
+  fallback: 'fallback_model',
+});
+
 /**
  * Resolves a model alias to the actual model identifier.
  *
@@ -148,16 +157,8 @@ export async function checkOpenCodeInstalled(executablePath = 'opencode'): Promi
  * @returns The resolved model identifier.
  */
 function resolveModelAlias(alias: ModelAlias, config: Config): string {
-  const modelMap: Record<ModelAlias, keyof Config['models']> = {
-    architect: 'architect_model',
-    auditor: 'auditor_model',
-    structurer: 'structurer_model',
-    worker: 'worker_model',
-    fallback: 'fallback_model',
-  };
-
-  const configKey = modelMap[alias];
-  return config.models[configKey];
+  const configKey = MODEL_ALIAS_MAP.get(alias) ?? 'architect_model';
+  return config.models[configKey as keyof Config['models']];
 }
 
 /**
@@ -367,15 +368,17 @@ export class OpenCodeClient implements ModelRouter {
   }
 
   /**
-   * Executes an OpenCode subprocess and returns the result.
+   * Executes a subprocess and returns result.
    *
    * @param args - CLI arguments.
    * @param request - The original request (for error context).
+   * @param requestTimeoutMs - Optional timeout in milliseconds for this request.
    * @returns The parsed model router result.
    */
   private async executeSubprocess(
     args: string[],
-    request: ModelRouterRequest
+    request: ModelRouterRequest,
+    requestTimeoutMs?: number
   ): Promise<ModelRouterResult> {
     const startTime = Date.now();
 
@@ -383,12 +386,12 @@ export class OpenCodeClient implements ModelRouter {
       const result =
         this.cwd !== undefined
           ? await execa(this.executablePath, args, {
-              timeout: this.timeoutMs,
+              timeout: requestTimeoutMs ?? this.timeoutMs,
               reject: false,
               cwd: this.cwd,
             })
           : await execa(this.executablePath, args, {
-              timeout: this.timeoutMs,
+              timeout: requestTimeoutMs ?? this.timeoutMs,
               reject: false,
             });
 
@@ -474,12 +477,17 @@ export class OpenCodeClient implements ModelRouter {
    *
    * @param modelAlias - The model alias to route to.
    * @param prompt - The prompt text.
+   * @param timeoutMs - Optional timeout in milliseconds for this request.
    * @returns A result containing the response or an error.
    */
-  async prompt(modelAlias: ModelAlias, prompt: string): Promise<ModelRouterResult> {
+  async prompt(
+    modelAlias: ModelAlias,
+    prompt: string,
+    timeoutMs?: number
+  ): Promise<ModelRouterResult> {
     const request: ModelRouterRequest = { modelAlias, prompt };
     const args = this.buildArgs(request);
-    return this.executeSubprocess(args, request);
+    return this.executeSubprocess(args, request, timeoutMs);
   }
 
   /**

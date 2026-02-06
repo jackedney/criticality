@@ -6,7 +6,7 @@
  * @module adapters/typescript/claims
  */
 
-import * as fs from 'fs';
+import { safeReadFileSync } from '../../utils/safe-fs.js';
 import { parseSpec, SpecParseError } from '../../spec/index.js';
 import type { ClaimType, SpecClaim } from '../../spec/types.js';
 
@@ -130,7 +130,7 @@ export function parseClaims(specPath: string): Claim[] {
   // Read the spec file
   let tomlContent: string;
   try {
-    tomlContent = fs.readFileSync(specPath, 'utf-8');
+    tomlContent = safeReadFileSync(specPath, 'utf-8');
   } catch (error) {
     const fsError = error as NodeJS.ErrnoException;
     throw new ClaimParseError(

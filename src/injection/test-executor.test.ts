@@ -12,7 +12,7 @@
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import * as fs from 'node:fs/promises';
+import { mkdtemp, rm } from 'node:fs/promises';
 import * as path from 'node:path';
 import * as os from 'node:os';
 import {
@@ -29,6 +29,7 @@ import {
 } from './test-executor.js';
 import type { TypeCheckResult } from '../adapters/typescript/typecheck.js';
 import type { TestRunResult } from '../adapters/typescript/testrunner.js';
+import { safeWriteFile, safeMkdir } from '../utils/safe-fs.js';
 
 // Mock runTypeCheck and runTests
 vi.mock('../adapters/typescript/typecheck.js', async () => {
@@ -156,19 +157,19 @@ describe('findTestFile', () => {
   let tempDir: string;
 
   beforeEach(async () => {
-    tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'test-executor-'));
+    tempDir = await mkdtemp(path.join(os.tmpdir(), 'test-executor-'));
   });
 
   afterEach(async () => {
-    await fs.rm(tempDir, { recursive: true, force: true });
+    await rm(tempDir, { recursive: true, force: true });
   });
 
   it('should find .test.ts file in same directory', async () => {
     const srcFile = path.join(tempDir, 'account.ts');
     const testFile = path.join(tempDir, 'account.test.ts');
 
-    await fs.writeFile(srcFile, 'export function deposit() {}');
-    await fs.writeFile(testFile, 'describe("account", () => {})');
+    await safeWriteFile(srcFile, 'export function deposit() {}');
+    await safeWriteFile(testFile, 'describe("account", () => {})');
 
     const found = await findTestFile(srcFile);
     expect(found).toBe(testFile);
@@ -178,8 +179,8 @@ describe('findTestFile', () => {
     const srcFile = path.join(tempDir, 'account.ts');
     const testFile = path.join(tempDir, 'account.spec.ts');
 
-    await fs.writeFile(srcFile, 'export function deposit() {}');
-    await fs.writeFile(testFile, 'describe("account", () => {})');
+    await safeWriteFile(srcFile, 'export function deposit() {}');
+    await safeWriteFile(testFile, 'describe("account", () => {})');
 
     const found = await findTestFile(srcFile);
     expect(found).toBe(testFile);
@@ -190,9 +191,9 @@ describe('findTestFile', () => {
     const testFile = path.join(tempDir, 'account.test.ts');
     const specFile = path.join(tempDir, 'account.spec.ts');
 
-    await fs.writeFile(srcFile, 'export function deposit() {}');
-    await fs.writeFile(testFile, 'describe("account test", () => {})');
-    await fs.writeFile(specFile, 'describe("account spec", () => {})');
+    await safeWriteFile(srcFile, 'export function deposit() {}');
+    await safeWriteFile(testFile, 'describe("account test", () => {})');
+    await safeWriteFile(specFile, 'describe("account spec", () => {})');
 
     const found = await findTestFile(srcFile);
     expect(found).toBe(testFile);
@@ -203,9 +204,9 @@ describe('findTestFile', () => {
     const testsDir = path.join(tempDir, '__tests__');
     const testFile = path.join(testsDir, 'account.test.ts');
 
-    await fs.writeFile(srcFile, 'export function deposit() {}');
-    await fs.mkdir(testsDir, { recursive: true });
-    await fs.writeFile(testFile, 'describe("account", () => {})');
+    await safeWriteFile(srcFile, 'export function deposit() {}');
+    await safeMkdir(testsDir, { recursive: true });
+    await safeWriteFile(testFile, 'describe("account", () => {})');
 
     const found = await findTestFile(srcFile);
     expect(found).toBe(testFile);
@@ -213,10 +214,95 @@ describe('findTestFile', () => {
 
   it('should return undefined if no test file found', async () => {
     const srcFile = path.join(tempDir, 'account.ts');
-    await fs.writeFile(srcFile, 'export function deposit() {}');
+    await safeWriteFile(srcFile, 'export function deposit() {}');
 
     const found = await findTestFile(srcFile);
     expect(found).toBeUndefined();
+  });
+
+  it('should find .test.tsx file for .tsx source file', async () => {
+    const srcFile = path.join(tempDir, 'Component.tsx');
+    const testFile = path.join(tempDir, 'Component.test.tsx');
+
+    await safeWriteFile(srcFile, 'export function Component() {}');
+    await safeWriteFile(testFile, 'describe("Component", () => {})');
+
+    const found = await findTestFile(srcFile);
+    expect(found).toBe(testFile);
+  });
+
+  it('should find .spec.tsx file for .tsx source file', async () => {
+    const srcFile = path.join(tempDir, 'Component.tsx');
+    const testFile = path.join(tempDir, 'Component.spec.tsx');
+
+    await safeWriteFile(srcFile, 'export function Component() {}');
+    await safeWriteFile(testFile, 'describe("Component", () => {})');
+
+    const found = await findTestFile(srcFile);
+    expect(found).toBe(testFile);
+  });
+
+  it('should prefer .test.tsx over .spec.tsx for .tsx source', async () => {
+    const srcFile = path.join(tempDir, 'Component.tsx');
+    const testFile = path.join(tempDir, 'Component.test.tsx');
+    const specFile = path.join(tempDir, 'Component.spec.tsx');
+
+    await safeWriteFile(srcFile, 'export function Component() {}');
+    await safeWriteFile(testFile, 'describe("Component test", () => {})');
+    await safeWriteFile(specFile, 'describe("Component spec", () => {})');
+
+    const found = await findTestFile(srcFile);
+    expect(found).toBe(testFile);
+  });
+
+  it('should find .test.tsx file in __tests__ directory', async () => {
+    const srcFile = path.join(tempDir, 'Component.tsx');
+    const testsDir = path.join(tempDir, '__tests__');
+    const testFile = path.join(testsDir, 'Component.test.tsx');
+
+    await safeWriteFile(srcFile, 'export function Component() {}');
+    await safeMkdir(testsDir, { recursive: true });
+    await safeWriteFile(testFile, 'describe("Component", () => {})');
+
+    const found = await findTestFile(srcFile);
+    expect(found).toBe(testFile);
+  });
+
+  it('should prefer same directory over __tests__ for TSX', async () => {
+    const srcFile = path.join(tempDir, 'Component.tsx');
+    const testsDir = path.join(tempDir, '__tests__');
+    const localTestFile = path.join(tempDir, 'Component.test.tsx');
+    const testsTestFile = path.join(testsDir, 'Component.test.tsx');
+
+    await safeWriteFile(srcFile, 'export function Component() {}');
+    await safeMkdir(testsDir, { recursive: true });
+    await safeWriteFile(localTestFile, 'describe("Component local", () => {})');
+    await safeWriteFile(testsTestFile, 'describe("Component tests", () => {})');
+
+    const found = await findTestFile(srcFile);
+    expect(found).toBe(localTestFile);
+  });
+
+  it('should still find .test.ts file for .tsx source file', async () => {
+    const srcFile = path.join(tempDir, 'Component.tsx');
+    const testFile = path.join(tempDir, 'Component.test.ts');
+
+    await safeWriteFile(srcFile, 'export function Component() {}');
+    await safeWriteFile(testFile, 'describe("Component", () => {})');
+
+    const found = await findTestFile(srcFile);
+    expect(found).toBe(testFile);
+  });
+
+  it('should find .test.ts file for .ts source file', async () => {
+    const srcFile = path.join(tempDir, 'account.ts');
+    const testFile = path.join(tempDir, 'account.test.ts');
+
+    await safeWriteFile(srcFile, 'export function deposit() {}');
+    await safeWriteFile(testFile, 'describe("account", () => {})');
+
+    const found = await findTestFile(srcFile);
+    expect(found).toBe(testFile);
   });
 });
 
@@ -357,21 +443,21 @@ describe('executeFunctionTest', () => {
   let tempDir: string;
 
   beforeEach(async () => {
-    tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'test-executor-'));
+    tempDir = await mkdtemp(path.join(os.tmpdir(), 'test-executor-'));
     mockRunTypeCheck.mockReset();
     mockRunTests.mockReset();
   });
 
   afterEach(async () => {
-    await fs.rm(tempDir, { recursive: true, force: true });
+    await rm(tempDir, { recursive: true, force: true });
   });
 
   it('should pass when compilation and tests pass', async () => {
     // Create source and test files
     const srcFile = path.join(tempDir, 'account.ts');
     const testFile = path.join(tempDir, 'account.test.ts');
-    await fs.writeFile(srcFile, 'export function deposit() {}');
-    await fs.writeFile(testFile, 'describe("account", () => {})');
+    await safeWriteFile(srcFile, 'export function deposit() {}');
+    await safeWriteFile(testFile, 'describe("account", () => {})');
 
     mockRunTypeCheck.mockResolvedValue(createSuccessTypeCheck());
     mockRunTests.mockResolvedValue(createPassingTestRun());
@@ -390,7 +476,7 @@ describe('executeFunctionTest', () => {
 
   it('should fail when compilation fails', async () => {
     const srcFile = path.join(tempDir, 'account.ts');
-    await fs.writeFile(srcFile, 'export function deposit() {}');
+    await safeWriteFile(srcFile, 'export function deposit() {}');
 
     mockRunTypeCheck.mockResolvedValue(createFailedTypeCheck('Type error'));
 
@@ -408,8 +494,8 @@ describe('executeFunctionTest', () => {
     // Create source and test files
     const srcFile = path.join(tempDir, 'account.ts');
     const testFile = path.join(tempDir, 'account.test.ts');
-    await fs.writeFile(srcFile, 'export function deposit() {}');
-    await fs.writeFile(testFile, 'describe("account", () => {})');
+    await safeWriteFile(srcFile, 'export function deposit() {}');
+    await safeWriteFile(testFile, 'describe("account", () => {})');
 
     mockRunTypeCheck.mockResolvedValue(createSuccessTypeCheck());
     mockRunTests.mockResolvedValue(createFailedTestRun());
@@ -429,8 +515,8 @@ describe('executeFunctionTest', () => {
     // Create source and test files
     const srcFile = path.join(tempDir, 'account.ts');
     const testFile = path.join(tempDir, 'account.test.ts');
-    await fs.writeFile(srcFile, 'export function deposit() {}');
-    await fs.writeFile(testFile, 'describe("account", () => {})');
+    await safeWriteFile(srcFile, 'export function deposit() {}');
+    await safeWriteFile(testFile, 'describe("account", () => {})');
 
     mockRunTypeCheck.mockResolvedValue(createSuccessTypeCheck());
 
@@ -455,7 +541,7 @@ describe('executeFunctionTest', () => {
 
   it('should pass when no test file exists (compilation-only)', async () => {
     const srcFile = path.join(tempDir, 'account.ts');
-    await fs.writeFile(srcFile, 'export function deposit() {}');
+    await safeWriteFile(srcFile, 'export function deposit() {}');
 
     mockRunTypeCheck.mockResolvedValue(createSuccessTypeCheck());
 
@@ -472,8 +558,8 @@ describe('executeFunctionTest', () => {
   it('should skip compilation when skipCompilation is true', async () => {
     const srcFile = path.join(tempDir, 'account.ts');
     const testFile = path.join(tempDir, 'account.test.ts');
-    await fs.writeFile(srcFile, 'export function deposit() {}');
-    await fs.writeFile(testFile, 'describe("account", () => {})');
+    await safeWriteFile(srcFile, 'export function deposit() {}');
+    await safeWriteFile(testFile, 'describe("account", () => {})');
 
     mockRunTests.mockResolvedValue(createPassingTestRun());
 
@@ -489,8 +575,8 @@ describe('executeFunctionTest', () => {
   it('should include test file path in result', async () => {
     const srcFile = path.join(tempDir, 'account.ts');
     const testFile = path.join(tempDir, 'account.test.ts');
-    await fs.writeFile(srcFile, 'export function deposit() {}');
-    await fs.writeFile(testFile, 'describe("account", () => {})');
+    await safeWriteFile(srcFile, 'export function deposit() {}');
+    await safeWriteFile(testFile, 'describe("account", () => {})');
 
     mockRunTypeCheck.mockResolvedValue(createSuccessTypeCheck());
     mockRunTests.mockResolvedValue(createPassingTestRun());
@@ -504,7 +590,7 @@ describe('executeFunctionTest', () => {
 
   it('should track duration in result', async () => {
     const srcFile = path.join(tempDir, 'account.ts');
-    await fs.writeFile(srcFile, 'export function deposit() {}');
+    await safeWriteFile(srcFile, 'export function deposit() {}');
 
     mockRunTypeCheck.mockResolvedValue(createSuccessTypeCheck());
 
@@ -518,8 +604,8 @@ describe('executeFunctionTest', () => {
   it('should handle test execution errors gracefully', async () => {
     const srcFile = path.join(tempDir, 'account.ts');
     const testFile = path.join(tempDir, 'account.test.ts');
-    await fs.writeFile(srcFile, 'export function deposit() {}');
-    await fs.writeFile(testFile, 'describe("account", () => {})');
+    await safeWriteFile(srcFile, 'export function deposit() {}');
+    await safeWriteFile(testFile, 'describe("account", () => {})');
 
     mockRunTypeCheck.mockResolvedValue(createSuccessTypeCheck());
     mockRunTests.mockRejectedValue(new Error('Vitest crashed'));
@@ -538,20 +624,20 @@ describe('executeFunctionTestsBatch', () => {
   let tempDir: string;
 
   beforeEach(async () => {
-    tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'test-executor-'));
+    tempDir = await mkdtemp(path.join(os.tmpdir(), 'test-executor-'));
     mockRunTypeCheck.mockReset();
     mockRunTests.mockReset();
   });
 
   afterEach(async () => {
-    await fs.rm(tempDir, { recursive: true, force: true });
+    await rm(tempDir, { recursive: true, force: true });
   });
 
   it('should execute tests for multiple functions', async () => {
     const file1 = path.join(tempDir, 'account.ts');
     const file2 = path.join(tempDir, 'transaction.ts');
-    await fs.writeFile(file1, 'export function deposit() {}');
-    await fs.writeFile(file2, 'export function transfer() {}');
+    await safeWriteFile(file1, 'export function deposit() {}');
+    await safeWriteFile(file2, 'export function transfer() {}');
 
     mockRunTypeCheck.mockResolvedValue(createSuccessTypeCheck());
 
@@ -746,21 +832,21 @@ describe('deposit function acceptance criteria example', () => {
   let tempDir: string;
 
   beforeEach(async () => {
-    tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'test-executor-'));
+    tempDir = await mkdtemp(path.join(os.tmpdir(), 'test-executor-'));
     mockRunTypeCheck.mockReset();
     mockRunTests.mockReset();
   });
 
   afterEach(async () => {
-    await fs.rm(tempDir, { recursive: true, force: true });
+    await rm(tempDir, { recursive: true, force: true });
   });
 
   it('deposit function injected -> runs deposit.test.ts -> passes -> accepted', async () => {
     // Create the scenario from acceptance criteria
     const srcFile = path.join(tempDir, 'deposit.ts');
     const testFile = path.join(tempDir, 'deposit.test.ts');
-    await fs.writeFile(srcFile, 'export function deposit(amount: number) { return amount; }');
-    await fs.writeFile(
+    await safeWriteFile(srcFile, 'export function deposit(amount: number) { return amount; }');
+    await safeWriteFile(
       testFile,
       `
 import { deposit } from './deposit.js';
@@ -811,8 +897,8 @@ describe('deposit', () => {
     // Create the scenario from acceptance criteria
     const srcFile = path.join(tempDir, 'deposit.ts');
     const testFile = path.join(tempDir, 'deposit.test.ts');
-    await fs.writeFile(srcFile, 'export function deposit(amount: number) { return amount; }');
-    await fs.writeFile(testFile, 'describe("deposit", () => {})');
+    await safeWriteFile(srcFile, 'export function deposit(amount: number) { return amount; }');
+    await safeWriteFile(testFile, 'describe("deposit", () => {})');
 
     // Simulate successful compilation
     mockRunTypeCheck.mockResolvedValue(createSuccessTypeCheck());

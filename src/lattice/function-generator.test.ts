@@ -163,6 +163,40 @@ describe('parseSpecReturnType', () => {
       isResult: false,
     });
   });
+
+  it('should parse Result return type with nested Map generic', () => {
+    const result = parseSpecReturnType('Result<Map<string, number>, string[]>');
+    expect(result.isResult).toBe(true);
+    expect(result.successType).toBe('Map<string, number>');
+    expect(result.errorType).toBe('string[]');
+    expect(result.type).toBe('Result<Map<string, number>, string[]>');
+  });
+
+  it('should parse Result return type with nested Map and array', () => {
+    const result = parseSpecReturnType('Result<Map<UserId, Account>, Error>');
+    expect(result.isResult).toBe(true);
+    expect(result.successType).toBe('Map<UserId, Account>');
+    expect(result.errorType).toBe('Error');
+  });
+
+  it('should parse Result return type with nested Set generic', () => {
+    const result = parseSpecReturnType('Result<Set<UserId>, ValidationError>');
+    expect(result.isResult).toBe(true);
+    expect(result.successType).toBe('Set<UserId>');
+    expect(result.errorType).toBe('ValidationError');
+  });
+
+  it('should parse Result return type with deeply nested generics', () => {
+    const result = parseSpecReturnType('Result<Map<string, Array<number>>, Error>');
+    expect(result.isResult).toBe(true);
+    expect(result.successType).toBe('Map<string, Array<number>>');
+    expect(result.errorType).toBe('Error');
+  });
+
+  it('should return isResult=false for non-Result types', () => {
+    const result = parseSpecReturnType('Promise<Result<AccountId, Error>>');
+    expect(result.isResult).toBe(false);
+  });
 });
 
 describe('generateFunctionSignature', () => {
@@ -526,6 +560,12 @@ created = "2024-01-24T12:00:00Z"
 
 [system]
 name = "test-system"
+
+[interfaces.SomeInterface]
+description = "An existing interface"
+methods = [
+  { name = "someMethod", returns = "void" }
+]
     `);
 
     expect(() => generateFunctionsForInterface(spec, 'NonExistent')).toThrow(

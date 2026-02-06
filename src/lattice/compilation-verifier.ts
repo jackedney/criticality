@@ -17,7 +17,7 @@
  */
 
 import * as path from 'node:path';
-import * as fs from 'node:fs/promises';
+import { Project } from 'ts-morph';
 import type { CompilerError, TypeCheckResult } from '../adapters/typescript/typecheck.js';
 import { runTypeCheck } from '../adapters/typescript/typecheck.js';
 import type { ModelRouter, ModelRouterRequest } from '../router/types.js';
@@ -26,6 +26,7 @@ import {
   type AstInspectionResult,
   type InspectedFunction,
 } from '../adapters/typescript/ast.js';
+import { safeReadFile, safeReaddir, safeWriteFile } from '../utils/safe-fs.js';
 
 /**
  * Error types that can occur during compilation verification.
@@ -113,6 +114,16 @@ export interface CompilationVerificationResult {
   readonly totalDurationMs: number;
   /** AST inspection result (verifies no logic leakage). */
   readonly astInspection?: AstInspectionResult;
+}
+
+/**
+ * Error thrown when files cannot be resolved for compilation verification.
+ */
+export class FilesNotResolvedError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'FilesNotResolvedError';
+  }
 }
 
 /**
@@ -435,15 +446,30 @@ export function verifyNoLogicLeakage(
   const violations: LogicLeakageViolation[] = [];
   const allInspectedFunctions: InspectedFunction[] = [];
 
+  // Create a shared Project instance to avoid repeated compiler initialization
+  const project = new Project({
+    compilerOptions: {
+      strict: true,
+      noUncheckedIndexedAccess: true,
+      exactOptionalPropertyTypes: true,
+      target: 99, // ScriptTarget.ESNext
+      module: 199, // ModuleKind.NodeNext
+    },
+  });
+
   for (const file of files) {
     const filePath = path.resolve(projectPath, file);
 
     try {
-      const result = inspectAst(filePath, {
-        checkFunctionBodies: true,
-        checkTodoPattern: true,
-        detectLogicPatterns: true,
-      });
+      const result = inspectAst(
+        filePath,
+        {
+          checkFunctionBodies: true,
+          checkTodoPattern: true,
+          detectLogicPatterns: true,
+        },
+        project
+      );
 
       // Collect all inspected functions
       allInspectedFunctions.push(...result.functions);
@@ -483,7 +509,7 @@ export function verifyNoLogicLeakage(
         line: 0,
         functionName: 'N/A',
         violation: `Could not parse file for inspection: ${error instanceof Error ? error.message : String(error)}`,
-        severity: 'warning',
+        severity: 'error',
       });
     }
   }
@@ -512,6 +538,112 @@ export interface LogicLeakageViolation {
 }
 
 /**
+ * Reads tsconfig.json and extracts file inclusion patterns.
+ *
+ * @param tsconfigPath - Path to tsconfig.json file.
+ * @returns Array of glob patterns or null if tsconfig is invalid.
+ */
+async function readTsconfigPatterns(tsconfigPath: string): Promise<string[] | null> {
+  try {
+    const tsconfigContent = await safeReadFile(tsconfigPath, 'utf-8');
+    const tsconfig = JSON.parse(tsconfigContent) as { include?: string[] };
+    const include = tsconfig.include;
+    if (include !== undefined && include.length > 0) {
+      return include;
+    }
+  } catch {
+    // tsconfig not found or invalid, fall back to default
+  }
+  return null;
+}
+
+/**
+ * Finds TypeScript files recursively in a directory.
+ *
+ * @param dirPath - The directory path.
+ * @param projectPath - The project path for resolving relative paths.
+ * @returns Array of relative file paths.
+ */
+async function findTypeScriptFilesRecursive(
+  dirPath: string,
+  projectPath: string
+): Promise<string[]> {
+  const files: string[] = [];
+  const entries = await safeReaddir(dirPath, {
+    withFileTypes: true,
+  });
+
+  for (const entry of entries) {
+    const fullPath = path.join(dirPath, entry.name);
+
+    if (entry.isDirectory()) {
+      // Skip node_modules and .git directories
+      if (
+        entry.name !== 'node_modules' &&
+        entry.name !== '.git' &&
+        entry.name !== 'dist' &&
+        entry.name !== '.next'
+      ) {
+        const subFiles = await findTypeScriptFilesRecursive(fullPath, projectPath);
+        files.push(...subFiles);
+      }
+    } else if (entry.isFile() && entry.name.endsWith('.ts')) {
+      // Return relative path from project path
+      files.push(path.relative(projectPath, fullPath));
+    }
+  }
+
+  return files;
+}
+
+/**
+ * Derives file list from projectPath or tsconfigPath.
+ *
+ * @param projectPath - The project path.
+ * @param tsconfigPath - Optional path to tsconfig.json.
+ * @returns Array of relative file paths.
+ * @throws {FilesNotResolvedError} If files cannot be resolved.
+ */
+async function deriveFileList(
+  projectPath: string,
+  tsconfigPath: string | undefined
+): Promise<string[]> {
+  const resolvedProjectPath = path.resolve(projectPath);
+
+  // Read tsconfig to get included patterns (for future use)
+  if (tsconfigPath !== undefined && tsconfigPath !== '') {
+    const resolvedTsconfigPath = path.resolve(resolvedProjectPath, tsconfigPath);
+    await readTsconfigPatterns(resolvedTsconfigPath);
+  }
+
+  // Find TypeScript files recursively
+  const files = await findTypeScriptFilesRecursive(resolvedProjectPath, resolvedProjectPath);
+
+  if (files.length === 0) {
+    throw new FilesNotResolvedError(`No TypeScript files found in ${resolvedProjectPath}`);
+  }
+
+  return files;
+}
+
+/**
+ * Normalizes a file path against the project path.
+ *
+ * @param filePath - The file path to normalize (can be relative or absolute).
+ * @param projectPath - The project path.
+ * @returns Normalized absolute file path.
+ */
+function normalizePath(filePath: string, projectPath: string): string {
+  const resolvedProjectPath = path.resolve(projectPath);
+
+  if (path.isAbsolute(filePath)) {
+    return path.normalize(filePath);
+  }
+
+  return path.normalize(path.resolve(resolvedProjectPath, filePath));
+}
+
+/**
  * Compilation verifier for Lattice output.
  *
  * Ensures generated code compiles and maintains structural integrity
@@ -522,21 +654,41 @@ export class CompilationVerifier {
   private readonly options: Required<
     Omit<CompilationVerifierOptions, 'modelRouter' | 'files'> & {
       modelRouter: ModelRouter | undefined;
-      files: readonly string[] | undefined;
+      files: readonly string[];
     }
   >;
 
   constructor(options: CompilationVerifierOptions) {
+    const projectPath = path.resolve(options.projectPath);
+    const tsconfigPath = options.tsconfigPath ?? '';
+
+    // Default options without files - will be resolved lazily
     this.options = {
       maxRepairAttempts: options.maxRepairAttempts ?? 5,
-      projectPath: options.projectPath,
-      files: options.files,
-      tsconfigPath: options.tsconfigPath ?? '',
+      projectPath,
+      files: options.files ?? [],
+      tsconfigPath,
       modelRouter: options.modelRouter,
       runAstInspection: options.runAstInspection ?? true,
       // eslint-disable-next-line no-console -- console.log is the appropriate default logger
       logger: options.logger ?? console.log,
     };
+  }
+
+  /**
+   * Gets the resolved file list, deriving from projectPath if needed.
+   *
+   * @returns Array of relative file paths.
+   * @throws {FilesNotResolvedError} If files cannot be resolved.
+   */
+  private async getFiles(): Promise<string[]> {
+    // If files were provided and non-empty, return them
+    if (this.options.files.length > 0) {
+      return [...this.options.files];
+    }
+
+    // Derive files from project path
+    return await deriveFileList(this.options.projectPath, this.options.tsconfigPath || undefined);
   }
 
   /**
@@ -583,8 +735,9 @@ export class CompilationVerifier {
 
         // Run AST inspection if enabled
         let astInspection: AstInspectionResult | undefined;
-        if (this.options.runAstInspection && this.options.files !== undefined) {
-          const leakageResult = verifyNoLogicLeakage(this.options.projectPath, this.options.files);
+        if (this.options.runAstInspection) {
+          const files = await this.getFiles();
+          const leakageResult = verifyNoLogicLeakage(this.options.projectPath, files);
           // Convert to AstInspectionResult format
           // Build conditionally to satisfy exactOptionalPropertyTypes
           if (leakageResult.violations.length > 0) {
@@ -689,21 +842,18 @@ export class CompilationVerifier {
    * @returns The type check result.
    */
   private async runTypeCheck(): Promise<TypeCheckResult> {
-    // Build options conditionally to satisfy exactOptionalPropertyTypes
-    const { files, tsconfigPath } = this.options;
+    const { tsconfigPath } = this.options;
+    const files = await this.getFiles();
 
-    if (files !== undefined && tsconfigPath !== '') {
+    // Build options conditionally to satisfy exactOptionalPropertyTypes
+    if (tsconfigPath !== '') {
       return runTypeCheck(this.options.projectPath, {
-        files: [...files],
+        files,
         tsconfigPath,
       });
-    } else if (files !== undefined) {
+    } else if (files.length > 0) {
       return runTypeCheck(this.options.projectPath, {
-        files: [...files],
-      });
-    } else if (tsconfigPath !== '') {
-      return runTypeCheck(this.options.projectPath, {
-        tsconfigPath,
+        files,
       });
     } else {
       return runTypeCheck(this.options.projectPath, {});
@@ -727,7 +877,7 @@ export class CompilationVerifier {
 
     for (const file of uniqueFiles) {
       try {
-        const content = await fs.readFile(file, 'utf-8');
+        const content = await safeReadFile(file, 'utf-8');
         fileContents.set(file, content);
       } catch {
         // File might not exist or be readable
@@ -781,25 +931,30 @@ export class CompilationVerifier {
 
     for (const [file, newContent] of repairs) {
       try {
+        // Normalize file path
+        const normalizedFile = normalizePath(file, this.options.projectPath);
+
         // Read the old content
         let oldContent: string | undefined;
         try {
-          oldContent = await fs.readFile(file, 'utf-8');
+          oldContent = await safeReadFile(normalizedFile, 'utf-8');
         } catch {
           // File might be new
         }
 
         // Write the new content
-        await fs.writeFile(file, newContent, 'utf-8');
+        await safeWriteFile(normalizedFile, newContent, 'utf-8');
 
-        // Find errors that this repair addresses
-        const addressedErrors = errors.filter((e) => e.error.file === file);
+        // Find errors that this repair addresses (compare normalized paths)
+        const addressedErrors = errors.filter(
+          (e) => normalizePath(e.error.file, this.options.projectPath) === normalizedFile
+        );
         for (const addressedError of addressedErrors) {
           // Build repair object conditionally to satisfy exactOptionalPropertyTypes
           if (oldContent !== undefined) {
             applied.push({
               error: addressedError,
-              file,
+              file: normalizedFile,
               description: addressedError.repairHint,
               oldContent,
               newContent,
@@ -807,14 +962,14 @@ export class CompilationVerifier {
           } else {
             applied.push({
               error: addressedError,
-              file,
+              file: normalizedFile,
               description: addressedError.repairHint,
               newContent,
             });
           }
         }
 
-        this.options.logger(`Applied repair to ${file}`);
+        this.options.logger(`Applied repair to ${normalizedFile}`);
       } catch (error) {
         this.options.logger(
           `Failed to apply repair to ${file}: ${error instanceof Error ? error.message : String(error)}`

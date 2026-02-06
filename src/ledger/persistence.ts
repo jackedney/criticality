@@ -7,11 +7,11 @@
  * @packageDocumentation
  */
 
-import { writeFile, readFile, rename, unlink } from 'node:fs/promises';
 import { join, dirname } from 'node:path';
 import { randomUUID } from 'node:crypto';
 import type { LedgerData } from './types.js';
 import { Ledger, fromData, LedgerValidationError, DuplicateDecisionIdError } from './ledger.js';
+import { safeReadFile, safeWriteFile, safeRename, safeUnlink } from '../utils/safe-fs.js';
 
 /**
  * Error type for serialization operations.
@@ -260,14 +260,14 @@ export async function saveLedger(
 
   try {
     // Write to temporary file first
-    await writeFile(tempPath, json, 'utf-8');
+    await safeWriteFile(tempPath, json, 'utf-8');
 
     // Atomic rename to target path
-    await rename(tempPath, filePath);
+    await safeRename(tempPath, filePath);
   } catch (error) {
     // Clean up temp file if it exists
     try {
-      await unlink(tempPath);
+      await safeUnlink(tempPath);
     } catch {
       // Ignore cleanup errors
     }
@@ -301,7 +301,7 @@ export async function loadLedger(filePath: string, options?: LoadLedgerOptions):
   let content: string;
 
   try {
-    content = await readFile(filePath, 'utf-8');
+    content = await safeReadFile(filePath, 'utf-8');
   } catch (error) {
     const fileError = error instanceof Error ? error : new Error(String(error));
     const isNotFound =

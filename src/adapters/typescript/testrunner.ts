@@ -191,7 +191,8 @@ function parseError(failureMessages: string[]): TestError | undefined {
 
   // Extract just the assertion message (before any stack trace)
   // Format is typically: "AssertionError: expected X to be Y // Object.is equality"
-  const match = /^(?:AssertionError: )?(.+?)(?:\s*\/\/.*)?$/.exec(messageLine);
+  // eslint-disable-next-line security/detect-unsafe-regex -- Input is single line from error message
+  const match = /^(?:AssertionError: )?([^/]+?)(?:\s*\/\/[^\n]*)?$/.exec(messageLine);
   const message = match?.[1] ?? messageLine;
 
   return {

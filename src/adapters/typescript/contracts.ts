@@ -273,12 +273,7 @@ function parseInlineAssertions(bodyText: string, startLine: number): InlineParse
 
   const lines = bodyText.split('\n');
 
-  for (let i = 0; i < lines.length; i++) {
-    const line = lines[i];
-    if (line === undefined) {
-      continue;
-    }
-
+  lines.forEach((line, i) => {
     const lineNumber = startLine + i;
 
     // Check for empty @invariant: (malformed - error case)
@@ -314,7 +309,7 @@ function parseInlineAssertions(bodyText: string, startLine: number): InlineParse
           lineNumber,
         });
       }
-      continue;
+      return;
     }
 
     // Check for inline @assert: with expression
@@ -328,7 +323,7 @@ function parseInlineAssertions(bodyText: string, startLine: number): InlineParse
           lineNumber,
         });
       }
-      continue;
+      return;
     }
 
     // Check for inline CLAIM_REF:
@@ -339,7 +334,7 @@ function parseInlineAssertions(bodyText: string, startLine: number): InlineParse
         claimRefs.push(claimId);
       }
     }
-  }
+  });
 
   return { inlineAssertions, claimRefs };
 }

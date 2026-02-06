@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
-import * as fs from 'node:fs';
+import { mkdtempSync, rmSync } from 'node:fs';
 import * as path from 'node:path';
 import * as os from 'node:os';
 import { Project } from 'ts-morph';
@@ -11,18 +11,20 @@ import {
   FunctionNotFoundError,
   InvalidBodySyntaxError,
   orderByDependency,
+  inspectAst,
   type TodoFunction,
 } from './ast.js';
+import { safeWriteFileSync, safeReadFileSync, safeExistsSync } from '../../utils/safe-fs.js';
 
 describe('createProject', () => {
   let tempDir: string;
 
   beforeEach(() => {
-    tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'ast-test-'));
+    tempDir = mkdtempSync(path.join(os.tmpdir(), 'ast-test-'));
   });
 
   afterEach(() => {
-    fs.rmSync(tempDir, { recursive: true, force: true });
+    rmSync(tempDir, { recursive: true, force: true });
   });
 
   describe('with tsconfig.json path', () => {
@@ -35,7 +37,7 @@ describe('createProject', () => {
           strict: true,
         },
       };
-      fs.writeFileSync(tsConfigPath, JSON.stringify(tsConfigContent, null, 2));
+      safeWriteFileSync(tsConfigPath, JSON.stringify(tsConfigContent, null, 2));
 
       const project = createProject(tsConfigPath);
 
@@ -51,7 +53,7 @@ describe('createProject', () => {
           noImplicitAny: false,
         },
       };
-      fs.writeFileSync(tsConfigPath, JSON.stringify(tsConfigContent, null, 2));
+      safeWriteFileSync(tsConfigPath, JSON.stringify(tsConfigContent, null, 2));
 
       const project = createProject(tsConfigPath);
       const compilerOptions = project.getCompilerOptions();
@@ -77,7 +79,7 @@ describe('createProject', () => {
 
     it('resolves relative paths correctly', () => {
       const tsConfigPath = path.join(tempDir, 'tsconfig.json');
-      fs.writeFileSync(tsConfigPath, JSON.stringify({ compilerOptions: {} }));
+      safeWriteFileSync(tsConfigPath, JSON.stringify({ compilerOptions: {} }));
 
       const cwd = process.cwd();
       process.chdir(tempDir);
@@ -153,17 +155,17 @@ describe('findTodoFunctions', () => {
   let project: Project;
 
   beforeEach(() => {
-    tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'todo-test-'));
+    tempDir = mkdtempSync(path.join(os.tmpdir(), 'todo-test-'));
     project = createProject();
   });
 
   afterEach(() => {
-    fs.rmSync(tempDir, { recursive: true, force: true });
+    rmSync(tempDir, { recursive: true, force: true });
   });
 
   function addSourceFile(filename: string, content: string): string {
     const filePath = path.join(tempDir, filename);
-    fs.writeFileSync(filePath, content);
+    safeWriteFileSync(filePath, content);
     project.addSourceFileAtPath(filePath);
     return filePath;
   }
@@ -521,7 +523,7 @@ describe('findTodoFunctions', () => {
       const fixtureDir = path.resolve(process.cwd(), 'test-fixtures/todo-patterns');
       const fixturePath = path.join(fixtureDir, 'todo-single-quotes.ts');
 
-      if (fs.existsSync(fixturePath)) {
+      if (safeExistsSync(fixturePath)) {
         const fixtureProject = createProject();
         fixtureProject.addSourceFileAtPath(fixturePath);
 
@@ -536,7 +538,7 @@ describe('findTodoFunctions', () => {
       const fixtureDir = path.resolve(process.cwd(), 'test-fixtures/todo-patterns');
       const fixturePath = path.join(fixtureDir, 'todo-double-quotes.ts');
 
-      if (fs.existsSync(fixturePath)) {
+      if (safeExistsSync(fixturePath)) {
         const fixtureProject = createProject();
         fixtureProject.addSourceFileAtPath(fixturePath);
 
@@ -554,23 +556,23 @@ describe('injectFunctionBody', () => {
   let project: Project;
 
   beforeEach(() => {
-    tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'inject-test-'));
+    tempDir = mkdtempSync(path.join(os.tmpdir(), 'inject-test-'));
     project = createProject();
   });
 
   afterEach(() => {
-    fs.rmSync(tempDir, { recursive: true, force: true });
+    rmSync(tempDir, { recursive: true, force: true });
   });
 
   function addSourceFile(filename: string, content: string): string {
     const filePath = path.join(tempDir, filename);
-    fs.writeFileSync(filePath, content);
+    safeWriteFileSync(filePath, content);
     project.addSourceFileAtPath(filePath);
     return filePath;
   }
 
   function readFileContent(filePath: string): string {
-    return fs.readFileSync(filePath, 'utf-8');
+    return safeReadFileSync(filePath, 'utf-8');
   }
 
   describe('basic injection', () => {
@@ -1077,17 +1079,17 @@ describe('orderByDependency', () => {
   let project: Project;
 
   beforeEach(() => {
-    tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'topo-test-'));
+    tempDir = mkdtempSync(path.join(os.tmpdir(), 'topo-test-'));
     project = createProject();
   });
 
   afterEach(() => {
-    fs.rmSync(tempDir, { recursive: true, force: true });
+    rmSync(tempDir, { recursive: true, force: true });
   });
 
   function addSourceFile(filename: string, content: string): string {
     const filePath = path.join(tempDir, filename);
-    fs.writeFileSync(filePath, content);
+    safeWriteFileSync(filePath, content);
     project.addSourceFileAtPath(filePath);
     return filePath;
   }
@@ -1713,6 +1715,360 @@ describe('orderByDependency', () => {
       // todoOther is a leaf (called by todoFunc)
       expect(ordered[0]?.name).toBe('todoOther');
       expect(ordered[1]?.name).toBe('todoFunc');
+    });
+  });
+});
+
+describe('inspectAst', () => {
+  let tempDir: string;
+
+  beforeEach(() => {
+    tempDir = mkdtempSync(path.join(os.tmpdir(), 'inspect-test-'));
+  });
+
+  afterEach(() => {
+    rmSync(tempDir, { recursive: true, force: true });
+  });
+
+  function createSourceFile(filename: string, content: string): string {
+    const filePath = path.join(tempDir, filename);
+    safeWriteFileSync(filePath, content);
+    return filePath;
+  }
+
+  describe('TODO-only detection', () => {
+    it('skips leakage check for function with only TODO marker', () => {
+      const filePath = createSourceFile(
+        'todo-only.ts',
+        `
+        export function add(a: number, b: number): number {
+          throw new Error('TODO');
+        }
+      `
+      );
+
+      const result = inspectAst(filePath, {
+        checkFunctionBodies: true,
+        checkTodoPattern: true,
+        detectLogicPatterns: true,
+      });
+
+      expect(result.passed).toBe(true);
+      expect(result.logicPatterns).toBeUndefined();
+      expect(result.functions).toHaveLength(1);
+      expect(result.functions[0]?.hasTodoBody).toBe(true);
+    });
+
+    it('detects leakage for function with TODO marker and real logic', () => {
+      const filePath = createSourceFile(
+        'todo-with-logic.ts',
+        `
+        export function process(data: string[]): string[] {
+          throw new Error('TODO');
+          return data.map(x => x.toUpperCase());
+        }
+      `
+      );
+
+      const result = inspectAst(filePath, {
+        checkFunctionBodies: true,
+        checkTodoPattern: true,
+        detectLogicPatterns: true,
+      });
+
+      expect(result.passed).toBe(false);
+      expect(result.logicPatterns).toBeDefined();
+      expect(result.logicPatterns?.length).toBeGreaterThan(0);
+      expect(
+        result.logicPatterns?.some((p) => p.description.includes('Loop or array processing'))
+      ).toBe(true);
+    });
+
+    it('skips leakage check for empty function body', () => {
+      const filePath = createSourceFile(
+        'empty-body.ts',
+        `
+        export function noop(): void {}
+      `
+      );
+
+      const result = inspectAst(filePath, {
+        checkFunctionBodies: true,
+        checkTodoPattern: true,
+        detectLogicPatterns: true,
+      });
+
+      expect(result.passed).toBe(true);
+      expect(result.logicPatterns).toBeUndefined();
+      expect(result.functions).toHaveLength(1);
+    });
+
+    it('detects leakage for function with console.log after TODO', () => {
+      const filePath = createSourceFile(
+        'console-after-todo.ts',
+        `
+        export function debug(value: unknown): void {
+          throw new Error('TODO');
+          console.log(value);
+        }
+      `
+      );
+
+      const result = inspectAst(filePath, {
+        checkFunctionBodies: true,
+        checkTodoPattern: true,
+        detectLogicPatterns: true,
+      });
+
+      expect(result.passed).toBe(true);
+      expect(result.logicPatterns).toBeDefined();
+      expect(result.logicPatterns?.some((p) => p.description.includes('Console output'))).toBe(
+        true
+      );
+    });
+
+    it('detects leakage for function with fetch call', () => {
+      const filePath = createSourceFile(
+        'network-call.ts',
+        `
+        export function fetchData(url: string): Promise<string> {
+          throw new Error('TODO');
+          return fetch(url).then(r => r.text());
+        }
+      `
+      );
+
+      const result = inspectAst(filePath, {
+        checkFunctionBodies: true,
+        checkTodoPattern: true,
+        detectLogicPatterns: true,
+      });
+
+      expect(result.passed).toBe(false);
+      expect(result.logicPatterns?.some((p) => p.description.includes('Network call'))).toBe(true);
+    });
+
+    it('detects leakage for function with conditional logic', () => {
+      const filePath = createSourceFile(
+        'conditional.ts',
+        `
+        export function checkValue(x: number): string {
+          throw new Error('TODO');
+          if (x > 10) return 'high';
+          return 'low';
+        }
+      `
+      );
+
+      const result = inspectAst(filePath, {
+        checkFunctionBodies: true,
+        checkTodoPattern: true,
+        detectLogicPatterns: true,
+      });
+
+      expect(result.passed).toBe(true);
+      expect(result.logicPatterns).toBeDefined();
+      expect(result.logicPatterns?.some((p) => p.description.includes('Conditional logic'))).toBe(
+        true
+      );
+    });
+
+    it('skips leakage check when detectLogicPatterns is false', () => {
+      const filePath = createSourceFile(
+        'todo-with-logic-no-detect.ts',
+        `
+        export function process(data: string[]): string[] {
+          throw new Error('TODO');
+          return data.map(x => x.toUpperCase());
+        }
+      `
+      );
+
+      const result = inspectAst(filePath, {
+        checkFunctionBodies: true,
+        checkTodoPattern: true,
+        detectLogicPatterns: false,
+      });
+
+      expect(result.passed).toBe(true);
+      expect(result.logicPatterns).toBeUndefined();
+    });
+  });
+
+  describe('unique context keys', () => {
+    it('assigns unique context keys to same-named functions in different files', () => {
+      const file1 = createSourceFile(
+        'file1.ts',
+        `
+        export function helper(): number {
+          throw new Error('TODO');
+        }
+      `
+      );
+
+      const file2 = createSourceFile(
+        'file2.ts',
+        `
+        export function helper(): number {
+          throw new Error('TODO');
+          return fetch('url').then(r => r.text());
+        }
+      `
+      );
+
+      const result1 = inspectAst(file1, {
+        checkFunctionBodies: true,
+        checkTodoPattern: true,
+        detectLogicPatterns: true,
+      });
+
+      const result2 = inspectAst(file2, {
+        checkFunctionBodies: true,
+        checkTodoPattern: true,
+        detectLogicPatterns: true,
+      });
+
+      expect(result1.passed).toBe(true);
+      expect(result1.logicPatterns).toBeUndefined();
+
+      expect(result2.passed).toBe(false);
+      expect(result2.logicPatterns).toBeDefined();
+      expect(result2.logicPatterns?.length).toBeGreaterThan(0);
+
+      // Context keys should include file path and line number
+      const pattern = result2.logicPatterns?.[0];
+      expect(pattern?.context).toMatch(/^.*\.ts:\d+:helper$/);
+    });
+
+    it('context key includes file path, line number, and function name', () => {
+      const filePath = createSourceFile(
+        'context-key.ts',
+        `
+        export function myFunc(): void {
+          throw new Error('TODO');
+          console.log('logic');
+        }
+      `
+      );
+
+      const result = inspectAst(filePath, {
+        checkFunctionBodies: true,
+        checkTodoPattern: true,
+        detectLogicPatterns: true,
+      });
+
+      expect(result.logicPatterns).toBeDefined();
+      expect(result.logicPatterns?.length).toBeGreaterThan(0);
+
+      const pattern = result.logicPatterns?.[0];
+      expect(pattern?.context).toMatch(/\.ts:\d+:myFunc$/);
+      expect(pattern?.context).toContain('context-key.ts');
+    });
+  });
+
+  describe('edge cases', () => {
+    it('handles TODO with double quotes and extra whitespace', () => {
+      const filePath = createSourceFile(
+        'todo-double-whitespace.ts',
+        `
+        export function add(a: number, b: number): number {
+          throw  new   Error(  "TODO"  );
+        }
+      `
+      );
+
+      const result = inspectAst(filePath, {
+        checkFunctionBodies: true,
+        checkTodoPattern: true,
+        detectLogicPatterns: true,
+      });
+
+      expect(result.passed).toBe(true);
+      expect(result.logicPatterns).toBeUndefined();
+      expect(result.functions[0]?.hasTodoBody).toBe(true);
+    });
+
+    it('detects TODO with macro-style comment but no TODO throw as implementation', () => {
+      const filePath = createSourceFile(
+        'macro-no-throw.ts',
+        `
+        export function calculate(x: number): number {
+          // todo!()
+          return x * 2;
+        }
+      `
+      );
+
+      const result = inspectAst(filePath, {
+        checkFunctionBodies: true,
+        checkTodoPattern: true,
+        detectLogicPatterns: true,
+      });
+
+      expect(result.passed).toBe(false);
+      expect(result.logicPatterns).toBeDefined();
+      expect(result.logicPatterns?.some((p) => p.description.includes('implementation body'))).toBe(
+        true
+      );
+    });
+
+    it('handles functions without bodies (abstract/overloads)', () => {
+      const filePath = createSourceFile(
+        'no-body.ts',
+        `
+        export interface Service {
+          process(data: string): string;
+        }
+      `
+      );
+
+      const result = inspectAst(filePath, {
+        checkFunctionBodies: true,
+        checkTodoPattern: true,
+        detectLogicPatterns: true,
+      });
+
+      expect(result.passed).toBe(true);
+      expect(result.logicPatterns).toBeUndefined();
+    });
+
+    it('handles multiple functions with mixed TODO and implementation', () => {
+      const filePath = createSourceFile(
+        'mixed-functions.ts',
+        `
+        export function todoOnly(): number {
+          throw new Error('TODO');
+        }
+
+        export function withLogic(): number {
+          throw new Error('TODO');
+          return 42;
+        }
+
+        export function implemented(): number {
+          return 100;
+        }
+      `
+      );
+
+      const result = inspectAst(filePath, {
+        checkFunctionBodies: true,
+        checkTodoPattern: true,
+        detectLogicPatterns: true,
+      });
+
+      expect(result.functions).toHaveLength(3);
+
+      const todoOnlyFunc = result.functions.find((f) => f.name === 'todoOnly');
+      expect(todoOnlyFunc?.hasTodoBody).toBe(true);
+
+      const withLogicFunc = result.functions.find((f) => f.name === 'withLogic');
+      expect(withLogicFunc?.hasTodoBody).toBe(true);
+
+      const implementedFunc = result.functions.find((f) => f.name === 'implemented');
+      expect(implementedFunc?.hasTodoBody).toBe(false);
+
+      expect(result.logicPatterns?.length).toBeGreaterThan(0);
     });
   });
 });

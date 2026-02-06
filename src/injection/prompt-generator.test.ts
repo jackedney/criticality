@@ -12,7 +12,7 @@
  */
 
 import { describe, it, expect, beforeEach } from 'vitest';
-import { Project } from 'ts-morph';
+import { Project, ScriptTarget, ModuleKind } from 'ts-morph';
 import {
   generateMinimalPrompt,
   generateMinimalPromptFromComponents,
@@ -32,8 +32,8 @@ describe('generateMinimalPrompt', () => {
       useInMemoryFileSystem: true,
       compilerOptions: {
         strict: true,
-        target: 99, // ESNext
-        module: 199, // NodeNext
+        target: ScriptTarget.ESNext,
+        module: ModuleKind.NodeNext,
       },
     });
   });
@@ -413,7 +413,8 @@ function add(a: number, b: number): number {
 
     it('should return exceedsTokenLimit: true when context exceeds 12k tokens', () => {
       // Create a large type that will generate many tokens
-      const largeInterface = Array(500)
+      // 4000 fields should generate ~48k chars / 4 = ~12k tokens, exceeding the limit
+      const largeInterface = Array(4000)
         .fill(null)
         .map((_, i) => `  field${String(i)}: string;`)
         .join('\n');
@@ -434,7 +435,7 @@ function processLarge(data: LargeType): LargeType {
       const todoFunction: TodoFunction = {
         name: 'processLarge',
         filePath: '/test/large.ts',
-        line: 503,
+        line: 4003,
         signature: 'function processLarge(data: LargeType): LargeType',
         hasTodoBody: true,
       };
@@ -442,8 +443,9 @@ function processLarge(data: LargeType): LargeType {
       const context = extractContext(project, todoFunction);
       const result = generateMinimalPrompt(context);
 
-      // Should have substantial tokens with 500+ fields (~3 tokens per field line)
-      expect(result.estimatedTokens).toBeGreaterThan(2500);
+      // With 4000+ fields, should exceed the 12k token limit
+      expect(result.estimatedTokens).toBeGreaterThan(12000);
+      expect(result.exceedsTokenLimit).toBe(true);
     });
 
     it('should respect custom token limit option', () => {

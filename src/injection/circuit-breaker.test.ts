@@ -266,14 +266,13 @@ describe('Circuit Breaker - Single Function Failures', () => {
 
     const result = checkCircuitBreaker(state);
 
-    // 8 attempts with 2 escalations triggers module escalation rate (100% > 20%)
+    // 8 attempts triggers max_attempts_exceeded (8 >= 8)
     expect(result.shouldTrip).toBe(true);
-    expect(result.tripReason?.type).toBe('module_escalation_rate');
-    if (result.tripReason?.type === 'module_escalation_rate') {
-      expect(result.tripReason.modulePath).toBe('src/complex.ts');
-      expect(result.tripReason.rate).toBe(1.0);
-      expect(result.tripReason.escalatedCount).toBe(1);
-      expect(result.tripReason.totalCount).toBe(1);
+    expect(result.tripReason?.type).toBe('max_attempts_exceeded');
+    if (result.tripReason?.type === 'max_attempts_exceeded') {
+      expect(result.tripReason.functionId).toBe('complexFunc');
+      expect(result.tripReason.totalAttempts).toBe(8);
+      expect(result.tripReason.maxAttempts).toBe(8);
     }
   });
 });
@@ -283,12 +282,12 @@ describe('Circuit Breaker - Single Function Failures', () => {
 // ============================================================================
 
 describe('Circuit Breaker - Max Attempts', () => {
-  it('should trip when max attempts exceeded (default: 8)', () => {
+  it('should trip when max attempts reached (default: 8)', () => {
     let state = createCircuitBreakerState();
     state = registerFunction(state, 'func1', 'module1.ts');
 
-    // Record 9 attempts (exceeds default of 8)
-    for (let i = 0; i < 9; i++) {
+    // Record 8 attempts (reaches default of 8)
+    for (let i = 0; i < 8; i++) {
       state = recordAttemptStart(state, 'func1', 'worker');
     }
 
@@ -298,7 +297,7 @@ describe('Circuit Breaker - Max Attempts', () => {
     expect(result.tripReason?.type).toBe('max_attempts_exceeded');
     if (result.tripReason?.type === 'max_attempts_exceeded') {
       expect(result.tripReason.functionId).toBe('func1');
-      expect(result.tripReason.totalAttempts).toBe(9);
+      expect(result.tripReason.totalAttempts).toBe(8);
       expect(result.tripReason.maxAttempts).toBe(8);
     }
   });
@@ -326,8 +325,8 @@ describe('Circuit Breaker - Max Attempts', () => {
     let state = createCircuitBreakerState();
     state = registerFunction(state, 'func1', 'module1.ts');
 
-    // Record 6 attempts (exceeds custom limit of 5)
-    for (let i = 0; i < 6; i++) {
+    // Record 5 attempts (reaches custom limit of 5)
+    for (let i = 0; i < 5; i++) {
       state = recordAttemptStart(state, 'func1', 'worker');
     }
 
@@ -337,7 +336,7 @@ describe('Circuit Breaker - Max Attempts', () => {
     expect(result.tripReason?.type).toBe('max_attempts_exceeded');
     if (result.tripReason?.type === 'max_attempts_exceeded') {
       expect(result.tripReason.functionId).toBe('func1');
-      expect(result.tripReason.totalAttempts).toBe(6);
+      expect(result.tripReason.totalAttempts).toBe(5);
       expect(result.tripReason.maxAttempts).toBe(5);
     }
   });
@@ -845,8 +844,8 @@ describe('CircuitBreaker Class', () => {
 
       breaker.registerFunction('func1', 'module1.ts');
 
-      // Exceed max attempts (9 > 8)
-      for (let i = 0; i < 9; i++) {
+      // Reach max attempts (8 >= 8)
+      for (let i = 0; i < 8; i++) {
         breaker.recordAttemptStart('func1', 'worker');
       }
 
@@ -902,7 +901,7 @@ describe('CircuitBreaker Class', () => {
     it('should log trip reason', () => {
       breaker.registerFunction('func1', 'module1.ts');
 
-      for (let i = 0; i < 9; i++) {
+      for (let i = 0; i < 8; i++) {
         breaker.recordAttemptStart('func1', 'worker');
       }
 
@@ -914,7 +913,7 @@ describe('CircuitBreaker Class', () => {
     it('should generate report when tripped', () => {
       breaker.registerFunction('func1', 'module1.ts');
 
-      for (let i = 0; i < 9; i++) {
+      for (let i = 0; i < 8; i++) {
         breaker.recordAttemptStart('func1', 'worker');
       }
 

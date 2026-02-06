@@ -16,6 +16,7 @@ async function main(): Promise<void> {
   let projectRoot = process.cwd();
   let debug = false;
 
+  /* eslint-disable security/detect-object-injection -- args[i] and args[i+1] are safe: bounded array access for CLI argument parsing */
   for (let i = 0; i < args.length; i++) {
     const arg = args[i];
     const nextArg = args[i + 1];
@@ -26,6 +27,7 @@ async function main(): Promise<void> {
       debug = true;
     }
   }
+  /* eslint-enable security/detect-object-injection */
 
   const logger = createServerLogger({ serverName: 'toolchain-server', debug });
 

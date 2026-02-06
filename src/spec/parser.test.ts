@@ -650,6 +650,165 @@ name = "Test"
           );
         }
       });
+
+      it('should reject __proto__ key in enums section', () => {
+        const toml = `
+[meta]
+version = "1.0.0"
+created = "2024-01-24T12:00:00Z"
+
+[system]
+name = "my-system"
+
+[enums.__proto__]
+variants = ["a", "b"]
+`;
+        expect(() => parseSpec(toml)).toThrow(SpecParseError);
+
+        try {
+          parseSpec(toml);
+        } catch (error) {
+          expect((error as SpecParseError).message).toContain("Prohibited key '__proto__'");
+          expect((error as SpecParseError).message).toContain('enums');
+          expect((error as SpecParseError).message).toContain('security reasons');
+        }
+      });
+
+      it('should reject constructor key in data_models section', () => {
+        const toml = `
+[meta]
+version = "1.0.0"
+created = "2024-01-24T12:00:00Z"
+
+[system]
+name = "my-system"
+
+[data_models.constructor]
+fields = []
+`;
+        expect(() => parseSpec(toml)).toThrow(SpecParseError);
+
+        try {
+          parseSpec(toml);
+        } catch (error) {
+          const errorMsg = (error as SpecParseError).message;
+          expect(errorMsg).toContain("Prohibited key 'constructor'");
+          expect(errorMsg).toContain('data_models');
+          expect(errorMsg).toContain('security reasons');
+        }
+      });
+
+      it('should reject prototype key in interfaces section', () => {
+        const toml = `
+[meta]
+version = "1.0.0"
+created = "2024-01-24T12:00:00Z"
+
+[system]
+name = "my-system"
+
+[interfaces.prototype]
+methods = []
+`;
+        expect(() => parseSpec(toml)).toThrow(SpecParseError);
+
+        try {
+          parseSpec(toml);
+        } catch (error) {
+          expect((error as SpecParseError).message).toContain("Prohibited key 'prototype'");
+          expect((error as SpecParseError).message).toContain('interfaces');
+        }
+      });
+
+      it('should reject __proto__ key in claims section', () => {
+        const toml = `
+[meta]
+version = "1.0.0"
+created = "2024-01-24T12:00:00Z"
+
+[system]
+name = "my-system"
+
+[claims.__proto__]
+text = "Test claim"
+`;
+        expect(() => parseSpec(toml)).toThrow(SpecParseError);
+
+        try {
+          parseSpec(toml);
+        } catch (error) {
+          expect((error as SpecParseError).message).toContain("Prohibited key '__proto__'");
+          expect((error as SpecParseError).message).toContain('claims');
+        }
+      });
+
+      it('should reject constructor key in witnesses section', () => {
+        const toml = `
+[meta]
+version = "1.0.0"
+created = "2024-01-24T12:00:00Z"
+
+[system]
+name = "my-system"
+
+[witnesses.constructor]
+name = "Test"
+invariants = []
+`;
+        expect(() => parseSpec(toml)).toThrow(SpecParseError);
+
+        try {
+          parseSpec(toml);
+        } catch (error) {
+          const errorMsg = (error as SpecParseError).message;
+          expect(errorMsg).toContain("Prohibited key 'constructor'");
+          expect(errorMsg).toContain('witnesses');
+          expect(errorMsg).toContain('security reasons');
+        }
+      });
+
+      it('should accept valid TOML keys like myEnum', () => {
+        const toml = `
+[meta]
+version = "1.0.0"
+created = "2024-01-24T12:00:00Z"
+
+[system]
+name = "my-system"
+
+[enums.myEnum]
+variants = ["a", "b"]
+
+[data_models.User]
+fields = [{ name = "id", type = "string" }]
+
+[interfaces.Service]
+methods = [{ name = "doSomething", returns = "void" }]
+
+[claims.myClaim]
+text = "Test claim"
+
+[witnesses.myWitness]
+name = "Test"
+invariants = []
+`;
+        const spec = parseSpec(toml);
+
+        expect(spec.enums?.myEnum).toBeDefined();
+        expect(spec.enums?.myEnum?.variants).toEqual(['a', 'b']);
+
+        expect(spec.data_models?.User).toBeDefined();
+        expect(spec.data_models?.User?.fields).toHaveLength(1);
+
+        expect(spec.interfaces?.Service).toBeDefined();
+        expect(spec.interfaces?.Service?.methods).toHaveLength(1);
+
+        expect(spec.claims?.myClaim).toBeDefined();
+        expect(spec.claims?.myClaim?.text).toBe('Test claim');
+
+        expect(spec.witnesses?.myWitness).toBeDefined();
+        expect(spec.witnesses?.myWitness?.name).toBe('Test');
+      });
     });
 
     describe('format validation errors', () => {
@@ -961,6 +1120,7 @@ variants = [${variants.map((v) => `"${v}"`).join(', ')}]
             const specVariants = spec.enums?.Status?.variants ?? [];
             return (
               specVariants.length === variants.length &&
+              // eslint-disable-next-line security/detect-object-injection -- safe: i is numeric index from .every() callback
               variants.every((v, i) => specVariants[i] === v)
             );
           }

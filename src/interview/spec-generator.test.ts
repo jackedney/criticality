@@ -5,12 +5,13 @@
  */
 
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
-import { rm, mkdir, readFile } from 'node:fs/promises';
+import { rm } from 'node:fs/promises';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
+import { safeMkdir, safeReadFile } from '../utils/safe-fs.js';
 import { randomUUID } from 'node:crypto';
 import * as TOML from '@iarna/toml';
-import type { InterviewState, ExtractedRequirement } from './types.js';
+import type { InterviewState, ExtractedRequirement, Feature } from './types.js';
 import type { Spec, ClaimType } from '../spec/types.js';
 import {
   generateSpec,
@@ -25,6 +26,7 @@ import {
   SpecGeneratorError,
 } from './spec-generator.js';
 import { getInterviewDir } from './persistence.js';
+import { createInitialInterviewState } from './types.js';
 
 /**
  * Creates a mock requirement for testing.
@@ -310,6 +312,112 @@ describe('Spec Generator', () => {
       const security = spec.constraints?.security ?? [];
       expect(security.length).toBe(2);
     });
+
+    it('should map features from interview state to spec', () => {
+      const features: Feature[] = [
+        {
+          id: 'feature_123',
+          name: 'User Authentication',
+          description: 'Allows users to log in with email and password',
+          classification: 'core',
+          sourcePhase: 'Discovery',
+          identifiedAt: new Date().toISOString(),
+          classificationRationale: 'Core feature required for any user-facing application',
+        },
+      ];
+
+      const state = createMockInterviewState('test-project', []);
+      const stateWithFeatures: InterviewState = { ...state, features };
+
+      const spec = generateSpec(stateWithFeatures);
+
+      expect(spec.features).toBeDefined();
+      const featureKeys = Object.keys(spec.features ?? {});
+      expect(featureKeys.length).toBe(1);
+
+      const featureKey = featureKeys[0];
+      if (featureKey !== undefined) {
+        // eslint-disable-next-line security/detect-object-injection -- safe: featureKey comes from Object.keys iteration over controlled source
+        const specFeature = spec.features?.[featureKey];
+        expect(specFeature?.name).toBe('User Authentication');
+        expect(specFeature?.description).toBe('Allows users to log in with email and password');
+        expect(specFeature?.classification).toBe('core');
+        expect(specFeature?.rationale).toBe(
+          'Core feature required for any user-facing application'
+        );
+      }
+    });
+
+    it('should handle feature without classification rationale', () => {
+      const features: Feature[] = [
+        {
+          id: 'feature_456',
+          name: 'User Profile',
+          description: 'Users can manage their profile information',
+          classification: 'foundational',
+          sourcePhase: 'Architecture',
+          identifiedAt: new Date().toISOString(),
+        },
+      ];
+
+      const state = createMockInterviewState('test-project', []);
+      const stateWithFeatures: InterviewState = { ...state, features };
+
+      const spec = generateSpec(stateWithFeatures);
+
+      expect(spec.features).toBeDefined();
+      const featureKeys = Object.keys(spec.features ?? {});
+      const featureKey = featureKeys[0];
+      if (featureKey !== undefined) {
+        // eslint-disable-next-line security/detect-object-injection -- safe: featureKey comes from Object.keys iteration over controlled source
+        const specFeature = spec.features?.[featureKey];
+        expect(specFeature?.classification).toBe('foundational');
+        expect(specFeature?.rationale).toBeUndefined();
+      }
+    });
+
+    it('should preserve classification values for all feature types', () => {
+      const features: Feature[] = [
+        {
+          id: 'feature_001',
+          name: 'Payment Processing',
+          description: 'Process payments via Stripe',
+          classification: 'core',
+          sourcePhase: 'Discovery',
+          identifiedAt: new Date().toISOString(),
+          classificationRationale: 'Essential for revenue',
+        },
+        {
+          id: 'feature_002',
+          name: 'Multi-tenancy',
+          description: 'Support multiple organizations',
+          classification: 'foundational',
+          sourcePhase: 'Architecture',
+          identifiedAt: new Date().toISOString(),
+        },
+        {
+          id: 'feature_003',
+          name: 'Dark Mode',
+          description: 'Toggle between light and dark themes',
+          classification: 'bolt-on',
+          sourcePhase: 'DesignPreferences',
+          identifiedAt: new Date().toISOString(),
+        },
+      ];
+
+      const state = createMockInterviewState('test-project', []);
+      const stateWithFeatures: InterviewState = { ...state, features };
+
+      const spec = generateSpec(stateWithFeatures);
+
+      expect(spec.features).toBeDefined();
+      expect(Object.keys(spec.features ?? {}).length).toBe(3);
+
+      const specFeatures = Object.values(spec.features ?? {});
+      expect(specFeatures.some((f) => f.classification === 'core')).toBe(true);
+      expect(specFeatures.some((f) => f.classification === 'foundational')).toBe(true);
+      expect(specFeatures.some((f) => f.classification === 'bolt-on')).toBe(true);
+    });
   });
 
   describe('validateSpec', () => {
@@ -440,6 +548,108 @@ describe('Spec Generator', () => {
     });
   });
 
+  describe('normalizeSystemName', () => {
+    it('should normalize alphanumeric project ID', () => {
+      const state: InterviewState = createInitialInterviewState('my-project');
+      const spec = generateSpec(state);
+
+      expect(spec.system.name).toBe('my-project');
+    });
+
+    it('should convert to lowercase', () => {
+      const state: InterviewState = createInitialInterviewState('MyProject');
+      const spec = generateSpec(state);
+
+      expect(spec.system.name).toBe('myproject');
+    });
+
+    it('should replace spaces with hyphens', () => {
+      const state: InterviewState = createInitialInterviewState('My App');
+      const spec = generateSpec(state);
+
+      expect(spec.system.name).toBe('my-app');
+    });
+
+    it('should replace non-alphanumeric characters with hyphens', () => {
+      const state: InterviewState = createInitialInterviewState('my@cool$app');
+      const spec = generateSpec(state);
+
+      expect(spec.system.name).toBe('my-cool-app');
+    });
+
+    it('should trim leading hyphens', () => {
+      const state: InterviewState = createInitialInterviewState('-my-project');
+      const spec = generateSpec(state);
+
+      expect(spec.system.name).toBe('my-project');
+    });
+
+    it('should trim trailing hyphens', () => {
+      const state: InterviewState = createInitialInterviewState('my-project-');
+      const spec = generateSpec(state);
+
+      expect(spec.system.name).toBe('my-project');
+    });
+
+    it('should trim both leading and trailing hyphens', () => {
+      const state: InterviewState = createInitialInterviewState('--my-project--');
+      const spec = generateSpec(state);
+
+      expect(spec.system.name).toBe('my-project');
+    });
+
+    it('should prefix with "project-" when starting with number', () => {
+      const state: InterviewState = createInitialInterviewState('123-test');
+      const spec = generateSpec(state);
+
+      expect(spec.system.name).toBe('project-123-test');
+    });
+
+    it('should prefix with "project-" when starting with hyphen after trim', () => {
+      const state: InterviewState = createInitialInterviewState('-123');
+      const spec = generateSpec(state);
+
+      expect(spec.system.name).toBe('project-123');
+    });
+
+    it('should return "project-spec" for only hyphens', () => {
+      const state: InterviewState = createInitialInterviewState('---');
+      const spec = generateSpec(state);
+
+      expect(spec.system.name).toBe('project-spec');
+    });
+
+    it('should return "project-spec" for empty result after normalization', () => {
+      const state: InterviewState = createInitialInterviewState('@@@');
+      const spec = generateSpec(state);
+
+      expect(spec.system.name).toBe('project-spec');
+    });
+
+    it('should validate normalized system name', () => {
+      const state: InterviewState = createInitialInterviewState('My App!');
+      const spec = generateSpec(state);
+      const validation = validateSpec(spec);
+
+      expect(validation.valid).toBe(true);
+      expect(spec.system.name).toBe('my-app');
+    });
+
+    it('should respect systemName override option', () => {
+      const state: InterviewState = createInitialInterviewState('weird-name');
+      const spec = generateSpec(state, { systemName: 'custom-system' });
+
+      expect(spec.system.name).toBe('custom-system');
+    });
+
+    it('should handle multiple consecutive non-alphanumeric characters', () => {
+      const state: InterviewState = createInitialInterviewState('My   !!!   App');
+      const spec = generateSpec(state);
+
+      expect(spec.system.name).toBe('my-app');
+    });
+  });
+
   describe('serializeSpec', () => {
     it('should serialize a minimal spec to valid TOML', () => {
       const spec: Spec = {
@@ -539,7 +749,7 @@ describe('Spec Generator', () => {
     beforeEach(async () => {
       testProjectId = `test-${randomUUID().substring(0, 8)}`;
       testDir = getInterviewDir(testProjectId);
-      await mkdir(testDir, { recursive: true });
+      await safeMkdir(testDir, { recursive: true });
     });
 
     afterEach(async () => {
@@ -593,7 +803,7 @@ describe('Spec Generator', () => {
         expect(result.spec).toEqual(spec);
 
         // Verify file exists and is valid TOML
-        const content = await readFile(result.path, 'utf-8');
+        const content = await safeReadFile(result.path, 'utf-8');
         const parsed = TOML.parse(content);
         expect(parsed.meta).toBeDefined();
       });
@@ -623,6 +833,33 @@ describe('Spec Generator', () => {
         } as unknown as Spec;
 
         await expect(saveProposal(invalidSpec, testProjectId)).rejects.toThrow(SpecGeneratorError);
+      });
+
+      it('should handle concurrent saveProposal calls with different version numbers', async () => {
+        const spec: Spec = {
+          meta: {
+            version: '1.0.0',
+            created: new Date().toISOString(),
+          },
+          system: {
+            name: 'test-system',
+          },
+        };
+
+        // Launch two parallel save calls
+        const [result1, result2] = await Promise.all([
+          saveProposal(spec, testProjectId),
+          saveProposal(spec, testProjectId),
+        ]);
+
+        // Both should succeed with different version numbers
+        expect(result1.version).toBeDefined();
+        expect(result2.version).toBeDefined();
+        expect(result1.version).not.toBe(result2.version);
+        expect([result1.version, result2.version].sort()).toEqual([1, 2]);
+
+        // Verify files exist and are different
+        expect(result1.path).not.toBe(result2.path);
       });
     });
 
@@ -705,7 +942,7 @@ describe('Spec Generator', () => {
 
     beforeEach(async () => {
       testDir = join(tmpdir(), `criticality-test-${randomUUID()}`);
-      await mkdir(testDir, { recursive: true });
+      await safeMkdir(testDir, { recursive: true });
     });
 
     afterEach(async () => {
@@ -731,7 +968,7 @@ describe('Spec Generator', () => {
 
       expect(result.path).toBe(join(testDir, 'spec.toml'));
 
-      const content = await readFile(result.path, 'utf-8');
+      const content = await safeReadFile(result.path, 'utf-8');
       expect(content).toContain('name = "test-system"');
     });
 

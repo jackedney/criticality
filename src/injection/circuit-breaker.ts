@@ -443,8 +443,8 @@ export function checkCircuitBreaker(
       };
     }
 
-    // Check: max attempts exceeded
-    if (funcState.totalAttempts > config.maxAttemptsPerFunction) {
+    // Check: max attempts reached
+    if (funcState.totalAttempts >= config.maxAttemptsPerFunction) {
       return {
         shouldTrip: true,
         tripReason: {
@@ -483,7 +483,7 @@ export function checkCircuitBreaker(
       // Check for warning (19% case from spec example)
       if (
         escalationRate >= config.moduleEscalationWarningThreshold &&
-        escalationRate <= config.moduleEscalationThreshold
+        escalationRate < config.moduleEscalationThreshold
       ) {
         warnings.push({
           type: 'module_escalation_warning',
@@ -957,7 +957,11 @@ export class CircuitBreaker {
    * Gets the current state.
    */
   getState(): CircuitBreakerState {
-    return this.state;
+    return {
+      ...this.state,
+      functions: new Map(this.state.functions),
+      warnings: Array.from(this.state.warnings),
+    };
   }
 
   /**

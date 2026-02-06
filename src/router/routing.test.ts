@@ -225,7 +225,7 @@ describe('getBaseModel', () => {
 
   it('matches TASK_TYPE_TO_BASE_MODEL mapping', () => {
     for (const taskType of TASK_TYPES) {
-      expect(getBaseModel(taskType)).toBe(TASK_TYPE_TO_BASE_MODEL[taskType]);
+      expect(getBaseModel(taskType)).toBe(TASK_TYPE_TO_BASE_MODEL.get(taskType));
     }
   });
 });

@@ -1,16 +1,25 @@
 /**
  * Contradiction report storage module.
  *
- * Provides persistence for contradiction reports to the project directory,
+ * Provides persistence for contradiction reports to project directory,
  * supporting both JSON and YAML formats.
  *
  * @packageDocumentation
  */
 
-import { writeFile, readFile, mkdir, readdir, stat, rename, unlink } from 'node:fs/promises';
-import { join, dirname } from 'node:path';
+import {
+  safeWriteFile,
+  safeReadFile,
+  safeMkdir,
+  safeReaddir,
+  safeStat,
+  safeRename,
+  safeUnlink,
+} from '../utils/safe-fs.js';
+import { join, dirname, resolve } from 'node:path';
 import { homedir } from 'node:os';
 import { randomUUID } from 'node:crypto';
+import * as yaml from 'js-yaml';
 import type { ContradictionReport, ContradictionReportStorageOptions } from './types.js';
 import { isValidContradictionReport } from './report-parser.js';
 
@@ -29,9 +38,9 @@ export type ReportStorageErrorType =
 export class ReportStorageError extends Error {
   /** The type of storage error. */
   public readonly errorType: ReportStorageErrorType;
-  /** Additional details about the error. */
+  /** Additional details about error. */
   public readonly details: string | undefined;
-  /** The underlying cause of the error if available. */
+  /** The underlying cause of error if available. */
   public readonly cause: Error | undefined;
 
   /**
@@ -76,9 +85,25 @@ export function getCriticalityBaseDir(): string {
  *
  * @param projectId - The project identifier.
  * @returns The path to ~/.criticality/projects/<project>/audit
+ * @throws {Error} If projectId contains invalid characters or attempts path traversal
  */
 export function getAuditDir(projectId: string): string {
-  return join(getCriticalityBaseDir(), 'projects', projectId, 'audit');
+  const safeProjectIdRegex = /^[A-Za-z0-9._-]+$/;
+  if (!safeProjectIdRegex.test(projectId)) {
+    throw new Error(
+      `Invalid projectId: contains invalid characters. Only alphanumeric, '.', '_', and '-' are allowed.`
+    );
+  }
+
+  const auditDir = join(getCriticalityBaseDir(), 'projects', projectId, 'audit');
+  const resolvedPath = resolve(auditDir);
+  const resolvedBase = resolve(getCriticalityBaseDir());
+
+  if (!resolvedPath.startsWith(resolvedBase)) {
+    throw new Error(`Invalid projectId: path traversal detected.`);
+  }
+
+  return resolvedPath;
 }
 
 /**
@@ -88,12 +113,24 @@ export function getAuditDir(projectId: string): string {
  * @param reportId - The report identifier.
  * @param format - The file format ('json' or 'yaml').
  * @returns The full path to the report file.
+ * @throws {Error} If reportId contains invalid characters or attempts path traversal
  */
 export function getReportPath(
   projectId: string,
   reportId: string,
   format: 'json' | 'yaml' = 'json'
 ): string {
+  const safeReportIdRegex = /^[A-Za-z0-9._-]+$/;
+  if (!safeReportIdRegex.test(reportId)) {
+    throw new Error(
+      `Invalid reportId: contains invalid characters. Only alphanumeric, '.', '_', and '-' are allowed.`
+    );
+  }
+
+  if (reportId === '.' || reportId === '..') {
+    throw new Error(`Invalid reportId: cannot be "." or "..".`);
+  }
+
   const extension = format === 'yaml' ? 'yaml' : 'json';
   return join(getAuditDir(projectId), `${reportId}.${extension}`);
 }
@@ -117,7 +154,7 @@ export function getLatestReportPath(projectId: string, format: 'json' | 'yaml' =
  */
 export async function ensureAuditDir(projectId: string): Promise<void> {
   const dir = getAuditDir(projectId);
-  await mkdir(dir, { recursive: true });
+  await safeMkdir(dir, { recursive: true });
 }
 
 /**
@@ -137,72 +174,19 @@ export function serializeReportToJson(report: ContradictionReport, pretty: boole
 /**
  * Serializes a ContradictionReport to YAML string.
  *
- * Simple YAML serialization for human-readable output.
+ * Uses js-yaml library for robust YAML serialization that properly handles
+ * edge cases including colons, leading special characters, and multi-line content.
  *
  * @param report - The report to serialize.
  * @returns YAML string.
  */
 export function serializeReportToYaml(report: ContradictionReport): string {
-  const lines: string[] = [];
-
-  lines.push(`# Contradiction Report`);
-  lines.push(`# Generated: ${report.generatedAt}`);
-  lines.push('');
-  lines.push(`id: ${report.id}`);
-  lines.push(`projectId: ${report.projectId}`);
-  lines.push(`version: ${report.version}`);
-  lines.push(`generatedAt: ${report.generatedAt}`);
-  lines.push(`summary: "${escapeYamlString(report.summary)}"`);
-  lines.push(`crossVerified: ${String(report.crossVerified)}`);
-  lines.push('');
-  lines.push('stats:');
-  lines.push(`  total: ${String(report.stats.total)}`);
-  lines.push(`  critical: ${String(report.stats.critical)}`);
-  lines.push(`  warning: ${String(report.stats.warning)}`);
-  lines.push('  byType:');
-  for (const [type, count] of Object.entries(report.stats.byType)) {
-    lines.push(`    ${type}: ${String(count)}`);
-  }
-  lines.push('');
-  lines.push('contradictions:');
-
-  for (const c of report.contradictions) {
-    lines.push(`  - id: ${c.id}`);
-    lines.push(`    type: ${c.type}`);
-    lines.push(`    severity: ${c.severity}`);
-    lines.push(`    description: "${escapeYamlString(c.description)}"`);
-    lines.push('    involved:');
-    for (const inv of c.involved) {
-      lines.push(`      - elementType: ${inv.elementType}`);
-      lines.push(`        id: ${inv.id}`);
-      lines.push(`        name: "${escapeYamlString(inv.name)}"`);
-      lines.push(`        text: "${escapeYamlString(inv.text)}"`);
-      if (inv.location !== undefined) {
-        lines.push(`        location: ${inv.location}`);
-      }
-    }
-    lines.push(`    analysis: "${escapeYamlString(c.analysis)}"`);
-    lines.push(`    minimalScenario: "${escapeYamlString(c.minimalScenario)}"`);
-    lines.push('    suggestedResolutions:');
-    for (const res of c.suggestedResolutions) {
-      lines.push(`      - "${escapeYamlString(res)}"`);
-    }
-    lines.push('');
-  }
-
-  return lines.join('\n');
-}
-
-/**
- * Escapes a string for YAML output.
- */
-function escapeYamlString(str: string): string {
-  return str
-    .replace(/\\/g, '\\\\')
-    .replace(/"/g, '\\"')
-    .replace(/\n/g, '\\n')
-    .replace(/\r/g, '\\r')
-    .replace(/\t/g, '\\t');
+  return yaml.dump(report, {
+    indent: 2,
+    lineWidth: -1,
+    noRefs: true,
+    sortKeys: false,
+  });
 }
 
 /**
@@ -212,7 +196,7 @@ function escapeYamlString(str: string): string {
  *
  * @param report - The report to save.
  * @param options - Storage options.
- * @returns The path where the report was saved.
+ * @returns The path where report was saved.
  * @throws ReportStorageError if the file cannot be written.
  */
 export async function saveContradictionReport(
@@ -220,8 +204,8 @@ export async function saveContradictionReport(
   options?: ContradictionReportStorageOptions
 ): Promise<string> {
   const opts: Required<ContradictionReportStorageOptions> = {
-    ...DEFAULT_STORAGE_OPTIONS,
-    ...options,
+    format: options?.format ?? DEFAULT_STORAGE_OPTIONS.format,
+    pretty: options?.pretty ?? DEFAULT_STORAGE_OPTIONS.pretty,
   };
 
   await ensureAuditDir(report.projectId);
@@ -236,24 +220,29 @@ export async function saveContradictionReport(
       : serializeReportToJson(report, opts.pretty);
 
   const tempPath = join(dirname(filePath), `.report-${randomUUID()}.tmp`);
+  const latestTempPath = join(dirname(latestPath), `.latest-${randomUUID()}.tmp`);
 
   try {
     // Write to temporary file first
-    await writeFile(tempPath, content, 'utf-8');
+    await safeWriteFile(tempPath, content, 'utf-8');
 
     // Atomic rename to target path
-    await rename(tempPath, filePath);
+    await safeRename(tempPath, filePath);
 
-    // Also save as latest (copy the content)
-    const latestTempPath = join(dirname(latestPath), `.latest-${randomUUID()}.tmp`);
-    await writeFile(latestTempPath, content, 'utf-8');
-    await rename(latestTempPath, latestPath);
+    // Also save as latest (copy of content)
+    await safeWriteFile(latestTempPath, content, 'utf-8');
+    await safeRename(latestTempPath, latestPath);
 
     return filePath;
   } catch (error) {
-    // Clean up temp file if it exists
+    // Clean up temp files if they exist
     try {
-      await unlink(tempPath);
+      await safeUnlink(tempPath);
+    } catch {
+      // Ignore cleanup errors
+    }
+    try {
+      await safeUnlink(latestTempPath);
     } catch {
       // Ignore cleanup errors
     }
@@ -265,6 +254,19 @@ export async function saveContradictionReport(
       { cause: fileError, details: 'Check that the directory exists and is writable' }
     );
   }
+}
+
+/**
+ * Type guard to check if an error has a specific error code.
+ *
+ * @param error - The error to check.
+ * @param code - The error code to look for.
+ * @returns True if error has the specified code.
+ */
+function hasErrorCode(error: unknown, code: string): error is Error & { code: string } {
+  return (
+    error instanceof Error && 'code' in error && (error as Error & { code?: string }).code === code
+  );
 }
 
 /**
@@ -287,18 +289,35 @@ export async function loadContradictionReport(
   let filePath: string;
 
   try {
-    content = await readFile(jsonPath, 'utf-8');
+    content = await safeReadFile(jsonPath, 'utf-8');
     filePath = jsonPath;
-  } catch {
-    try {
-      content = await readFile(yamlPath, 'utf-8');
-      filePath = yamlPath;
-    } catch (error) {
-      const fileError = error instanceof Error ? error : new Error(String(error));
+  } catch (error) {
+    const fileError = error instanceof Error ? error : new Error(String(error));
+    if (!hasErrorCode(error, 'ENOENT')) {
       throw new ReportStorageError(
-        `Contradiction report "${reportId}" not found for project "${projectId}"`,
-        'not_found',
-        { cause: fileError, details: `Looked for ${jsonPath} and ${yamlPath}` }
+        `Failed to read contradiction report from "${jsonPath}"`,
+        'file_error',
+        { cause: fileError }
+      );
+    }
+    try {
+      content = await safeReadFile(yamlPath, 'utf-8');
+      filePath = yamlPath;
+    } catch (yamlError) {
+      const yamlFileError = yamlError instanceof Error ? yamlError : new Error(String(yamlError));
+      if (hasErrorCode(yamlError, 'ENOENT')) {
+        // Both JSON and YAML files don't exist - report not found
+        throw new ReportStorageError(
+          `Contradiction report "${reportId}" not found for project "${projectId}"`,
+          'not_found',
+          { cause: yamlFileError, details: `Looked for ${jsonPath} and ${yamlPath}` }
+        );
+      }
+      // YAML file exists but couldn't be read for another reason
+      throw new ReportStorageError(
+        `Failed to read contradiction report from "${yamlPath}"`,
+        'file_error',
+        { cause: yamlFileError }
       );
     }
   }
@@ -322,13 +341,27 @@ export async function loadLatestContradictionReport(
   let filePath: string;
 
   try {
-    content = await readFile(jsonPath, 'utf-8');
+    content = await safeReadFile(jsonPath, 'utf-8');
     filePath = jsonPath;
-  } catch {
+  } catch (err) {
+    if (!hasErrorCode(err, 'ENOENT')) {
+      const fileError = err instanceof Error ? err : new Error(String(err));
+      throw new ReportStorageError(`Failed to read report file: ${jsonPath}`, 'file_error', {
+        details: jsonPath,
+        cause: fileError,
+      });
+    }
     try {
-      content = await readFile(yamlPath, 'utf-8');
+      content = await safeReadFile(yamlPath, 'utf-8');
       filePath = yamlPath;
-    } catch {
+    } catch (yamlErr) {
+      if (!hasErrorCode(yamlErr, 'ENOENT')) {
+        const yamlFileError = yamlErr instanceof Error ? yamlErr : new Error(String(yamlErr));
+        throw new ReportStorageError(`Failed to read report file: ${yamlPath}`, 'file_error', {
+          details: yamlPath,
+          cause: yamlFileError,
+        });
+      }
       return null;
     }
   }
@@ -337,7 +370,9 @@ export async function loadLatestContradictionReport(
 }
 
 /**
- * Parses report content from JSON.
+ * Parses report content from JSON or YAML.
+ *
+ * Attempts JSON parsing first, then falls back to YAML parsing on failure.
  *
  * @param content - The file content.
  * @param filePath - The file path for error messages.
@@ -345,16 +380,22 @@ export async function loadLatestContradictionReport(
  */
 function parseReportContent(content: string, filePath: string): ContradictionReport {
   let data: unknown;
+  let parseError: Error;
 
   try {
     data = JSON.parse(content);
   } catch (error) {
-    const parseError = error instanceof Error ? error : new Error(String(error));
-    throw new ReportStorageError(
-      `Failed to parse contradiction report at "${filePath}": ${parseError.message}`,
-      'parse_error',
-      { cause: parseError }
-    );
+    parseError = error instanceof Error ? error : new Error(String(error));
+    try {
+      data = yaml.load(content, { schema: yaml.JSON_SCHEMA });
+    } catch (yamlError) {
+      const yamlParseError = yamlError instanceof Error ? yamlError : new Error(String(yamlError));
+      throw new ReportStorageError(
+        `Failed to parse contradiction report at "${filePath}": Neither JSON nor YAML format valid`,
+        'parse_error',
+        { cause: new Error(`JSON: ${parseError.message}; YAML: ${yamlParseError.message}`) }
+      );
+    }
   }
 
   if (!isValidContradictionReport(data)) {
@@ -378,7 +419,8 @@ export async function listContradictionReports(projectId: string): Promise<strin
   const auditDir = getAuditDir(projectId);
 
   try {
-    const files = await readdir(auditDir);
+    const files = await safeReaddir(auditDir);
+
     const reportIds: { id: string; mtime: number }[] = [];
 
     for (const file of files) {
@@ -397,8 +439,8 @@ export async function listContradictionReports(projectId: string): Promise<strin
       const fullPath = join(auditDir, file);
 
       try {
-        const stats = await stat(fullPath);
-        reportIds.push({ id: reportId, mtime: stats.mtimeMs });
+        const stats = await safeStat(fullPath);
+        reportIds.push({ id: reportId, mtime: Number(stats.mtimeMs) });
       } catch {
         // Skip files we can't stat
         continue;
@@ -421,8 +463,7 @@ export async function listContradictionReports(projectId: string): Promise<strin
     return result;
   } catch (error) {
     const fileError = error instanceof Error ? error : new Error(String(error));
-    const isNotFound =
-      'code' in fileError && (fileError as Error & { code?: string }).code === 'ENOENT';
+    const isNotFound = hasErrorCode(error, 'ENOENT');
 
     if (isNotFound) {
       return [];
@@ -441,7 +482,7 @@ export async function listContradictionReports(projectId: string): Promise<strin
  *
  * @param projectId - The project identifier.
  * @param reportId - The report identifier.
- * @returns True if the report exists.
+ * @returns True if report exists.
  */
 export async function contradictionReportExists(
   projectId: string,
@@ -451,13 +492,19 @@ export async function contradictionReportExists(
   const yamlPath = getReportPath(projectId, reportId, 'yaml');
 
   try {
-    await stat(jsonPath);
+    await safeStat(jsonPath);
     return true;
-  } catch {
+  } catch (err) {
+    if (!hasErrorCode(err, 'ENOENT')) {
+      throw err;
+    }
     try {
-      await stat(yamlPath);
+      await safeStat(yamlPath);
       return true;
-    } catch {
+    } catch (yamlErr) {
+      if (!hasErrorCode(yamlErr, 'ENOENT')) {
+        throw yamlErr;
+      }
       return false;
     }
   }

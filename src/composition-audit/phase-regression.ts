@@ -256,18 +256,13 @@ function buildSuggestedResolutions(
 ): SuggestedResolution[] {
   const resolutions: SuggestedResolution[] = [];
 
-  for (let i = 0; i < contradiction.suggestedResolutions.length; i++) {
-    const resolutionText = contradiction.suggestedResolutions[i];
-    if (resolutionText === undefined) {
-      continue;
-    }
-
+  for (const [index, resolutionText] of contradiction.suggestedResolutions.entries()) {
     const affectedIds = contradiction.involved
       .filter((e) => e.elementType === 'constraint')
       .map((e) => e.id);
 
     const resolution: SuggestedResolution = {
-      id: `resolution_${contradiction.id}_${String(i + 1)}`,
+      id: `resolution_${contradiction.id}_${String(index + 1)}`,
       description: resolutionText,
       affectedPhase: targetPhase,
       requiresSpecChange: true,
@@ -669,12 +664,7 @@ function buildComplexContradictionQuery(
   lines.push('Human guidance is required to determine the resolution strategy.');
   lines.push('');
 
-  for (let i = 0; i < contradictions.length; i++) {
-    const contradiction = contradictions[i];
-    if (contradiction === undefined) {
-      continue;
-    }
-
+  for (const [i, contradiction] of contradictions.entries()) {
     lines.push(`Contradiction ${String(i + 1)}: [${contradiction.type.toUpperCase()}]`);
     lines.push(`  ${contradiction.description}`);
     lines.push(
@@ -790,11 +780,7 @@ export function formatContradictionForUser(
   // Suggested resolutions
   if (resolutions.length > 0) {
     lines.push('Suggested resolutions:');
-    for (let i = 0; i < resolutions.length; i++) {
-      const resolution = resolutions[i];
-      if (resolution === undefined) {
-        continue;
-      }
+    for (const [i, resolution] of resolutions.entries()) {
       lines.push(`  ${String(i + 1)}. ${resolution.description}`);
       lines.push(`     (affects: ${resolution.affectedPhase} phase)`);
     }

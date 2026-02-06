@@ -11,7 +11,7 @@
  */
 
 import * as path from 'node:path';
-import * as fs from 'node:fs/promises';
+import { safeExists } from '../utils/safe-fs.js';
 import {
   runTests,
   type TestRunOptions,
@@ -106,6 +106,17 @@ export interface FunctionTestOptions {
   /** Whether to skip compilation check. Default: false. */
   readonly skipCompilation?: boolean;
 
+  /**
+   * Whether to require a test file to exist.
+   *
+   * When true, if no test file is found for the source file, the function
+   * test will fail with an explanatory message. When false (default),
+   * missing test files result in a silent pass (compilation-only verification).
+   *
+   * Default: false.
+   */
+  readonly requireTestFile?: boolean;
+
   /** Logger for progress messages. */
   readonly logger?: (message: string) => void;
 }
@@ -119,30 +130,35 @@ export const DEFAULT_TEST_TIMEOUT = 30000;
  * Looks for test files in the following patterns:
  * 1. Same directory: <basename>.test.ts
  * 2. Same directory: <basename>.spec.ts
- * 3. __tests__ directory: <basename>.test.ts
- * 4. __tests__ directory: <basename>.spec.ts
+ * 3. Same directory: <basename>.test.tsx
+ * 4. Same directory: <basename>.spec.tsx
+ * 5. __tests__ directory: <basename>.test.ts
+ * 6. __tests__ directory: <basename>.spec.ts
+ * 7. __tests__ directory: <basename>.test.tsx
+ * 8. __tests__ directory: <basename>.spec.tsx
  *
  * @param sourceFilePath - The source file path.
  * @returns The test file path if found, undefined otherwise.
  */
 export async function findTestFile(sourceFilePath: string): Promise<string | undefined> {
-  const baseName = path.basename(sourceFilePath, '.ts');
+  const baseName = path.basename(sourceFilePath).replace(/\.(ts|tsx)$/, '');
   const dirName = path.dirname(sourceFilePath);
 
   // Patterns to check
   const candidates = [
     path.join(dirName, `${baseName}.test.ts`),
     path.join(dirName, `${baseName}.spec.ts`),
+    path.join(dirName, `${baseName}.test.tsx`),
+    path.join(dirName, `${baseName}.spec.tsx`),
     path.join(dirName, '__tests__', `${baseName}.test.ts`),
     path.join(dirName, '__tests__', `${baseName}.spec.ts`),
+    path.join(dirName, '__tests__', `${baseName}.test.tsx`),
+    path.join(dirName, '__tests__', `${baseName}.spec.tsx`),
   ];
 
   for (const candidate of candidates) {
-    try {
-      await fs.access(candidate);
+    if (await safeExists(candidate)) {
       return candidate;
-    } catch {
-      // File doesn't exist, try next candidate
     }
   }
 
@@ -315,6 +331,21 @@ export async function executeFunctionTest(
   const testFilePath = await findTestFile(sourceFilePath);
 
   if (testFilePath === undefined) {
+    if (options.requireTestFile === true) {
+      logger(`  No test file found for ${functionName}, failing due to requireTestFile=true`);
+      return {
+        functionName,
+        filePath: sourceFilePath,
+        passed: false,
+        compilationPassed: true,
+        testsPassed: false,
+        compilationResult,
+        failureReason: `No test file found for '${functionName}' and requireTestFile is enabled`,
+        timedOut: false,
+        durationMs: Date.now() - startTime,
+      };
+    }
+
     logger(`  No test file found for ${functionName}, skipping test verification`);
     return {
       functionName,
@@ -432,6 +463,12 @@ export async function executeFunctionTest(
  *
  * Useful for testing multiple functions from the same module in sequence.
  * Each function is tested independently with its own result.
+ *
+ * **Note on sequential execution**: Tests are executed sequentially (not in parallel)
+ * intentionally to avoid resource contention during TypeScript compilation and test
+ * runs, and to preserve deterministic ordering of results. If parallelism is desired
+ * for performance reasons, it should be implemented with throttling (e.g., p-limit)
+ * or worker pools to control concurrency.
  *
  * @param functions - Array of function names and their source file paths.
  * @param options - Test execution options.

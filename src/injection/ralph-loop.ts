@@ -16,7 +16,6 @@
  */
 
 import * as path from 'node:path';
-import * as fs from 'node:fs/promises';
 import { Project } from 'ts-morph';
 import {
   findTodoFunctions,
@@ -45,6 +44,15 @@ import {
   securityScanToFailure,
   type SecurityScanResult,
 } from './security-scanner.js';
+import type { FailureType } from './escalation.js';
+import {
+  determineEscalation,
+  type ModelTier,
+  createFunctionAttempts,
+  recordAttempt,
+  MODEL_TIER_TO_ALIAS,
+} from './escalation.js';
+import { safeExists, safeReadFile, safeWriteFile } from '../utils/safe-fs.js';
 
 /**
  * Local context for a single function implementation.
@@ -84,8 +92,12 @@ export interface ImplementationAttempt {
   readonly compilationResult: TypeCheckResult;
   /** Test result after injection (only if compilation succeeded). */
   readonly testResult?: TestRunResult;
+  /** Security scan result (if performed). */
+  readonly securityScanResult?: SecurityScanResult;
   /** Reason for rejection (if not accepted). */
   readonly rejectionReason?: string;
+  /** The failure type for circuit breaker tracking. */
+  readonly failureType?: FailureType;
   /** Duration in milliseconds. */
   readonly durationMs: number;
 }
@@ -231,165 +243,6 @@ export function parseImplementationResponse(response: string): string {
   }
 
   return body.trim();
-}
-
-/**
- * Extracts required types for a function from the project.
- *
- * Analyzes the function's parameter types and return type to find
- * the type definitions that need to be included in the context.
- *
- * @param project - The ts-morph Project.
- * @param todoFunction - The TODO function to analyze.
- * @returns Array of type definition strings.
- */
-export function extractRequiredTypes(project: Project, todoFunction: TodoFunction): string[] {
-  const types: string[] = [];
-  const sourceFile = project.getSourceFile(todoFunction.filePath);
-
-  if (sourceFile === undefined) {
-    return types;
-  }
-
-  // Find the function declaration
-  const funcDecl = sourceFile.getFunction(todoFunction.name);
-  if (funcDecl === undefined) {
-    return types;
-  }
-
-  // Collect type names from parameters and return type
-  const typeNames = new Set<string>();
-
-  // Extract type names from the signature
-  const signature = todoFunction.signature;
-
-  // Simple regex to find type references (handles common patterns)
-  // Matches: TypeName, TypeName<...>, TypeName[], etc.
-  const typePattern = /:\s*([A-Z][a-zA-Z0-9]*)/g;
-  let match;
-  while ((match = typePattern.exec(signature)) !== null) {
-    const typeName = match[1];
-    if (typeName !== undefined && !isBuiltInType(typeName)) {
-      typeNames.add(typeName);
-    }
-  }
-
-  // Also check generic type parameters
-  const genericPattern = /<([A-Z][a-zA-Z0-9]*)/g;
-  while ((match = genericPattern.exec(signature)) !== null) {
-    const typeName = match[1];
-    if (typeName !== undefined && !isBuiltInType(typeName)) {
-      typeNames.add(typeName);
-    }
-  }
-
-  // Find type definitions in the source file
-  for (const typeName of typeNames) {
-    // Check for type aliases
-    const typeAlias = sourceFile.getTypeAlias(typeName);
-    if (typeAlias !== undefined) {
-      types.push(typeAlias.getText());
-      continue;
-    }
-
-    // Check for interfaces
-    const iface = sourceFile.getInterface(typeName);
-    if (iface !== undefined) {
-      types.push(iface.getText());
-      continue;
-    }
-
-    // Check for classes
-    const classDecl = sourceFile.getClass(typeName);
-    if (classDecl !== undefined) {
-      // For classes, just include a simplified interface-like declaration
-      types.push(`// Class: ${typeName}`);
-    }
-  }
-
-  return types;
-}
-
-/**
- * Checks if a type name is a built-in TypeScript type.
- *
- * @param typeName - The type name to check.
- * @returns True if it's a built-in type.
- */
-function isBuiltInType(typeName: string): boolean {
-  const builtIns = new Set([
-    'String',
-    'Number',
-    'Boolean',
-    'Object',
-    'Array',
-    'Function',
-    'Symbol',
-    'BigInt',
-    'Promise',
-    'Map',
-    'Set',
-    'WeakMap',
-    'WeakSet',
-    'Date',
-    'RegExp',
-    'Error',
-    'ReadonlyArray',
-    'Readonly',
-    'Partial',
-    'Required',
-    'Pick',
-    'Omit',
-    'Record',
-    'Exclude',
-    'Extract',
-    'NonNullable',
-    'Parameters',
-    'ReturnType',
-    'InstanceType',
-    'ThisType',
-  ]);
-  return builtIns.has(typeName);
-}
-
-/**
- * Extracts witness type definitions from a file.
- *
- * Looks for branded types that follow the witness pattern:
- * type Foo = string & { readonly __brand: 'Foo' }
- *
- * @param project - The ts-morph Project.
- * @param filePath - The file to search.
- * @param typeNames - Set of type names to look for.
- * @returns Array of witness type definition strings.
- */
-export function extractWitnessTypes(
-  project: Project,
-  filePath: string,
-  typeNames: Set<string>
-): string[] {
-  const witnesses: string[] = [];
-  const sourceFile = project.getSourceFile(filePath);
-
-  if (sourceFile === undefined) {
-    return witnesses;
-  }
-
-  // Look for type aliases that match the witness pattern
-  for (const typeAlias of sourceFile.getTypeAliases()) {
-    const name = typeAlias.getName();
-    if (!typeNames.has(name)) {
-      continue;
-    }
-
-    const text = typeAlias.getText();
-    // Check if it's a branded type (contains __brand)
-    if (text.includes('__brand')) {
-      witnesses.push(text);
-    }
-  }
-
-  return witnesses;
 }
 
 /**
@@ -551,10 +404,13 @@ export class RalphLoop {
       this.options.logger(`Processing: ${todoFunction.name}`);
 
       const functionId = `${todoFunction.filePath}:${todoFunction.name}`;
-      const attempt = await this.implementFunction(project, todoFunction);
-      attempts.push(attempt);
+      const finalAttempt = await this.implementFunctionWithRetry(project, todoFunction, functionId);
 
-      if (attempt.accepted) {
+      for (const attempt of finalAttempt.attempts) {
+        attempts.push(attempt);
+      }
+
+      if (finalAttempt.accepted) {
         implementedCount++;
         this.options.logger(`  Accepted: ${todoFunction.name}`);
         this.circuitBreaker.recordSuccess(functionId);
@@ -562,44 +418,24 @@ export class RalphLoop {
         failedCount++;
         remainingTodos.push(todoFunction);
         this.options.logger(
-          `  Rejected: ${todoFunction.name} - ${attempt.rejectionReason ?? 'unknown reason'}`
+          `  Rejected: ${todoFunction.name} - ${finalAttempt.finalRejectionReason ?? 'unknown reason'}`
         );
 
-        let failure:
-          | {
-              type: 'test';
-              failingTests: readonly {
-                testName: string;
-                expected: string;
-                actual: string;
-                errorMessage?: string;
-              }[];
-            }
-          | { type: 'type'; compilerError: string };
-
-        if (attempt.testResult !== undefined && !attempt.testResult.success) {
-          failure = {
-            type: 'test',
-            failingTests: attempt.testResult.tests
-              .filter((t) => t.status === 'failed' && t.error !== undefined)
-              .map((t) => ({
-                testName: t.name,
-                expected: '<unknown>',
-                actual: '<unknown>',
-                errorMessage: t.error?.message ?? 'Test failed',
-              })),
-          };
-        } else {
-          failure = {
-            type: 'type',
-            compilerError: attempt.rejectionReason ?? 'Unknown error',
-          };
-        }
-
-        this.circuitBreaker.recordFailure(functionId, failure);
+        // Always record failure for circuit breaker tracking
+        // Use the actual failure type if available, otherwise create a fallback semantic failure
+        const failureToRecord: FailureType = finalAttempt.finalFailureType ?? {
+          type: 'semantic',
+          violation: {
+            type: 'contract',
+            description:
+              finalAttempt.finalRejectionReason ??
+              'Implementation failed without specific failure type',
+          },
+        };
+        this.circuitBreaker.recordFailure(functionId, failureToRecord);
       }
 
-      // Check circuit breaker after each attempt
+      // Check circuit breaker after each function
       const circuitCheck = this.circuitBreaker.check();
 
       if (circuitCheck.shouldTrip) {
@@ -651,11 +487,13 @@ export class RalphLoop {
    *
    * @param project - The ts-morph Project.
    * @param todoFunction - The function to implement.
+   * @param tier - The model tier to use.
    * @returns The implementation attempt result.
    */
   private async implementFunction(
     project: Project,
-    todoFunction: TodoFunction
+    todoFunction: TodoFunction,
+    tier: ModelTier = 'worker'
   ): Promise<ImplementationAttempt> {
     const startTime = Date.now();
 
@@ -665,9 +503,10 @@ export class RalphLoop {
     // Generate implementation prompt
     const prompt = generateImplementationPrompt(context);
 
-    // Request implementation from worker_model
+    // Request implementation from the appropriate model tier
     const request: ModelRouterRequest = {
-      modelAlias: 'worker',
+      // eslint-disable-next-line security/detect-object-injection -- tier is ModelTier enum with known literal keys
+      modelAlias: MODEL_TIER_TO_ALIAS[tier],
       prompt,
       parameters: {
         systemPrompt: IMPLEMENTATION_SYSTEM_PROMPT,
@@ -678,6 +517,9 @@ export class RalphLoop {
 
     let generatedBody = '';
     let compilationResult: TypeCheckResult;
+    // Track original content for rollback - will be set before injection
+    let originalContent = '';
+    let injectionOccurred = false;
 
     try {
       const result = await this.options.modelRouter.complete(request);
@@ -703,11 +545,12 @@ export class RalphLoop {
       }
 
       // Save original file content for potential rollback
-      const originalContent = await fs.readFile(todoFunction.filePath, 'utf-8');
+      originalContent = await safeReadFile(todoFunction.filePath, 'utf-8');
 
       // Inject implementation via AST
       try {
         injectFunctionBody(project, todoFunction.filePath, todoFunction.name, generatedBody);
+        injectionOccurred = true;
       } catch (injectError) {
         return this.createRejectedAttempt(
           todoFunction,
@@ -722,7 +565,7 @@ export class RalphLoop {
 
       if (!compilationResult.success) {
         // Rollback: restore original file
-        await fs.writeFile(todoFunction.filePath, originalContent, 'utf-8');
+        await safeWriteFile(todoFunction.filePath, originalContent, 'utf-8');
         // Refresh to pick up the restored file
         void project.getSourceFile(todoFunction.filePath)?.refreshFromFileSystem();
 
@@ -731,12 +574,18 @@ export class RalphLoop {
           .map((e) => `${e.code}: ${e.message}`)
           .join('; ');
 
+        const failure: FailureType = {
+          type: 'type',
+          compilerError: errorMessages,
+        };
+
         return {
           function: todoFunction,
           accepted: false,
           generatedBody,
           compilationResult,
           rejectionReason: `Compilation failed: ${errorMessages}`,
+          failureType: failure,
           durationMs: Date.now() - startTime,
         };
       }
@@ -745,28 +594,31 @@ export class RalphLoop {
       const securityScanResult = await this.runSecurityVerification(todoFunction);
 
       if (securityScanResult.hasCriticalVulnerabilities) {
-        const failure = securityScanToFailure(securityScanResult);
+        const failure = securityScanToFailure(securityScanResult) ?? {
+          type: 'security' as const,
+          vulnerability: 'injection' as const,
+        };
 
-        if (failure !== undefined) {
-          // Rollback: restore original file
-          await fs.writeFile(todoFunction.filePath, originalContent, 'utf-8');
-          void project.getSourceFile(todoFunction.filePath)?.refreshFromFileSystem();
+        // Rollback: restore original file
+        await safeWriteFile(todoFunction.filePath, originalContent, 'utf-8');
+        void project.getSourceFile(todoFunction.filePath)?.refreshFromFileSystem();
 
-          const vulnSummary = securityScanResult.vulnerabilities
-            .filter((v) => v.severity === 'critical')
-            .slice(0, 3)
-            .map((v) => `${v.cweId ?? 'unknown'}: ${v.message}`)
-            .join('; ');
+        const vulnSummary = securityScanResult.vulnerabilities
+          .filter((v) => v.severity === 'critical')
+          .slice(0, 3)
+          .map((v) => `${v.cweId ?? 'unknown'}: ${v.message}`)
+          .join('; ');
 
-          return {
-            function: todoFunction,
-            accepted: false,
-            generatedBody,
-            compilationResult,
-            rejectionReason: `Security vulnerabilities: ${vulnSummary}`,
-            durationMs: Date.now() - startTime,
-          };
-        }
+        return {
+          function: todoFunction,
+          accepted: false,
+          generatedBody,
+          compilationResult,
+          securityScanResult,
+          rejectionReason: `Security vulnerabilities: ${vulnSummary}`,
+          failureType: failure,
+          durationMs: Date.now() - startTime,
+        };
       }
 
       // Verify tests (only if compilation passes and no critical vulnerabilities)
@@ -774,7 +626,7 @@ export class RalphLoop {
 
       if (testResult !== undefined && !testResult.success) {
         // Rollback: restore original file
-        await fs.writeFile(todoFunction.filePath, originalContent, 'utf-8');
+        await safeWriteFile(todoFunction.filePath, originalContent, 'utf-8');
         void project.getSourceFile(todoFunction.filePath)?.refreshFromFileSystem();
 
         const failedTests = testResult.tests
@@ -783,13 +635,27 @@ export class RalphLoop {
           .map((t) => t.name)
           .join(', ');
 
+        const failure: FailureType = {
+          type: 'test',
+          failingTests: testResult.tests
+            .filter((t) => t.status === 'failed' && t.error !== undefined)
+            .map((t) => ({
+              testName: t.name,
+              expected: '<unknown>',
+              actual: '<unknown>',
+              errorMessage: t.error?.message ?? 'Test failed',
+            })),
+        };
+
         return {
           function: todoFunction,
           accepted: false,
           generatedBody,
           compilationResult,
           testResult,
+          securityScanResult,
           rejectionReason: `Tests failed: ${failedTests}`,
+          failureType: failure,
           durationMs: Date.now() - startTime,
         };
       }
@@ -803,6 +669,7 @@ export class RalphLoop {
           generatedBody,
           compilationResult,
           testResult,
+          securityScanResult,
           durationMs: Date.now() - startTime,
         };
       }
@@ -812,9 +679,21 @@ export class RalphLoop {
         accepted: true,
         generatedBody,
         compilationResult,
+        securityScanResult,
         durationMs: Date.now() - startTime,
       };
     } catch (error) {
+      // Rollback: restore original file if injection occurred
+      if (injectionOccurred) {
+        try {
+          await safeWriteFile(todoFunction.filePath, originalContent, 'utf-8');
+          void project.getSourceFile(todoFunction.filePath)?.refreshFromFileSystem();
+        } catch {
+          // Rollback failed - log but continue with error reporting
+          this.options.logger(`  Warning: Failed to rollback ${todoFunction.filePath} after error`);
+        }
+      }
+
       return this.createRejectedAttempt(
         todoFunction,
         generatedBody,
@@ -825,15 +704,112 @@ export class RalphLoop {
   }
 
   /**
+   * Attempts to implement a single function with retry and escalation.
+   *
+   * This method implements the retry/escalation logic:
+   * - Retries up to maxAttemptsPerFunction
+   * - Escalates to higher tiers based on failure type
+   * - Records attempts to circuit breaker
+   *
+   * @param project - The ts-morph Project.
+   * @param todoFunction - The function to implement.
+   * @param functionId - The function ID for circuit breaker tracking.
+   * @returns An object with all attempts and final status.
+   */
+  private async implementFunctionWithRetry(
+    project: Project,
+    todoFunction: TodoFunction,
+    functionId: string
+  ): Promise<{
+    accepted: boolean;
+    attempts: ImplementationAttempt[];
+    finalRejectionReason?: string;
+    finalFailureType?: FailureType;
+  }> {
+    const attempts: ImplementationAttempt[] = [];
+    let currentTier: ModelTier = 'worker';
+
+    // Maintain persistent attempts tracker for this function across retries
+    let functionAttempts = createFunctionAttempts(functionId);
+
+    for (let attemptNum = 0; attemptNum < this.options.maxAttemptsPerFunction; attemptNum++) {
+      // Record attempt start with circuit breaker
+      this.circuitBreaker.recordAttemptStart(functionId, currentTier);
+
+      // Attempt implementation at current tier
+      const attempt = await this.implementFunction(project, todoFunction, currentTier);
+      attempts.push(attempt);
+
+      if (attempt.accepted) {
+        return { accepted: true, attempts };
+      }
+
+      // Extract failure type from attempt
+      const failureType = attempt.failureType;
+
+      // Update the persistent attempts tracker with this attempt (and failure if present)
+      functionAttempts = recordAttempt(functionAttempts, currentTier, failureType);
+
+      if (failureType === undefined) {
+        // No specific failure type, give up
+        const base = { accepted: false, attempts };
+        if (attempt.rejectionReason !== undefined) {
+          return { ...base, finalRejectionReason: attempt.rejectionReason };
+        }
+        return base;
+      }
+
+      // Determine escalation action using persistent attempts tracker
+      const decision = determineEscalation(failureType, functionAttempts, currentTier);
+
+      this.options.logger(
+        `  Attempt ${String(attemptNum + 1)} (${currentTier}): ${decision.reason}`
+      );
+
+      // Check for circuit break decision
+      if (decision.action.type === 'circuit_break') {
+        this.options.logger(`  Circuit breaker: ${decision.action.reason}`);
+        const base = { accepted: false, attempts };
+        if (attempt.rejectionReason !== undefined) {
+          return { ...base, finalRejectionReason: attempt.rejectionReason };
+        }
+        return { ...base, finalFailureType: failureType };
+      }
+
+      // Check for escalation decision
+      if (decision.action.type === 'escalate') {
+        if (decision.nextTier !== undefined) {
+          this.circuitBreaker.recordEscalation(functionId, decision.nextTier);
+          currentTier = decision.nextTier;
+          this.options.logger(`  Escalating to ${currentTier}`);
+          continue; // Retry with new tier
+        }
+      }
+
+      // Otherwise, retry on same tier
+      if (decision.action.type === 'retry_same') {
+        this.options.logger(`  Retrying same tier ${currentTier}`);
+        continue;
+      }
+    }
+
+    // Max attempts exceeded
+    const lastRejectionReason =
+      attempts[attempts.length - 1]?.rejectionReason ?? 'Max attempts exceeded';
+    return { accepted: false, attempts, finalRejectionReason: lastRejectionReason };
+  }
+
+  /**
    * Creates a rejected attempt result.
    */
   private createRejectedAttempt(
     todoFunction: TodoFunction,
     generatedBody: string,
     reason: string,
-    startTime: number
+    startTime: number,
+    failureType?: FailureType
   ): ImplementationAttempt {
-    return {
+    const base = {
       function: todoFunction,
       accepted: false,
       generatedBody,
@@ -846,6 +822,12 @@ export class RalphLoop {
       rejectionReason: reason,
       durationMs: Date.now() - startTime,
     };
+
+    if (failureType !== undefined) {
+      return { ...base, failureType };
+    }
+
+    return base;
   }
 
   /**
@@ -894,20 +876,27 @@ export class RalphLoop {
 
     if (testPattern === undefined) {
       // Default: look for a test file matching the source file
+      // Try both .test.ts and .spec.ts conventions
       const baseName = path.basename(todoFunction.filePath, '.ts');
       const dirName = path.dirname(todoFunction.filePath);
       const testFile = path.join(dirName, `${baseName}.test.ts`);
+      const specFile = path.join(dirName, `${baseName}.spec.ts`);
 
-      // Check if test file exists
-      try {
-        await fs.access(testFile);
+      // Check if .test.ts file exists first, then fall back to .spec.ts
+      const testFileExists = await safeExists(testFile);
+      if (testFileExists) {
         testPattern = testFile;
-      } catch {
-        // No matching test file found, skip test verification
-        this.options.logger(
-          `  No test file found for ${todoFunction.name}, skipping test verification`
-        );
-        return undefined;
+      } else {
+        const specFileExists = await safeExists(specFile);
+        if (specFileExists) {
+          testPattern = specFile;
+        } else {
+          // Neither test file convention found, skip test verification
+          this.options.logger(
+            `  No test file found for ${todoFunction.name}, skipping test verification`
+          );
+          return undefined;
+        }
       }
     }
 
@@ -916,17 +905,35 @@ export class RalphLoop {
         cwd: this.options.projectPath,
       });
     } catch (error) {
-      this.options.logger(
-        `  Test execution error: ${error instanceof Error ? error.message : String(error)}`
-      );
-      // Return a failed result rather than undefined to trigger rejection
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      const errorStack = error instanceof Error ? error.stack : undefined;
+      this.options.logger(`  Test execution error: ${errorMessage}`);
+
+      // Return a consistent failed result with synthetic test entry
+      // Build error object conditionally to satisfy exactOptionalPropertyTypes
+      const testError: { message: string; stack?: string } = {
+        message: errorMessage,
+      };
+      if (errorStack !== undefined) {
+        testError.stack = errorStack;
+      }
+
       return {
         success: false,
-        totalTests: 0,
+        totalTests: 1,
         passedTests: 0,
         failedTests: 1,
         skippedTests: 0,
-        tests: [],
+        tests: [
+          {
+            name: `${todoFunction.name} (execution error)`,
+            fullName: `${todoFunction.name} test execution failed`,
+            file: todoFunction.filePath,
+            status: 'failed',
+            durationMs: 0,
+            error: testError,
+          },
+        ],
       };
     }
   }
