@@ -9,3 +9,6 @@
  */
 
 export * from './types.js';
+export { loadCatalog } from './catalog-parser.js';
+export type { CatalogParseError, ParseResult } from './catalog-parser.js';
+export { isCatalogError } from './catalog-parser.js';
