@@ -1,4 +1,4 @@
-# criticality
+# criticality.
 
 > autonomous software synthesis through context-shedding
 
