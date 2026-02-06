@@ -221,42 +221,53 @@ describe('cluster-executor', () => {
       expect(runTests).toHaveBeenCalledTimes(1);
     });
 
-    it('should retry on retryable infrastructure failures', { timeout: 60000 }, async () => {
-      let attemptCount = 0;
-      runTests.mockImplementation(() => {
-        attemptCount++;
-        if (attemptCount < 3) {
-          const error = new Error('Temporary failure');
-          return Promise.reject(error);
-        }
-        return Promise.resolve({
-          success: true,
-          totalTests: 1,
-          passedTests: 1,
-          failedTests: 0,
-          skippedTests: 0,
-          tests: [
-            {
-              name: 'balance_001',
-              fullName: 'accounting balance_001',
-              file: 'src/accounting/balance_001.test.ts',
-              status: 'passed',
-              durationMs: 100,
-            },
-          ],
+    it('should retry on retryable infrastructure failures', async () => {
+      vi.useFakeTimers();
+
+      try {
+        let attemptCount = 0;
+        runTests.mockImplementation(() => {
+          attemptCount++;
+          if (attemptCount < 3) {
+            const error = new Error('Temporary failure');
+            return Promise.reject(error);
+          }
+          return Promise.resolve({
+            success: true,
+            totalTests: 1,
+            passedTests: 1,
+            failedTests: 0,
+            skippedTests: 0,
+            tests: [
+              {
+                name: 'balance_001',
+                fullName: 'accounting balance_001',
+                file: 'src/accounting/balance_001.test.ts',
+                status: 'passed',
+                durationMs: 100,
+              },
+            ],
+          });
         });
-      });
 
-      const result = await executeClusters(mockClusters, {
-        projectPath: '/fake/project',
-        maxRetries: 5,
-      });
+        const resultPromise = executeClusters(mockClusters, {
+          projectPath: '/fake/project',
+          maxRetries: 5,
+        });
 
-      // 3 attempts for first cluster (2 failures + 1 success) + 1 for second cluster = 4 total
-      expect(runTests).toHaveBeenCalledTimes(4);
-      expect(result.success).toBe(true);
-      // Both clusters are processed
-      expect(result.clusters).toHaveLength(2);
+        // Advance timers to trigger retry backoffs (multiple retries with exponential backoff)
+        await vi.runAllTimersAsync();
+
+        const result = await resultPromise;
+
+        // 3 attempts for first cluster (2 failures + 1 success) + 1 for second cluster = 4 total
+        expect(runTests).toHaveBeenCalledTimes(4);
+        expect(result.success).toBe(true);
+        // Both clusters are processed
+        expect(result.clusters).toHaveLength(2);
+      } finally {
+        vi.useRealTimers();
+      }
     });
   });
 
