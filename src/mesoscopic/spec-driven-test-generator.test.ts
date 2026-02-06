@@ -4,7 +4,7 @@
  * @packageDocumentation
  */
 
-/* eslint-disable @typescript-eslint/strict-template-expressions */
+/* eslint-disable @typescript-eslint/restrict-template-expressions */
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import type { ModelRouter } from '../router/types.js';
 import {
@@ -14,41 +14,44 @@ import {
 import * as fs from 'node:fs/promises';
 
 const mockRouter: ModelRouter = {
-  prompt: async (): Promise<{
+  prompt: (): Promise<{
     success: true;
     response: {
       content: 'generated test code';
       usage: { promptTokens: 100; completionTokens: 50; totalTokens: 150 };
       metadata: { modelId: 'test-model'; provider: 'test'; latencyMs: 100 };
     };
-  }> => ({
-    success: true,
-    response: {
-      content: 'generated test code',
-      usage: { promptTokens: 100, completionTokens: 50, totalTokens: 150 },
-      metadata: { modelId: 'test-model', provider: 'test', latencyMs: 100 },
-    },
-  }),
-  complete: async (): Promise<{
+  }> =>
+    Promise.resolve({
+      success: true,
+      response: {
+        content: 'generated test code',
+        usage: { promptTokens: 100, completionTokens: 50, totalTokens: 150 },
+        metadata: { modelId: 'test-model', provider: 'test', latencyMs: 100 },
+      },
+    }),
+  complete: (): Promise<{
     success: true;
     response: {
       content: 'generated test code';
       usage: { promptTokens: 100; completionTokens: 50; totalTokens: 150 };
       metadata: { modelId: 'test-model'; provider: 'test'; latencyMs: 100 };
     };
-  }> => ({
-    success: true,
-    response: {
-      content: 'generated test code',
-      usage: { promptTokens: 100, completionTokens: 50, totalTokens: 150 },
-      metadata: { modelId: 'test-model', provider: 'test', latencyMs: 100 },
-    },
-  }),
+  }> =>
+    Promise.resolve({
+      success: true,
+      response: {
+        content: 'generated test code',
+        usage: { promptTokens: 100, completionTokens: 50, totalTokens: 150 },
+        metadata: { modelId: 'test-model', provider: 'test', latencyMs: 100 },
+      },
+    }),
   stream: async function* (): AsyncGenerator<{
     content: 'test';
     done: true;
     usage: { promptTokens: 100; completionTokens: 50; totalTokens: 150 };
   }> {
+    await Promise.resolve(); // Satisfy require-await
     yield {
       content: 'test',
       done: true,
@@ -152,14 +155,17 @@ perf_001 = { type = "performance", text = "search operation completes quickly", 
     const specPath = `${tempDir}/spec.toml`;
     await fs.writeFile(specPath, specContent, 'utf-8');
 
+    // eslint-disable-next-line no-console
     const consoleWarn = console.warn;
     const warnings: string[] = [];
-    console.warn = (...args: unknown[]) => {
+    // eslint-disable-next-line no-console
+    console.warn = (...args: unknown[]): void => {
       warnings.push(args.join(' '));
     };
 
     await generateSpecDrivenTests(specPath, new Map());
 
+    // eslint-disable-next-line no-console
     console.warn = consoleWarn;
 
     expect(warnings.some((w) => w.includes('perf_001'))).toBe(true);

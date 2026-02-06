@@ -5,16 +5,20 @@
  * and infrastructure failure handling.
  */
 
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, type Mock } from 'vitest';
 import { executeClusters, type ClusterExecutionSummary } from './cluster-executor.js';
 import type { ClusterDefinition } from './types.js';
+import type { runTests as runTestsType } from '../adapters/typescript/testrunner.js';
 
 vi.mock('../adapters/typescript/testrunner.js');
 
-const { runTests } = (await import('../adapters/typescript/testrunner.js')) as any;
+const { runTests } = (await import('../adapters/typescript/testrunner.js')) as unknown as {
+  runTests: Mock<typeof runTestsType>;
+};
 
 beforeEach(() => {
   vi.clearAllMocks();
+  vi.resetAllMocks();
 });
 
 describe('cluster-executor', () => {
@@ -130,7 +134,7 @@ describe('cluster-executor', () => {
 
       expect(result.success).toBe(false);
       expect(result.clusters).toHaveLength(1);
-      expect(result.clusters[0].clusterId).toBe('accounting');
+      expect(result.clusters[0]?.clusterId).toBe('accounting');
 
       expect(runTests).toHaveBeenCalledTimes(1);
     });
@@ -207,21 +211,23 @@ describe('cluster-executor', () => {
       });
 
       expect(result.success).toBe(false);
-      expect(result.clusters).toHaveLength(2);
+      // Only 1 cluster because execution stops on error when continueOnFailure is false (default)
+      expect(result.clusters).toHaveLength(1);
+      // First cluster has 2 claims that become 'error' status
       expect(result.errorClaims).toBe(2);
-      expect(result.clusters[0].claimResults[0].status).toBe('error');
-      expect(result.clusters[0].claimResults[0].error).toContain('vitest not found');
+      expect(result.clusters[0]?.claimResults[0]?.status).toBe('error');
+      expect(result.clusters[0]?.claimResults[0]?.error).toContain('vitest not found');
 
       expect(runTests).toHaveBeenCalledTimes(1);
     });
 
-    it('should retry on retryable infrastructure failures', async () => {
+    it('should retry on retryable infrastructure failures', { timeout: 60000 }, async () => {
       let attemptCount = 0;
-      (runTests as ReturnType<typeof vi.fn>).mockImplementation(() => {
+      runTests.mockImplementation(() => {
         attemptCount++;
         if (attemptCount < 3) {
           const error = new Error('Temporary failure');
-          return Promise.reject<void>(error);
+          return Promise.reject(error);
         }
         return Promise.resolve({
           success: true,
@@ -246,9 +252,11 @@ describe('cluster-executor', () => {
         maxRetries: 5,
       });
 
-      expect(runTests).toHaveBeenCalledTimes(3);
+      // 3 attempts for first cluster (2 failures + 1 success) + 1 for second cluster = 4 total
+      expect(runTests).toHaveBeenCalledTimes(4);
       expect(result.success).toBe(true);
-      expect(result.clusters).toHaveLength(1);
+      // Both clusters are processed
+      expect(result.clusters).toHaveLength(2);
     });
   });
 

@@ -266,7 +266,7 @@ async function executeClusterWithRetry(
     const isClusterExecutionError = error instanceof ClusterExecutionError;
 
     if (isClusterExecutionError) {
-      const clusterError = error as ClusterExecutionError;
+      const clusterError = error;
       const failure = clusterError.infrastructureFailure;
 
       if (failure !== undefined) {

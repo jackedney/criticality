@@ -12,7 +12,6 @@
 
 import type { ModelRouter } from '../router/types.js';
 
-/* eslint-disable @typescript-eslint/strict-boolean-expressions */
 import { parseSpec, SpecParseError } from '../spec/index.js';
 import type { Claim } from '../adapters/typescript/claims.js';
 import type { SpecClaim } from '../spec/types.js';
@@ -296,7 +295,7 @@ async function generateTestsForCluster(
     // Check for missing complexity thresholds
     const performanceClaimsWithoutThreshold = performanceClaims.filter((c) => {
       const description = c.description.toLowerCase();
-      const hasComplexity = /o\(/.test(description);
+      const hasComplexity = description.includes('o(');
       return !hasComplexity;
     });
 
@@ -454,7 +453,7 @@ import * as fs from 'node:fs/promises';
 
 async function readFile(path: string, encoding = 'utf-8'): Promise<string> {
   const buffer = await fs.readFile(path, { encoding: encoding as BufferEncoding });
-  return buffer as string;
+  return buffer;
 }
 
 export { DEFAULT_TIMEOUT };
