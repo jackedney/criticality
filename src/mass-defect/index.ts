@@ -19,3 +19,4 @@ export {
 } from './complexity-analyzer.js';
 export { applyTransformation } from './transformation-applier.js';
 export { verifyTransformation } from './semantic-verifier.js';
+export { runMassDefect } from './mass-defect-loop.js';

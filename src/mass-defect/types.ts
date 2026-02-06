@@ -288,3 +288,66 @@ export interface VerificationResult {
   /** Number of tests run. */
   testsRun: number;
 }
+
+/**
+ * Status of a function after Mass Defect iteration.
+ */
+export type FunctionStatus = 'optimal' | 'converged' | 'manual_review_required' | 'failed';
+
+/**
+ * Record of a transformation attempt on a function.
+ */
+export interface TransformationAttempt {
+  /** Pattern ID that was attempted. */
+  patternId: string;
+  /** Whether the attempt succeeded. */
+  success: boolean;
+  /** Risk level of the transformation. */
+  risk: RiskLevel;
+  /** Metrics before the transformation. */
+  beforeMetrics: ComplexityMetrics;
+  /** Metrics after the transformation. */
+  afterMetrics?: ComplexityMetrics;
+  /** Error message (if failed). */
+  error?: string;
+  /** Verification result (if transformation was applied). */
+  verification?: VerificationResult;
+}
+
+/**
+ * Result for a single function after Mass Defect processing.
+ */
+export interface FunctionResult {
+  /** ID of the function. */
+  functionId: FunctionId;
+  /** Final status of the function. */
+  status: FunctionStatus;
+  /** Initial complexity metrics. */
+  initialMetrics: ComplexityMetrics;
+  /** Final complexity metrics. */
+  finalMetrics: ComplexityMetrics;
+  /** All transformation attempts on this function. */
+  attempts: TransformationAttempt[];
+  /** Reason if status is 'manual_review_required'. */
+  reason?: string;
+}
+
+/**
+ * Overall result of running Mass Defect on source files.
+ */
+export interface MassDefectResult {
+  /** Whether Mass Defect converged (all functions meet targets). */
+  converged: boolean;
+  /** Total number of functions analyzed. */
+  totalFunctions: number;
+  /** Number of functions that were transformed. */
+  transformedFunctions: number;
+  /** Number of functions already meeting targets. */
+  optimalFunctions: number;
+  /** Number of functions requiring manual review. */
+  manualReviewFunctions: number;
+  /** Results for each function. */
+  functionResults: Map<FunctionId, FunctionResult>;
+  /** Configuration used for this run. */
+  config: MassDefectConfig;
+}
