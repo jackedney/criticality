@@ -1,60 +1,59 @@
-# criticality.
+```
+1  ▄▀▀▀ █▀▀▄ ▀█▀ ▀█▀ ▀█▀ ▄▀▀▀ ▄▀▀▄ █    ▀█▀ ▀█▀ █  █
+2  █    █▄▄▀  █   █   █  █    █▄▄█ █     █   █  ▀▄▄▀
+3  ▀▄▄▄ █  █ ▄█▄  █  ▄█▄ ▀▄▄▄ █  █ █▄▄▄ ▄█▄  █    █   ●
+```
 
-**A Context-Shedding Architecture for Autonomous Software Synthesis**
+> autonomous software synthesis through context-shedding
 
-![Status: Phase 2 - TypeScript Adapter Complete](https://img.shields.io/badge/Status-Phase_2:_TypeScript_Adapter_Complete-green)
-![TypeScript](https://img.shields.io/badge/Language-TypeScript-3178C6)
+```
+                    ┌─────────────────────────────────────────┐
+                    │                                         │
+  intent ──────────>│  ignition -> lattice -> injection ->   │──────────> code
+                    │              audit        mesoscopic    │
+                    │                           mass-defect   │
+                    │                                         │
+                    └─────────────────────────────────────────┘
+```
 
----
-...
-## Development Status
+## status
 
-The project is currently in **Phase 2: TypeScript Target Adapter**.
+```
+phase 3: protocol phases ................................. complete
+phase 4: human interface ................................. pending
+```
 
--   [x] **Protocol State Machine**: Phase transitions and blocking states defined.
--   [x] **Model Routing**: Unified interface for Claude Code and OpenCode backends.
--   [x] **MCP Servers**: Artifact and Toolchain servers implemented.
--   [x] **TypeScript Adapter**: AST manipulation, witness generation, and contract parsing implemented.
--   [x] **Test Generation Suite**: Support for property (fast-check), behavioral, concurrent (workers), and benchmark testing.
--   [x] **LLM-Based Claim Parsing**: Automated transformation of natural language claims into structured test scenarios.
--   [ ] **Phase Implementation**: Ignition and Lattice phases are next.
-
-See [ROADMAP.md](./ROADMAP.md) for the detailed development plan.
-
-## Getting Started
-
-### Prerequisites
-
--   Node.js 20.x
--   npm
-
-### Installation
+## quickstart
 
 ```bash
 git clone https://github.com/jackedney/criticality.git
 cd criticality
 npm install
-```
-
-### Running Tests
-
-```bash
-# Run unit and integration tests
 npm test
-
-# Run type checking
-npm run typecheck
-
-# Lint the codebase
-npm run lint
 ```
 
-## Documentation
+## architecture
 
--   **[SPECIFICATION.md](./SPECIFICATION.md)**: The complete, authoritative protocol specification.
--   **[ROADMAP.md](./ROADMAP.md)**: Implementation progress and future milestones.
--   **[DECISIONS.toml](./DECISIONS.toml)**: Record of architectural decisions.
+```
+src/
+├── interview/        # phase I: ignition
+├── lattice/          # phase II: type lattice construction
+├── composition-audit/# contradiction detection
+├── injection/        # phase III: ralph loop
+├── mesoscopic/       # phase III.5: cluster verification
+├── mass-defect/      # phase IV: complexity reduction
+├── adapters/         # language-specific implementations
+├── protocol/         # state machine & orchestration
+├── router/           # model routing & cost optimization
+└── servers/          # MCP artifact & toolchain servers
+```
 
-## License
+## docs
+
+- [SPECIFICATION.md](./SPECIFICATION.md) — protocol spec
+- [ROADMAP.md](./ROADMAP.md) — implementation progress
+- [DECISIONS.toml](./DECISIONS.toml) — architectural decisions
+
+## license
 
 MIT
