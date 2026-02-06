@@ -145,8 +145,6 @@ ${lines.join('\n')}
             }
             return x;
           }
-          return 0;
-        }
         `;
 
         const sourceFile = createSourceFileFromString(code);
@@ -161,24 +159,22 @@ ${lines.join('\n')}
       });
 
       it('detects high cyclomatic complexity smell', async () => {
+        // This function has complexity > 10 (threshold)
+        // Base: 1 + 11 if/else branches = 12
         const code = `
-          function highComplexity(x: number, y: number, z: number): number {
-            if (x > 0) {
-              if (y > 0) {
-                if (z > 0) {
-                  return x + y + z;
-                }
-                return x + y;
-              }
-              return x + z;
-            }
-            if (y < 0) {
-              if (z < 0) {
-                return y + z;
-              }
-              return y;
-            }
-            return z;
+          function highComplexity(x: number): string {
+            if (x === 1) return 'one';
+            else if (x === 2) return 'two';
+            else if (x === 3) return 'three';
+            else if (x === 4) return 'four';
+            else if (x === 5) return 'five';
+            else if (x === 6) return 'six';
+            else if (x === 7) return 'seven';
+            else if (x === 8) return 'eight';
+            else if (x === 9) return 'nine';
+            else if (x === 10) return 'ten';
+            else if (x === 11) return 'eleven';
+            else return 'other';
           }
         `;
 
@@ -400,8 +396,6 @@ ${lines.join('\n')}
             }
             return x;
           }
-          return 0;
-        }
         `;
 
         const sourceFile = createSourceFileFromString(code);
@@ -415,35 +409,23 @@ ${lines.join('\n')}
       });
 
       it('calculates severity based on threshold exceedance', async () => {
+        // Function with complexity > 10 (threshold)
+        // Base: 1 + 12 if/else branches = 13
         const code = `
-          function veryComplex(x: number): number {
-            if (x > 0) {
-              if (x > 10) {
-                if (x > 20) {
-                  if (x > 30) {
-                    return x + 1;
-                  } else if (x > 25) {
-                    return x + 2;
-                  } else if (x > 22) {
-                    return x + 3;
-                  } else {
-                    return x;
-                  }
-                } else if (x > 15) {
-                  return x + 4;
-                } else {
-                  return x + 5;
-                }
-              } else if (x > 5) {
-                return x + 6;
-              } else {
-                return x + 7;
-              }
-            } else if (x < 0) {
-              return x - 1;
-            } else {
-              return 0;
-            }
+          function veryComplex(x: number): string {
+            if (x === 1) return 'one';
+            else if (x === 2) return 'two';
+            else if (x === 3) return 'three';
+            else if (x === 4) return 'four';
+            else if (x === 5) return 'five';
+            else if (x === 6) return 'six';
+            else if (x === 7) return 'seven';
+            else if (x === 8) return 'eight';
+            else if (x === 9) return 'nine';
+            else if (x === 10) return 'ten';
+            else if (x === 11) return 'eleven';
+            else if (x === 12) return 'twelve';
+            else return 'other';
           }
         `;
 

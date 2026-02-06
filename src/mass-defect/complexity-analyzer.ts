@@ -27,6 +27,9 @@ let eslintInstance: any = null;
 
 /**
  * Initializes ESLint instance with required rules for smell detection.
+ *
+ * Uses a standalone configuration without TypeScript project service
+ * to support linting in-memory code snippets.
  */
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 async function initializeESLint(): Promise<any> {
@@ -35,13 +38,28 @@ async function initializeESLint(): Promise<any> {
   }
 
   const { ESLint } = await import('eslint');
-  eslintInstance = new ESLint({
-    overrideConfig: {
+  const tseslint = await import('typescript-eslint');
+
+  // Create a standalone config that doesn't require projectService
+  // This allows linting in-memory code without a tsconfig
+  const standaloneConfig = [
+    // Base recommended config
+    {
+      files: ['**/*.ts', '**/*.tsx'],
+      languageOptions: {
+        parser: tseslint.parser,
+        parserOptions: {
+          // Don't use projectService - allows linting without tsconfig
+          project: false,
+        },
+      },
       rules: {
         complexity: ['error', { max: 10 }],
         'max-depth': ['error', { max: 3 }],
         'max-lines-per-function': ['error', { max: 50, skipComments: true }],
         'no-magic-numbers': ['error', { ignore: [0, 1, -1], ignoreArrayIndexes: true }],
+        'no-unreachable': 'error',
+        'no-unused-vars': ['error', { argsIgnorePattern: '^_' }],
         'no-restricted-syntax': [
           'error',
           {
@@ -52,7 +70,12 @@ async function initializeESLint(): Promise<any> {
         ],
       },
     },
-    overrideConfigFile: undefined,
+  ];
+
+  eslintInstance = new ESLint({
+    overrideConfigFile: true,
+    // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-explicit-any
+    overrideConfig: standaloneConfig as any,
   });
 
   return eslintInstance;
@@ -187,17 +210,27 @@ export async function detectSmells(
 
 /**
  * Runs ESLint on a source file and returns violations.
+ *
+ * Uses lintText to support both real files and in-memory test files.
+ * For in-memory files (paths like /temp.ts), uses a synthetic path within cwd
+ * so ESLint doesn't reject them as outside the base path.
  */
 async function runESLint(
   sourceFile: SourceFile
 ): Promise<{ messages: Linter.LintMessage[]; filePath: string }[]> {
   // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
   const eslint = await initializeESLint();
-  const filePath = sourceFile.getFilePath();
+  const originalFilePath = sourceFile.getFilePath();
+  const code = sourceFile.getFullText();
+
+  // For in-memory files (paths like /temp.ts), use a synthetic path within cwd
+  // so ESLint doesn't reject them as outside the base path
+  const isInMemoryPath = originalFilePath.match(/^\/[^/]+\.tsx?$/);
+  const filePath = isInMemoryPath ? `${process.cwd()}/__eslint_temp__.ts` : originalFilePath;
 
   try {
     // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-call, @typescript-eslint/no-unsafe-member-access
-    const results = await eslint.lintFiles([filePath]);
+    const results = await eslint.lintText(code, { filePath });
 
     // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access
     if (results.length === 0) {
@@ -208,8 +241,8 @@ async function runESLint(
     return results.map((result: any) => ({
       // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-member-access
       messages: result.messages ?? [],
-      // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-member-access
-      filePath: result.filePath ?? filePath,
+      // Return original path for consistency
+      filePath: originalFilePath,
     }));
   } catch {
     return [];
