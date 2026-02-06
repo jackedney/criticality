@@ -1,307 +1,186 @@
-In `@PRD.md`:
-- Around line 1-2: The file currently starts with a second-level heading ("##
-2026-01-30 10:27 - US-026: Mesoscopic: Spec-driven test generation") which
-triggers MD041; add a top-level H1 heading above that line (for example "# PRD"
-or a concise project/title H1) so the document begins with an H1 before the
-existing "## 2026-01-30 10:27 - US-026: Mesoscopic: Spec-driven test generation"
-heading to satisfy MD041.
-
-In `@src/adapters/typescript/index.ts`:
-- Around line 681-701: The re-export block duplicates DEFAULT_TIMEOUT from
-temporal-test-generator.js and negative-test-generator.js and repeats
-generateSpecDrivenTests; fix by aliasing the two timeouts (e.g., export
-DEFAULT_TIMEOUT as TEMPORAL_DEFAULT_TIMEOUT from generateTemporalTests group and
-export DEFAULT_TIMEOUT as NEGATIVE_DEFAULT_TIMEOUT from generateNegativeTests
-group) and remove the duplicated generateSpecDrivenTests entry so the mesoscopic
-export only lists generateSpecDrivenTests once along with SpecDrivenTestOptions
-and SpecDrivenTestError.
-
-In `@src/adapters/typescript/invariant-test-generator.ts`:
-- Around line 172-186: In generateInvariantTest: when witnesses.length === 0 you
-are duplicating the fc.assert closure—generateTestProperty already appends the
-"{ numRuns: ... }" and closing ");". Remove the extra lines in
-generateInvariantTest that push the "{ numRuns: " + String(numRuns) + " }" and
-the final "    );" so that generateTestProperty remains responsible for closing
-fc.assert; do the same cleanup for the analogous block around the other
-occurrence (near the second instance referenced, lines 308-312). Ensure you keep
-the invariant body/comments but stop appending the numRuns/closing tokens in
-generateInvariantTest.
-
-In `@src/adapters/typescript/negative-test-generator.test.ts`:
-- Around line 20-41: The test expectations in negative-test-generator.test.ts do
-not match the actual strings produced by generateNegativeTest: update the
-assertions to exactly match the generator output from
-generateNegativeTest(claim, { includeJsDoc: false })—fix the mismatched
-describe/it titles (remove the extra bracket in the it title and use the real
-describe string), correct the expectedFailure/assertion messages to the exact
-phrases emitted (e.g., the actual "Forbidden outcome: ..." text and any
-differening assertion lines), and apply the same corrections to the other
-failing block around lines 95-123 so all expected strings align with
-generateNegativeTest’s current output.
-
 In `@src/adapters/typescript/negative-test-generator.ts`:
-- Around line 88-112: In extractForbiddenOutcome, one pattern
-(/never\s+(produces?|results?\s+in)\s+(\w+)/i) uses two capture groups so
-returning match[1] can yield the verb instead of the outcome; update the
-function to return the actual outcome by either making the intermediate group
-non-capturing (?:produces?|results?\s+in) in the patterns array or by selecting
-the last defined capture (e.g., prefer match[2] when present) before returning;
-reference function extractForbiddenOutcome and the patterns array to locate and
-apply this change.
+- Around line 30-38: Extract the duplicated escapeString implementation into a
+shared utility and update callers to import it: create a new utility (e.g.,
+export function escapeString in a shared utils module) containing the current
+logic, replace the local escapeString definitions in negative-test-generator.ts
+and temporal-test-generator.ts with imports from that module, and run
+tests/linters to ensure no behavior change; make sure the exported function name
+remains escapeString so callers (negative-test-generator and
+temporal-test-generator) require minimal changes.
+- Around line 373-377: The main test generation block uses a multi-line closing
+for the it() call while per-function tests use a single-line closing; update the
+code that pushes the closing lines (the lines.push calls around escapedTestName
+/ generateTestBody and timeout) to use the same single-line style as the
+per-function tests by replacing the three lines that currently push '    },',
+the timeout object, and '  );' with one lines.push that formats "  }, { timeout:
+${String(timeout)} });" so generateTestBody, escapedTestName and timeout remain
+unchanged but the closing style is consistent.
 
 In `@src/adapters/typescript/temporal-test-generator.test.ts`:
-- Around line 25-50: Update the assertions in temporal-test-generator.test.ts so
-they exactly match the generator output produced into testCode: adjust quote
-styles (use double quotes where the generator emits double quotes), match exact
-phrases (e.g., the describe header "Temporal: [temp_001] session is valid for 30
-minutes", the it block signature "it('[temp_001] session is valid for 30
-minutes', () => {", the final '},' and '});' tokens), and align variable/log
-strings (e.g., the console.log messages and the two separate validateSession
-calls must use the exact text the generator emits, as well as the timeout object
-'{ timeout: 30000 }' and "Time constraints detected: minute"); update any
-duplicated expectation texts (like re-used 'const isValid' lines) to the exact
-emitted lines so assertions reflect the actual generated code (search for
-testCode and the string literals asserted in this test to update them).
+- Around line 1-143: Add property-based tests using fast-check to supplement the
+example-based tests: import fast-check and write fc.assert(fc.property(...))
+cases that generate arbitrary claim objects (varying id, description with
+special chars, type including 'temporal' and others, and functions arrays) and
+assert that generateTemporalTest(claim, {includeJsDoc:false}) always includes
+the claim.id, safely-escaped description, and appropriate markers (e.g.,
+"Temporal:" header, timeout block) and that generateTemporalTests([...claims])
+only includes entries for claims with type === 'temporal' and preserves ids;
+focus on exercising generateTemporalTest and generateTemporalTests to catch
+string-escaping and filtering edge cases.
 
-In `@src/adapters/typescript/temporal-test-generator.ts`:
-- Line 321: The TODO string uses single quotes so `${func}` won't interpolate;
-update the lines.push call that builds the test comment (lines.push('    //
-TODO: Test ${func} specifically for temporal property')) to use a template
-literal with backticks so the func variable is interpolated (or alternatively
-concatenate with '+'), e.g., change the string in the lines.push call
-referencing func to a backtick-wrapped template literal.
-- Around line 137-163: The generated session test block in
-temporal-test-generator.ts references isValid in console.log but the actual
-validation calls are commented out, causing a ReferenceError; update the
-generator to emit distinct placeholder variables (e.g., midIsValid and
-afterIsValid) with initial boolean values before the commented validation lines
-and use those names in the corresponding console.log/assert lines inside the
-code that builds the lines array (the branches that check desc.includes('valid')
-and desc.includes('expires'/'invalid')); ensure each placeholder is declared
-(const midIsValid = false; const afterIsValid = false;) so generated tests run
-without runtime errors and keep the commented TODOs for real validation calls.
-- Around line 304-307: The generated `it()` closing is malformed: remove the
-standalone closing brace emitted after generateTestBody and replace the two-line
-close with a single consolidated close that uses the options-object syntax (as
-used in the second `it()` block) so the call to it(...) ends with a single "}, {
-timeout: <value> })" style closure; update the code that builds the lines
-(around the use of escapedTestName, generateTestBody(claim) and timeout in
-temporal-test-generator.ts) to emit one closing line instead of the separate '}'
-and '}, ${String(timeout)});' fragments.
-
-In `@src/mesoscopic/cluster-definer.test.ts`:
-- Around line 38-42: The tests use index-based assertions on result.modules
-(e.g., expecting modules[0].name === 'Account' and modules[1].name ===
-'Transaction') which is order-sensitive and flaky; update both occurrences (test
-assertions around result.modules, including the block asserting
-Account/Transaction and the one at the other location) to locate modules by
-name/id using Array.prototype.find (or equivalent lookup) on result.modules and
-then assert on that module's properties (name and dataModels) instead of relying
-on fixed indexes.
+In `@src/injection/escalation.test.ts.bak`:
+- Around line 147-157: The test uses dot notation on attempts.attemptsByTier but
+earlier tests treat attemptsByTier as a Map; update the assertions to access Map
+entries via attempts.attemptsByTier.get('worker') and
+attempts.attemptsByTier.get('fallback') (or coalesce to 0 if you expect missing
+keys) so the test matches the Map API used by createFunctionAttempts and
+recordAttempt.
+- Around line 1-6: The file escalation.test.ts.bak is a backup and should not be
+committed as-is; either rename it to follow the test naming convention (e.g.,
+escalation.test.ts or escalation.spec.ts) if it contains active tests, or remove
+it from the repo and add the .bak pattern (or the specific filename) to
+.gitignore if it must remain locally; ensure CI/test runner only sees valid
+.test.ts/.spec.ts files and update any references if you rename the file.
+- Around line 122-129: The test mistakenly references the original variable
+`attempts` instead of the updated result `updated` and mixes Map and property
+access for `attemptsByTier`; change assertions to reference `updated` and access
+`attemptsByTier` consistently as a Map (use `attemptsByTier.get('worker')` and
+`attemptsByTier.get('fallback')`) so the test checks the updated state returned
+by `recordAttempt(initial, 'worker')` and verifies fallback is 0 via the Map
+get.
 
 In `@src/mesoscopic/cluster-definer.ts`:
-- Around line 262-277: The forEach callbacks currently use expression bodies
-that implicitly return the result of Set.add (e.g., allClaims.forEach((c) =>
-assignedClaims.add(c)), allModules.forEach((m) => assignedModules.add(m)), and
-unassignedModuleClaims.forEach((c) => assignedClaims.add(c))); change those
-arrow callbacks to use block bodies with explicit statements (for example:
-allClaims.forEach((c) => { assignedClaims.add(c); });) so they no longer return
-a value and satisfy the Biome lint rule; update each occurrence referencing
-assignedClaims.add, assignedModules.add, and unassignedModuleClaims.forEach
-accordingly.
-- Around line 406-424: The current validateClusterResult builds allModules from
-clusters so the check `!allModules.has(moduleId)` never detects invalid module
-IDs; change validation to compare cluster.module IDs against the canonical list
-in result.modules instead: build a Set of validModuleIds from result.modules
-(e.g., using m.id) and replace the `allModules` usage and declaration with a
-check that each moduleId exists in validModuleIds (and/or
-result.modules.some(...) if preferred), removing the faulty allModules reference
-so invalid module IDs in clusters are properly rejected by
-validateClusterResult.
+- Around line 68-71: The current extraction into allTypeNames uses match[1]
+which TypeScript treats as string | undefined under noUncheckedIndexedAccess;
+update the flatMap result to explicitly narrow the type before returning — e.g.,
+derive the captured value into a variable (from the regex in the callback for
+allTypeNames), then filter out undefined with a type guard like (v): v is string
+=> v !== undefined (or use Boolean as a type-predicate) so the final array
+contains only string; apply this change to the callback used with params and
+returnType so allTypeNames is strongly typed as string[].
 
 In `@src/mesoscopic/cluster-executor.test.ts`:
-- Around line 32-74: The mocked runTests result is inconsistent: mockRunTests
-resolves with totalTests: 3 but only provides two test objects, causing
-assertions around executeClusters (function executeClusters, variable
-mockClusters, and cluster.claimResults) to be misleading; update the mocked
-response in the test to make totals match the tests array (either add the
-missing third test entry to the tests array with appropriate
-name/file/status/duration or change totalTests to match tests.length and adjust
-passed/failed counts) so that executeClusters' expectations (totalClaims,
-passedClaims, failedClaims, and cluster.claimResults length) align with the
-fixture data.
-
-In `@src/mesoscopic/cluster-executor.ts`:
-- Around line 194-220: The current detection using hasNotFoundError is brittle;
-update the logic in cluster-executor.ts where hasNotFoundError is computed to
-prefer checking structured error properties first (e.g., if error is an Error
-and error.code === 'ENOENT' or error.name === 'TestRunnerNotFoundError' or error
-instanceof TestRunnerNotFoundError) and only fall back to a case-insensitive
-message match as a last resort; keep the rest of the flow that builds
-infrastructureFailure and throws ClusterExecutionError (referencing cluster.id,
-errorMessage, stack) unchanged so callers still receive the same error shape.
-- Around line 317-400: Replace the direct console logging in cluster-executor.ts
-with the project's structured logger: import the logger (e.g., import { logger }
-from '../utils/logger.js') and change console.log/console.error calls inside the
-ClusterExecutor loop and after computing totals to logger.info/warn/error as
-appropriate (for example, replace the cluster completion log that references
-result.success with logger.info and pass structured metadata like { clusterId:
-cluster.id, clusterName: cluster.name, durationMs: result.durationMs, success:
-result.success }; replace the per-claim logs inside the for loop to logger.debug
-or logger.info with { claimId: claimResult.claimId, status: claimResult.status,
-testCount: claimResult.testCount }; and replace the error catch console.error to
-logger.error including the error object rather than just the message). Remove
-the corresponding eslint-disable-next-line no-console comments and ensure all
-stats logs at the end use logger.info with structured fields (totalClaims,
-passedClaims, failedClaims, skippedClaims, errorClaims, totalDurationMs).
-- Around line 109-113: The current test-to-claim mapping in the claimIds loop
-uses testRunResult.tests.filter with test.fullName.includes(claimId), which
-causes false positives (e.g., "inv-1" matching "inv-10"); update the filter in
-the claimIds loop (the code that sets testsForClaim) to perform a word-boundary
-or explicit-marker match instead of includes: construct a case-insensitive regex
-using escaped claimId with \b boundaries (or detect a CLAIM_REF marker pattern
-if you have one) and test against test.fullName, and add/inline a small
-escapeRegExp helper to safely escape claimId before building the RegExp to avoid
-regex injection.
-- Around line 371-383: The current code does five separate flatMap+filter passes
-over clusterResults to compute totalClaims, passedClaims, failedClaims,
-skippedClaims, and errorClaims; replace these with a single pass by either first
-collecting all claims once (e.g., const allClaims = clusterResults.flatMap(r =>
-r.claimResults)) and then using a single reduce over allClaims to accumulate
-counts, or by reducing directly over clusterResults and inner claimResults to
-increment counters; update the variables totalClaims, passedClaims,
-failedClaims, skippedClaims, and errorClaims to be derived from that single
-reduce to avoid repeated iteration.
-- Line 268: The retry uses a linear delay (await new Promise((resolve) =>
-setTimeout(resolve, 1000 * attempt))) which should be replaced with an
-exponential backoff + jitter strategy: compute a baseDelay (e.g., 1000ms), a
-capped exponential delay like Math.min(maxDelayMs, baseDelayMs * 2 ** attempt),
-add a small random jitter (+/- a fraction or uniform 0..baseDelayMs) and await
-that computed delay; update the retry loop where the await new Promise(...)
-appears (referencing the same await/new Promise and attempt variable) and ensure
-there is a sensible maxDelayMs cap to avoid unbounded waits.
+- Around line 224-260: The test currently waits up to 60s for retries; make it
+deterministic and faster by mocking timers around the retry behavior: in the
+'should retry on retryable infrastructure failures' test, call
+vi.useFakeTimers() before invoking executeClusters (or before the code path that
+triggers setTimeout delays), replace any real delay waits by advancing timers
+(e.g., vi.advanceTimersByTime or vi.runAllTimers/vi.advanceTimersToNextTimer) to
+simulate backoff between runTests attempts, then call vi.useRealTimers() (or
+vi.clearAllTimers/vi.restoreAllMocks as appropriate) after the test; ensure you
+still assert runTests call counts and result.success as before.
+- Around line 263-285: The current test only checks a manually created
+ClusterExecutionSummary object and provides little value; replace it with a real
+runtime test that calls executeClusters (or remove the test) — specifically,
+write a test that invokes executeClusters with a small set of mocked
+clusters/tasks and asserts the returned object (type ClusterExecutionSummary)
+contains the expected properties and values (clusters, success, totalClaims,
+passedClaims, failedClaims, skippedClaims, errorClaims, totalDurationMs), or
+simply delete the redundant structure-only spec if TypeScript compilation
+already guarantees interface shape.
 
 In `@src/mesoscopic/index.ts`:
-- Around line 12-18: The review points out that ClusterDefinitionError is a
-runtime class but was exported only as a type; change the exports in this module
-so ClusterDefinitionError is exported as a runtime value (not type-only).
-Specifically, keep the type-only exports for Module, ClusterDefinition,
-ClusterDefinitionResult, ClusterDefinitionOptions but add an explicit value
-export for ClusterDefinitionError (e.g., add "export { ClusterDefinitionError }
-from './types.js';" or split the current export into type and value exports) so
-consumers can use instanceof and catch the actual Error class.
+- Around line 27-38: The current export groups DEFAULT_TIMEOUT and
+DEFAULT_MAX_RETRIES under a type-only export which removes them at runtime;
+update the exports so those two constants are exported as values instead of
+types: keep the type-only export for the listed type symbols
+(ClusterExecutionOptions, ClusterExecutionResult, etc.) and add a separate value
+export for DEFAULT_TIMEOUT and DEFAULT_MAX_RETRIES from './cluster-executor.js'
+(i.e., remove them from the export type list and add "export { DEFAULT_TIMEOUT,
+DEFAULT_MAX_RETRIES } from './cluster-executor.js';" so consumers can access the
+runtime constants).
 
 In `@src/mesoscopic/spec-driven-test-generator.test.ts`:
-- Around line 8-15: Tests currently leak temp directories and a replaced
-console.warn; add lifecycle cleanup: in the test suite use beforeEach to save
-the original console.warn (e.g., const _origWarn = console.warn) and any temp
-path state, and add an afterEach that restores console.warn and deletes any temp
-dirs created by the tests via fs.rm(path, { recursive: true, force: true })
-(apply to the sections around the tests that exercise generateSpecDrivenTests /
-SpecDrivenTestOptions). Ensure afterEach runs regardless of test failures so
-global state and filesystem artifacts are always cleaned up.
+- Around line 16-69: The mockRouter's method return type annotations (prompt,
+complete, and the stream generator yield) use overly specific literal types
+(e.g., content: 'generated test code') which should be replaced with the actual
+router response types or generics from the ModelRouter API; update the
+signatures for prompt and complete to return the declared response interface (or
+reuse ModelRouter's method return types via ReturnType or the shared
+Response/Metadata types) and adjust the stream generator's yielded value type to
+the appropriate stream response type so the mock matches the real type shapes
+(including generic usage/metadata fields) instead of literal string/value types.
 
 In `@src/mesoscopic/spec-driven-test-generator.ts`:
-- Around line 428-500: The baseline loaded into the variable baseline in
-generateSpecDrivenTests is never used; either wire it into the
-test-generation/performance-evaluation flow or remove the baseline option. Fix
-by passing baseline (if defined) into the downstream step that evaluates
-performance—e.g. change the call to generateTestsForCluster or add a call to a
-new evaluateRegressions/generateRegressionFlags function that accepts
-generatedTests and baseline (types: Map<string, PerformanceBaseline>, Test
-outputs) and marks/filters tests accordingly; ensure options.baselinePath and
-loadBaseline remain consistent with the new parameter so regressions are
-actually detected and reported.
-- Around line 121-135: The linkage is inverted: linkClaimsToFunctions currently
-looks up functions by claimId in functionClaimRefs even though functionClaimRefs
-maps functionId → claimIds; fix by first building an inverse map from claimId →
-string[] by iterating functionClaimRefs (for each functionId and its claimIds
-push functionId into each claimId bucket), then iterate claims (in function
-linkClaimsToFunctions) and set each claim.functions to the collected array (or
-[] if none) so TestableClaim.functions is correctly populated; update references
-to claims, functionClaimRefs, and linkClaimsToFunctions accordingly.
+- Around line 209-227: The skippedClaims array is computed inside
+generateTestsForCluster but never used; remove the dead computation or wire it
+up: either delete the skippedClaims declaration and the loop in
+generateTestsForCluster to avoid duplicate logic, or modify
+generateTestsForCluster to return the skippedClaims (and update callers) so
+generateSpecDrivenTests can consume that result; locate the skippedClaims
+variable and the loop in generateTestsForCluster and apply the chosen fix to
+eliminate the redundant computation duplicated later in generateSpecDrivenTests.
+- Around line 359-361: The docstring claims "Detects performance regression if
+baseline is available" but no implementation exists; add a baseline option and
+comparison logic: extend SpecDrivenTestOptions to include baselinePath (or
+baselineData) and update the main generator function (generateSpecDrivenTests /
+SpecDrivenTestGenerator class) to load the baseline (e.g., read and parse the
+baseline file), compute the same metrics used for current runs, and compare them
+producing a regression warning/failure when current metrics exceed baseline
+thresholds; ensure logging and tests are updated to exercise the new baseline
+loading and comparison paths and update the docstring if you choose to remove
+rather than implement the feature.
+- Around line 452-457: The import statement for the promises API is currently
+below function definitions; move "import * as fs from 'node:fs/promises'" up
+with the other imports at the top of the file, so the module imports are
+consolidated, and ensure the readFile function continues to use fs; remove the
+now-duplicate import from its current location (leave the readFile(path: string,
+encoding = 'utf-8') function unchanged except for the relocated import).
 
 In `@src/mesoscopic/verdict-handler.test.ts`:
-- Around line 358-364: Tests are failing due to an extra closing brace/paren
-sequence that unbalances the file; remove the stray "});" that immediately
-precedes the describe('recordViolatedClaimsInLedger'...) block so the previous
-test block (the one containing expect(logger).toHaveBeenCalledWith(...)) is
-properly closed once and the new describe starts cleanly; locate the stray
-closing tokens near the expect stringContaining('No CLAIM_REF links found -
-triggering fallback') and delete the extra "});" (or alternatively wrap the
-previous block in a describe if intended) to restore balanced braces for the
-test file.
+- Around line 352-411: There is a duplicate test case named "should identify
+functions linked to violated claims when CLAIM_REF exists" — remove one of the
+duplicate it(...) blocks (either the one at lines ~149-215 or the one at lines
+~352-411) so the behavior is tested only once; ensure you keep the test that
+correctly exercises handleClusterVerdict with the constructed ClaimResult array,
+ClusterDefinition, tempDir/src/accounting/withdraw.ts source and assertions on
+result.verdict and result.recordedClaims, and run tests to confirm no other
+references to the removed block remain.
+- Around line 258-302: Remove the duplicate unit test that repeats "should
+return pass verdict when all claims passed" by deleting one of the two identical
+test blocks that call handleClusterVerdict (the test constructing claimResults,
+cluster, logger and asserting result.verdict and result.recordedClaims); keep a
+single canonical test for this behavior to avoid redundancy and maintainability
+issues.
+- Around line 413-452: Remove the duplicate test case named "should trigger
+fallback when no CLAIM_REF links exist for violated claim" and keep a single
+canonical test that asserts handleClusterVerdict returns pass=false,
+violatedClaims=['balance_002'], functionsToReinject=[], fallbackTriggered=true,
+recordedClaims=['balance_002'] and that the logger was called with 'No CLAIM_REF
+links found - triggering fallback'; locate the redundant it(...) block (the test
+using handleClusterVerdict, claimResults with claimId 'balance_002', cluster
+with claimIds ['balance_001','balance_002'], and the logger vi.fn()) and delete
+it so only one identical test remains.
 
 In `@src/mesoscopic/verdict-handler.ts`:
-- Around line 269-270: The current logic assigns recordedClaims =
-fallbackTriggered ? options.cluster.claimIds : violatedClaims which records all
-cluster.claimIds when a fallback occurs; change it so recordedClaims always
-equals violatedClaims (i.e., remove the fallbackTriggered branch) so only
-actually violated claims are recorded; update any surrounding comments or
-variable uses in verdict-handler.ts (look for recordedClaims, fallbackTriggered,
-options.cluster.claimIds, violatedClaims) to reflect that fallbacks do not mark
-passed claims as violations.
-- Around line 90-173: buildFunctionClaimMapping currently keys only by
-functionName, losing file context and causing getFunctionFilePath to guess
-paths; change the mapping so each entry stores the actual source file path
-(e.g., mapping value becomes objects like { filePath, claimRefs } or use a
-composite key functionName|filePath) when you call parseContracts in
-buildFunctionClaimMapping; then update identifyFunctionsToReinject to iterate
-those stored filePath values (use the stored filePath instead of calling
-getFunctionFilePath) and emit FunctionToReinject entries with the real filePath;
-finally remove or stop using the brittle getFunctionFilePath behavior and ensure
-parseContracts/Contract exposes the source file path used to populate the
-mapping.
+- Around line 341-344: The function signature for processClusterVerdict uses an
+inline import type import('../ledger/ledger.js').Ledger which is unconventional;
+replace that inline type with the already-imported Ledger type from the top of
+the file (use Ledger as the parameter type in processClusterVerdict) so the
+signature reads use VerdictOptions and Ledger directly, ensuring any existing
+import for Ledger at the top remains and removing the inline import reference.
+- Around line 232-234: The Project instantiation with new Project({
+tsConfigFilePath: path.join(options.projectPath, 'tsconfig.json') }) can throw
+if tsconfig.json is missing; add explicit error handling by either checking
+fs.existsSync(path.join(options.projectPath, 'tsconfig.json')) before calling
+new Project or wrap the new Project(...) call in a try-catch, and on failure
+throw or log a clear, contextual error referencing options.projectPath and the
+tsConfigFilePath so callers know the file is missing or unreadable.
 
-In `@US-026-CURRENT-STATUS.md`:
-- Around line 3-20: The markdown violates MD022/MD031/MD060: add a single blank
-line above and below each top-level and subsection heading (e.g., "## 🟢
-Implementation Status: Substantially Complete (80%)" and "### ✅ Completed
-Components"), ensure fenced code blocks have a blank line after the opening
-backticks and before the closing backticks (see the "bash" example under "###
-Successful Test Execution"), and normalize tables by padding pipe separators
-with spaces (e.g., convert "|a|b|" to "| a | b |"). Apply these fixes
-consistently across the document (including the sections around the spec-driven
-generator examples and the ranges referenced in the review) so headings, fenced
-blocks, and tables conform to markdownlint rules.
-
-In `@US-026-FINAL-STATUS.md`:
-- Around line 64-78: Normalize the markdown lists and heading spacing: fix the
-unordered and ordered list indentation under the sections that show the
-checklist (the lines listing test generator behaviors and items 11–12) to use
-consistent two-space indentation for nested list items and ensure ordered-list
-numbers increment correctly (no repeated "1." entries), and add a single blank
-line before each top-level heading to satisfy MD022; update the list bullets so
-sub-items are consistently prefixed (use "-" or "*" uniformly) and ensure code
-blocks or inline code spans like `specClaim.testable`, `it.skip()`, and
-`console.warn()` remain correctly fenced/escaped while adjusting surrounding
-whitespace to resolve MD007/MD029.
-
-In `@US-026-implementation-summary.md`:
-- Around line 11-23: The markdown has inconsistent heading spacing and list
-indentation causing MD022/MD007/MD029 warnings in the "Spec-Driven Test
-Generator Orchestration" section; normalize by ensuring a single blank line
-before each heading and using consistent list markers/indentation (e.g., one
-space after "-" and two-space indentation for nested bullets) across the block
-describing functions like extractClaimsFromSpec(), linkClaimsToFunctions(),
-generateTestsForCluster(), and generateSpecDrivenTests() so all headings and
-lists conform to the repo's markdown lint rules; apply the same spacing rules to
-other similar sections noted in the file.
-
-In `@US-028-FINAL-REPORT.md`:
-- Around line 1-40: The markdown has MD022/MD031 spacing violations: ensure
-there's a blank line both before and after each heading (e.g., "# US-028:
-Mesoscopic: Cluster Verdict Handling - Final Report", "## Status", "##
-Implementation Summary", "### Files Created/Modified", etc.) and also add a
-blank line before and after each fenced code block (e.g., the block that starts
-with "```typescript" showing the ClusterVerdict type and any other ``` blocks).
-Fix by inserting the required empty lines around those headings and fenced
-blocks or run your markdown formatter to apply these whitespace corrections.
-
-In `@US-028-implementation-summary.md`:
-- Around line 96-100: Fix the heading formatting for "###CLAIM_REF Linkage" by
-inserting a space after the heading marker so it becomes "### CLAIM_REF Linkage"
-and ensure there is a blank line before and after this heading to satisfy
-markdownlint MD018; update the heading text in the
-US-028-implementation-summary.md file where the "CLAIM_REF Linkage" section is
-defined.
+In `@src/utils/logger.ts`:
+- Around line 9-24: Add TSDoc comments to all exported API symbols in this file:
+LogLevel, LogEntry, LoggerOptions, and the Logger class. For each exported
+type/interface/class add a concise /** ... */ TSDoc block describing its
+purpose, the meaning of fields (e.g., timestamp, level, component, event, data)
+and any optional flags (e.g., debugMode), and annotate public methods or
+constructor on Logger with param/returns descriptions so the API docs can be
+generated.
+- Around line 52-65: The log method currently uses JSON.stringify directly and
+can throw on circular refs or BigInt; wrap the JSON.stringify call in a
+try/catch inside the log (method name: log) and, on error, build a safe fallback
+LogEntry that includes timestamp, level, component, event and a data or meta
+field describing the serialization error (e.g. serializationError: err.message
+and originalData: "[unserializable]" or omitted), then write that fallback JSON
+to process.stderr.write; ensure the original entry variable (entry: LogEntry)
+and the final write call (process.stderr.write) are used so callers still get a
+single JSON line even when serialization fails.
