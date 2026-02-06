@@ -109,7 +109,7 @@ export function analyzeComplexity(sourceFile: SourceFile): ComplexityMetrics {
     cyclomaticComplexity: maxCyclomaticComplexity,
     functionLength: maxFunctionLength,
     nestingDepth: maxNestingDepth,
-    testCoverage: 0,
+    testCoverage: undefined,
   };
 }
 
@@ -364,10 +364,8 @@ function calculateSeverity(smell: SmellDefinition, message: Linter.LintMessage):
 function runHeuristics(sourceFile: SourceFile, catalog: TransformationCatalog): DetectedSmell[] {
   const detectedSmells: DetectedSmell[] = [];
 
-  const overDocumentationSmell = detectOverDocumentation(sourceFile, catalog);
-  if (overDocumentationSmell) {
-    detectedSmells.push(overDocumentationSmell);
-  }
+  const overDocumentationSmells = detectOverDocumentation(sourceFile, catalog);
+  detectedSmells.push(...overDocumentationSmells);
 
   return detectedSmells;
 }
@@ -378,11 +376,12 @@ function runHeuristics(sourceFile: SourceFile, catalog: TransformationCatalog): 
 function detectOverDocumentation(
   sourceFile: SourceFile,
   catalog: TransformationCatalog
-): DetectedSmell | null {
+): DetectedSmell[] {
+  const smells: DetectedSmell[] = [];
   const smell = catalog.getSmell('over-documentation');
 
   if (!smell) {
-    return null;
+    return smells;
   }
 
   const threshold = smell.detection.thresholds?.max_comment_to_code_ratio ?? 0.5;
@@ -430,15 +429,15 @@ function detectOverDocumentation(
         column: 0,
       };
 
-      return {
+      smells.push({
         smellId: 'over-documentation',
         severity: Math.ceil(ratio / threshold),
         location,
-      };
+      });
     }
   }
 
-  return null;
+  return smells;
 }
 
 /**

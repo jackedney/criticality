@@ -107,7 +107,7 @@ def validate_user(user: dict[str, int | str | list[str]]) -> bool:
 
 AFTER (Python):
 ```python
-from typing import TypedDict, Union
+from typing import TypedDict
 
 class User(TypedDict):
     id: int
@@ -126,7 +126,7 @@ INSTRUCTIONS:
 1. Identify repeated complex types
 2. Create a type alias with a descriptive name
 3. Replace all occurrences of the complex type with the alias
-4. Use PascalCase for type names (TypeScript) or snake_case for TypedDict (Python)
+4. Use PascalCase for type names (TypeScript and Python TypedDict classes)
 
 OUTPUT FORMAT:
 Return the complete code including the new type alias and the refactored functions. Do not include explanations.

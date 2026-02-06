@@ -12,6 +12,7 @@ required = ["compile", "unit_tests_target_function"]
 conditions = [
     "Name follows a well-established convention that changing would break",
     "Name is from external API and must match exactly",
+    "Name is part of a public or exported API consumed outside this repo",
     "New name would be more vague or confusing than the original"
 ]
 

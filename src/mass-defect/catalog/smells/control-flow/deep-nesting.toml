@@ -13,9 +13,9 @@ rule = "max-depth"
 
 [detection.heuristics]
 patterns = [
-  "Nested if statements at depth >= 4",
-  "Nested loops at depth >= 4",
-  "Nested switch statements at depth >= 4"
+  "Nested if statements at depth > 3",
+  "Nested loops at depth > 3",
+  "Nested switch statements at depth > 3"
 ]
 
 [[applicable_patterns]]

@@ -91,7 +91,7 @@ ${lines.join('\n')}
       expect(metrics.cyclomaticComplexity).toBe(0);
       expect(metrics.functionLength).toBe(0);
       expect(metrics.nestingDepth).toBe(0);
-      expect(metrics.testCoverage).toBe(0);
+      expect(metrics.testCoverage).toBeUndefined();
     });
 
     it('handles multiple functions', () => {

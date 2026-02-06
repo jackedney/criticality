@@ -163,6 +163,7 @@ function extractTransformedCode(response: string): string | null {
  * - Extracts Micro-Contract comments (/// REQUIRES, etc.) from original
  * - Prepends them to the transformed code
  * - Ensures proper spacing between comments and code
+ * - Preserves original indentation
  */
 function preserveLeadingTrailingComments(originalCode: string, transformedCode: string): string {
   const project = new Project({ useInMemoryFileSystem: true });
@@ -180,40 +181,44 @@ function preserveLeadingTrailingComments(originalCode: string, transformedCode: 
 
   const comments: string[] = [];
 
+  // Collect JSDoc comments
   const jsDocs = func.getJsDocs();
   for (const jsDoc of jsDocs) {
     comments.push(jsDoc.getFullText());
   }
 
+  // Collect leading comments via ts-morph API only (not scanning fullText)
+  // This avoids pulling unrelated file-level triple-slash directives
   const leadingCommentRanges = func.getLeadingCommentRanges();
   for (const range of leadingCommentRanges) {
     const comment = originalCode.slice(range.getPos(), range.getEnd());
     comments.push(comment);
   }
 
-  const fullText = sourceFile.getFullText();
-  const funcStartPos = func.getStart();
-  const leadingText = fullText.slice(0, funcStartPos);
-
-  const tripleSlashRegex = /^\s*\/\/\/.*$/gm;
-  const tripleSlashMatches = leadingText.match(tripleSlashRegex);
-  if (tripleSlashMatches) {
-    for (const match of tripleSlashMatches) {
-      comments.push(match);
-    }
-  }
+  // Get the original indentation from the function start
+  const originalIndent = getIndentation(originalCode);
 
   if (comments.length === 0) {
-    return transformedCode;
+    // No comments to preserve, just ensure proper indentation
+    const trimmedTransformed = transformedCode.trimStart();
+    const lines = trimmedTransformed.split('\n');
+    const reindentedLines = lines.map((line, i) =>
+      i === 0 ? originalIndent + line : originalIndent + line.trimStart()
+    );
+    return reindentedLines.join('\n');
   }
 
   const commentsText = comments.join('\n');
   const trimmedOriginalComments = commentsText.trimEnd();
 
   const trimmedTransformed = transformedCode.trimStart();
-  const indent = getIndentation(trimmedTransformed);
+  const lines = trimmedTransformed.split('\n');
+  const reindentedLines = lines.map((line, i) =>
+    i === 0 ? line : originalIndent + line.trimStart()
+  );
+  const reindentedCode = reindentedLines.join('\n');
 
-  return `${trimmedOriginalComments}\n${indent}${trimmedTransformed}`;
+  return `${trimmedOriginalComments}\n${originalIndent}${reindentedCode}`;
 }
 
 /**

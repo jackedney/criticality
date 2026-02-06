@@ -31,6 +31,8 @@ import { verifyTransformation } from './semantic-verifier.js';
  */
 interface FunctionIterationState {
   functionId: FunctionId;
+  functionStartLine: number;
+  functionEndLine: number;
   sourceFile: SourceFile;
   functionName: string;
   filePath: string;
@@ -41,6 +43,7 @@ interface FunctionIterationState {
   previouslyAttempted: string[];
   attempts: TransformationAttempt[];
   status: FunctionStatus;
+  reason?: string;
 }
 
 /**
@@ -105,15 +108,20 @@ function initializeFunctionStates(
   const functions = sourceFile.getFunctions();
 
   for (const func of functions) {
-    const functionId = `${filePath}:${func.getName() ?? 'anonymous'}`;
+    const startLine = func.getStartLineNumber();
+    const endLine = func.getEndLineNumber();
+    const functionName = func.getName() ?? 'anonymous';
+    const functionId = `${filePath}:${functionName}:${String(startLine)}`;
     const functionCode = func.getFullText();
 
     const metrics = calculateFunctionMetrics(func);
 
     const state: FunctionIterationState = {
       functionId,
+      functionStartLine: startLine,
+      functionEndLine: endLine,
       sourceFile,
-      functionName: func.getName() ?? 'anonymous',
+      functionName,
       filePath,
       originalCode: functionCode,
       currentCode: functionCode,
@@ -154,7 +162,7 @@ function calculateFunctionMetrics(
     cyclomaticComplexity,
     functionLength,
     nestingDepth,
-    testCoverage: 0,
+    testCoverage: undefined,
   };
 }
 
@@ -235,14 +243,25 @@ function calculateFunctionNestingDepth(
 
 /**
  * Checks if function metrics meet complexity targets.
+ *
+ * Test coverage check is skipped when testCoverage is undefined or
+ * when minTestCoverage is 0 (disabled).
  */
 function meetsComplexityTargets(metrics: ComplexityMetrics, config: MassDefectConfig): boolean {
-  return (
-    metrics.cyclomaticComplexity <= config.maxCyclomaticComplexity &&
-    metrics.functionLength <= config.maxFunctionLength &&
-    metrics.nestingDepth <= config.maxNestingDepth &&
-    metrics.testCoverage >= config.minTestCoverage
-  );
+  const meetsComplexity = metrics.cyclomaticComplexity <= config.maxCyclomaticComplexity;
+  const meetsLength = metrics.functionLength <= config.maxFunctionLength;
+  const meetsNesting = metrics.nestingDepth <= config.maxNestingDepth;
+
+  // Test coverage check is skipped when:
+  // - minTestCoverage is 0 (coverage enforcement disabled)
+  // - testCoverage is undefined (coverage not yet computed)
+  const coverageEnforced = config.minTestCoverage > 0;
+  const meetsCoverage =
+    !coverageEnforced ||
+    metrics.testCoverage === undefined ||
+    metrics.testCoverage >= config.minTestCoverage;
+
+  return meetsComplexity && meetsLength && meetsNesting && meetsCoverage;
 }
 
 /**
@@ -296,10 +315,11 @@ async function processFunctionIteration(
   }
 
   if (!meetsComplexityTargets(state.currentMetrics, config)) {
-    if (state.attempts.length > 0) {
-      state.status = 'manual_review_required';
-    } else {
-      state.status = 'failed';
+    // If no attempts were made, it means no applicable patterns were found
+    // If attempts were made but all failed, it still requires manual review
+    state.status = 'manual_review_required';
+    if (state.attempts.length === 0) {
+      state.reason = 'No applicable patterns found';
     }
   } else if (state.status === 'manual_review_required') {
     state.status = 'converged';
@@ -314,7 +334,7 @@ async function processFunctionIteration(
   };
 
   if (state.status === 'manual_review_required') {
-    result.reason = 'No applicable patterns remain';
+    result.reason = state.reason ?? 'No applicable patterns remain';
   }
 
   return result;
@@ -486,6 +506,7 @@ function buildMassDefectResult(
   let transformedFunctions = 0;
   let optimalFunctions = 0;
   let manualReviewFunctions = 0;
+  let failedFunctions = 0;
 
   for (const result of functionResults.values()) {
     if (result.status === 'converged' && result.attempts.length > 0) {
@@ -497,10 +518,12 @@ function buildMassDefectResult(
       optimalFunctions++;
     } else if (result.status === 'manual_review_required') {
       manualReviewFunctions++;
+    } else if (result.status === 'failed') {
+      failedFunctions++;
     }
   }
 
-  const converged = manualReviewFunctions === 0;
+  const converged = manualReviewFunctions === 0 && failedFunctions === 0;
 
   return {
     converged,

@@ -2,11 +2,11 @@
  * Tests for phase execution handlers.
  */
 
-/* eslint-disable @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-explicit-any */
 import { describe, it, expect } from 'vitest';
 import type { ActionResult, TickContext, ExternalOperations } from './orchestrator.js';
 import type { MassDefectPhaseContext } from './phase-execution.js';
 import { executeMassDefectPhase } from './phase-execution.js';
+import type { ModelRouter, ModelRouterResult } from '../router/types.js';
 
 describe('Phase Execution', () => {
   describe('MassDefect Phase', () => {
@@ -33,6 +33,28 @@ describe('Phase Execution', () => {
           artifacts: new Set(),
           pendingResolutions: [],
           operations,
+        };
+
+        // Create a properly typed mock router
+        const mockRouter: ModelRouter = {
+          complete: () =>
+            Promise.resolve({
+              success: false,
+              error: { kind: 'ModelError', message: 'Not implemented', retryable: false },
+            } satisfies ModelRouterResult),
+          stream: async function* () {
+            await Promise.resolve();
+            yield { content: '', done: false };
+            return {
+              success: false,
+              error: { kind: 'ModelError', message: 'Not implemented', retryable: false },
+            } satisfies ModelRouterResult;
+          },
+          prompt: () =>
+            Promise.resolve({
+              success: false,
+              error: { kind: 'ModelError', message: 'Not implemented', retryable: false },
+            } satisfies ModelRouterResult),
         };
 
         const massDefectContext: MassDefectPhaseContext = {
@@ -72,10 +94,7 @@ describe('Phase Execution', () => {
             },
           },
           projectRoot: '/tmp/test',
-          router: {
-            // eslint-disable-next-line @typescript-eslint/require-await
-            route: async () => ({ model: 'test', response: '' }),
-          } as any,
+          router: mockRouter,
         };
 
         const result: ActionResult = await executeMassDefectPhase(context, massDefectContext);

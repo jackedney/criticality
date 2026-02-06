@@ -269,15 +269,23 @@ function convertConfig(config: {
 
 /**
  * Finds all TypeScript source files in a directory.
+ *
+ * Excludes:
+ * - Hidden directories (starting with .)
+ * - node_modules
+ * - Build output directories (dist, build, coverage)
+ * - Declaration files (.d.ts)
  */
 async function findTypeScriptFiles(rootDir: string): Promise<string[]> {
   const files: string[] = [];
+  const ignoreDirs = new Set(['dist', 'build', 'coverage', 'node_modules']);
 
   async function scanDir(dir: string): Promise<void> {
     const entries = await fs.readdir(dir, { withFileTypes: true });
 
     for (const entry of entries) {
-      if (entry.name.startsWith('.') || entry.name === 'node_modules') {
+      // Skip hidden directories and ignored directories
+      if (entry.name.startsWith('.') || ignoreDirs.has(entry.name)) {
         continue;
       }
 
@@ -285,8 +293,13 @@ async function findTypeScriptFiles(rootDir: string): Promise<string[]> {
 
       if (entry.isDirectory()) {
         await scanDir(fullPath);
-      } else if (entry.isFile() && (entry.name.endsWith('.ts') || entry.name.endsWith('.tsx'))) {
-        files.push(fullPath);
+      } else if (entry.isFile()) {
+        // Include .ts and .tsx files but exclude declaration files (.d.ts)
+        const isTypeScript = entry.name.endsWith('.ts') || entry.name.endsWith('.tsx');
+        const isDeclaration = entry.name.endsWith('.d.ts');
+        if (isTypeScript && !isDeclaration) {
+          files.push(fullPath);
+        }
       }
     }
   }

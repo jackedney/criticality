@@ -43,7 +43,7 @@ function process(data: string, options: ProcessOptions): Result {
 
 AFTER (TypeScript):
 ```typescript
-function process(data: string, options: ProcessOptions): Result {
+function process(): Result {
     console.log('Processing...');
     return { success: true };
 }
@@ -59,7 +59,7 @@ function calculate(x: number, y: number, z: number): number {
 
 AFTER (TypeScript):
 ```typescript
-function calculate(x: number, y: number, z: number): number {
+function calculate(x: number, y: number): number {
     return (x + y) * 2;
 }
 ```
@@ -74,7 +74,7 @@ def process_data(data: str, options: dict) -> Result:
 
 AFTER (Python):
 ```python
-def process_data(data: str, options: dict) -> Result:
+def process_data() -> Result:
     print('Processing...')
     return Result(success=True)
 ```
@@ -88,7 +88,7 @@ def calculate(x: int, y: int, z: int) -> int:
 
 AFTER (Python):
 ```python
-def calculate(x: int, y: int, z: int) -> int:
+def calculate(x: int, y: int) -> int:
     return (x + y) * 2
 ```
 
@@ -96,7 +96,10 @@ INSTRUCTIONS:
 1. Identify unused variables, parameters, or imports
 2. Remove the unused binding entirely
 3. If the removal makes code simpler, inline remaining logic
+4. For unused parameters, remove them from the function signature
 
 OUTPUT FORMAT:
-Return only the transformed function. Do not include explanations.
+Return only the transformed code for the edited scope.
+If you remove or change imports, include the updated import block with the transformed function.
+Do not include explanations.
 """

@@ -135,7 +135,7 @@ describe('semantic-verifier', () => {
       expect(result.errors).toEqual([]);
       expect(result.testsRun).toBe(3);
       expect(runTypeCheck).toHaveBeenCalledWith(context.workingDir);
-      expect(runVitestTests).toHaveBeenCalledWith('**/*.test.ts', {
+      expect(runVitestTests).toHaveBeenCalledWith('**/*.{test,spec}.ts', {
         cwd: context.workingDir,
         testNamePattern: context.functionName,
       });
@@ -192,7 +192,7 @@ describe('semantic-verifier', () => {
       expect(result.errors[0]).toContain('calculateTotal should handle negative values');
       expect(result.errors[0]).toContain('Expected 5 but got 4');
       expect(result.testsRun).toBe(3);
-      expect(runVitestTests).toHaveBeenCalledWith('**/*.test.ts', {
+      expect(runVitestTests).toHaveBeenCalledWith('**/*.{test,spec}.ts', {
         cwd: context.workingDir,
         testNamePattern: context.functionName,
       });
@@ -223,7 +223,7 @@ describe('semantic-verifier', () => {
       expect(result.passed).toBe(true);
       expect(result.errors).toEqual([]);
       expect(result.testsRun).toBe(10);
-      expect(runVitestTests).toHaveBeenCalledWith('**/*.test.ts', {
+      expect(runVitestTests).toHaveBeenCalledWith('**/*.{test,spec}.ts', {
         cwd: context.workingDir,
         testNamePattern: context.moduleName,
       });
@@ -284,7 +284,7 @@ describe('semantic-verifier', () => {
       expect(result.passed).toBe(true);
       expect(result.errors).toEqual([]);
       expect(result.testsRun).toBe(50);
-      expect(runVitestTests).toHaveBeenCalledWith('**/*.test.ts', {
+      expect(runVitestTests).toHaveBeenCalledWith('**/*.{test,spec}.ts', {
         cwd: context.workingDir,
       });
     });
@@ -389,7 +389,7 @@ describe('semantic-verifier', () => {
 
       expect(result.passed).toBe(true);
       expect(result.testsRun).toBe(5);
-      expect(runVitestTests).toHaveBeenCalledWith('**/*.test.ts', {
+      expect(runVitestTests).toHaveBeenCalledWith('**/*.{test,spec}.ts', {
         cwd: context.workingDir,
         testNamePattern: context.filePath,
       });

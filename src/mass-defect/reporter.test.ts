@@ -339,7 +339,6 @@ function createMockMassDefectResult(config: {
 }): MassDefectResult {
   const functionResults = new Map<string, FunctionResult>();
   const {
-    totalFunctions,
     transformedFunctions,
     optimalFunctions,
     manualReviewFunctions,
@@ -412,9 +411,12 @@ function createMockMassDefectResult(config: {
     funcIndex++;
   }
 
+  // Derive totalFunctions from map size to ensure consistency
+  const derivedTotalFunctions = functionResults.size;
+
   return {
     converged,
-    totalFunctions,
+    totalFunctions: derivedTotalFunctions,
     transformedFunctions,
     optimalFunctions,
     manualReviewFunctions,

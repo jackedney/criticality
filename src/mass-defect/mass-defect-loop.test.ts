@@ -9,17 +9,43 @@
  * - Manual review scenarios
  */
 
+import { fileURLToPath } from 'url';
+import { dirname, resolve } from 'path';
 import { describe, it, expect, beforeAll, vi } from 'vitest';
 import { runMassDefect } from './mass-defect-loop.js';
 import { loadCatalog } from './catalog-parser.js';
 import { createSourceFileFromString } from './complexity-analyzer.js';
 import type { ModelRouter, ModelRouterResult, StreamChunk } from '../router/types.js';
 
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
+const catalogPath = resolve(__dirname, 'catalog');
+
+/**
+ * Helper to find function result by name (function IDs now include line numbers).
+ */
+function findFunctionResultByName(
+  results: Awaited<ReturnType<typeof runMassDefect>>['functionResults'],
+  filePath: string,
+  functionName: string
+): Awaited<ReturnType<typeof runMassDefect>>['functionResults'] extends Map<string, infer T>
+  ? T | undefined
+  : never {
+  for (const [key, value] of results) {
+    if (key.startsWith(`${filePath}:${functionName}:`)) {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any, @typescript-eslint/no-unsafe-return
+      return value as any;
+    }
+  }
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any, @typescript-eslint/no-unsafe-return
+  return undefined as any;
+}
+
 describe('mass-defect-loop', () => {
   let catalog: Awaited<ReturnType<typeof loadCatalog>>;
 
   beforeAll(async () => {
-    catalog = await loadCatalog('src/mass-defect/catalog');
+    catalog = await loadCatalog(catalogPath);
   });
 
   describe('runMassDefect', () => {
@@ -98,8 +124,10 @@ describe('mass-defect-loop', () => {
       expect(result.totalFunctions).toBe(1);
       expect(result.functionResults.size).toBe(1);
 
-      const functionResult = result.functionResults.get(
-        `${sourceFile.getFilePath()}:complexFunction`
+      const functionResult = findFunctionResultByName(
+        result.functionResults,
+        sourceFile.getFilePath(),
+        'complexFunction'
       );
 
       expect(functionResult).toBeDefined();
@@ -138,7 +166,11 @@ describe('mass-defect-loop', () => {
         mockRouter
       );
 
-      const functionResult = result.functionResults.get(`${sourceFile.getFilePath()}:nestedLogic`);
+      const functionResult = findFunctionResultByName(
+        result.functionResults,
+        sourceFile.getFilePath(),
+        'nestedLogic'
+      );
 
       expect(functionResult).toBeDefined();
 
@@ -269,7 +301,11 @@ describe('mass-defect-loop', () => {
         mockRouter
       );
 
-      const functionResult = result.functionResults.get(`${sourceFile.getFilePath()}:veryComplex`);
+      const functionResult = findFunctionResultByName(
+        result.functionResults,
+        sourceFile.getFilePath(),
+        'veryComplex'
+      );
 
       expect(functionResult).toBeDefined();
     });
@@ -306,8 +342,10 @@ describe('mass-defect-loop', () => {
         mockRouter
       );
 
-      const functionResult = result.functionResults.get(
-        `${sourceFile.getFilePath()}:complexFunction`
+      const functionResult = findFunctionResultByName(
+        result.functionResults,
+        sourceFile.getFilePath(),
+        'complexFunction'
       );
 
       expect(functionResult).toBeDefined();
@@ -370,8 +408,10 @@ describe('mass-defect-loop', () => {
         mockRouter
       );
 
-      const functionResult = result.functionResults.get(
-        `${sourceFile.getFilePath()}:functionToTransform`
+      const functionResult = findFunctionResultByName(
+        result.functionResults,
+        sourceFile.getFilePath(),
+        'functionToTransform'
       );
 
       expect(functionResult).toBeDefined();
@@ -419,11 +459,15 @@ describe('mass-defect-loop', () => {
         mockRouter
       );
 
-      const strictFunctionResult = strictResult.functionResults.get(
-        `${sourceFile.getFilePath()}:complexFunction`
+      const strictFunctionResult = findFunctionResultByName(
+        strictResult.functionResults,
+        sourceFile.getFilePath(),
+        'complexFunction'
       );
-      const lenientFunctionResult = lenientResult.functionResults.get(
-        `${sourceFile.getFilePath()}:complexFunction`
+      const lenientFunctionResult = findFunctionResultByName(
+        lenientResult.functionResults,
+        sourceFile.getFilePath(),
+        'complexFunction'
       );
 
       expect(strictFunctionResult).toBeDefined();
@@ -507,8 +551,10 @@ describe('mass-defect-loop', () => {
         mockRouter
       );
 
-      const functionResult = result.functionResults.get(
-        `${sourceFile.getFilePath()}:circularPatternTest`
+      const functionResult = findFunctionResultByName(
+        result.functionResults,
+        sourceFile.getFilePath(),
+        'circularPatternTest'
       );
 
       expect(functionResult).toBeDefined();

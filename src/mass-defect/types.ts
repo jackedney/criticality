@@ -159,8 +159,8 @@ export interface ComplexityMetrics {
   functionLength: number;
   /** Maximum nesting depth. */
   nestingDepth: number;
-  /** Test coverage ratio (0-1). */
-  testCoverage: number;
+  /** Test coverage ratio (0-1). Undefined when coverage is not yet computed. */
+  testCoverage: number | undefined;
 }
 
 /**

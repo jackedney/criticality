@@ -80,17 +80,25 @@ def get_address(user: User | None) -> str | None:
 AFTER (Python):
 ```python
 def get_user_name(user: User | None) -> str | None:
-    return user and user.profile and user.profile.name
+    # Use getattr for safe attribute access
+    profile = getattr(user, 'profile', None)
+    return getattr(profile, 'name', None) if profile is not None else None
 
 def get_address(user: User | None) -> str | None:
-    return user and user.address and user.address.street
+    # Keep explicit None checks for semantic correctness
+    if user is None:
+        return None
+    if user.address is None:
+        return None
+    return user.address.street
 ```
 
 INSTRUCTIONS:
 1. Identify nested property access with null checks
-2. Replace explicit checks with optional chaining (?. in TypeScript, and in Python)
-3. For TypeScript, consider combining with nullish coalescing (??) for defaults
-4. Ensure the behavior is equivalent (short-circuiting on null/undefined)
+2. TypeScript: Replace explicit checks with optional chaining (?.)
+3. Python: Use getattr for safe attribute access or keep explicit None checks (Python's 'and' short-circuits on all falsy values, not just None)
+4. For TypeScript, consider combining with nullish coalescing (??) for defaults
+5. Ensure the behavior is equivalent (short-circuiting on null/undefined)
 
 OUTPUT FORMAT:
 Return only the transformed function. Do not include explanations.

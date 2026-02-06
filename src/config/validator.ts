@@ -450,6 +450,13 @@ export function validateConfig(
   // Validate paths if checker is provided
   if (pathChecker !== undefined) {
     validatePaths(config, errors, pathChecker);
+    validatePathExists(
+      config.mass_defect.catalog_path,
+      'mass_defect.catalog_path',
+      pathChecker,
+      errors,
+      true
+    );
   }
 
   // Validate thresholds

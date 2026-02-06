@@ -114,5 +114,8 @@ export interface PartialConfig {
   paths?: Partial<PathConfig>;
   thresholds?: Partial<ThresholdConfig>;
   notifications?: Partial<NotificationConfig>;
-  mass_defect?: Partial<MassDefectConfig>;
+  mass_defect?: {
+    targets?: Partial<MassDefectTargetsConfig>;
+    catalog_path?: string;
+  };
 }

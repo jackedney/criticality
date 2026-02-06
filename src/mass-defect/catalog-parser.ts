@@ -498,7 +498,13 @@ export async function loadCatalog(catalogDir: string): Promise<TransformationCat
     if (isCatalogError(result)) {
       errors.push({ ...result, filePath: path });
     } else {
-      smellsMap.set(result.id, result);
+      if (smellsMap.has(result.id)) {
+        errors.push(
+          createError('validation_error', `Duplicate smell id "${result.id}"`, path, 'smell.id')
+        );
+      } else {
+        smellsMap.set(result.id, result);
+      }
     }
   }
 
@@ -507,7 +513,13 @@ export async function loadCatalog(catalogDir: string): Promise<TransformationCat
     if (isCatalogError(result)) {
       errors.push({ ...result, filePath: path });
     } else {
-      patternsMap.set(result.id, result);
+      if (patternsMap.has(result.id)) {
+        errors.push(
+          createError('validation_error', `Duplicate pattern id "${result.id}"`, path, 'pattern.id')
+        );
+      } else {
+        patternsMap.set(result.id, result);
+      }
     }
   }
 

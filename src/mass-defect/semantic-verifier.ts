@@ -96,7 +96,7 @@ export async function verifyTransformation(
 
     case 2: {
       // Safe: Run tests for target function only
-      const functionTestResult = await runVitestTests('**/*.test.ts', {
+      const functionTestResult = await runVitestTests('**/*.{test,spec}.ts', {
         cwd: context.workingDir,
         testNamePattern: context.functionName,
       });
@@ -113,7 +113,7 @@ export async function verifyTransformation(
       // Moderate: Run tests for entire module
       const modulePattern =
         context.moduleName !== undefined ? context.moduleName : context.filePath;
-      const moduleTestResult = await runVitestTests('**/*.test.ts', {
+      const moduleTestResult = await runVitestTests('**/*.{test,spec}.ts', {
         cwd: context.workingDir,
         testNamePattern: modulePattern,
       });
@@ -128,7 +128,7 @@ export async function verifyTransformation(
 
     case 4: {
       // Structural: Run full test suite
-      const fullTestResult = await runVitestTests('**/*.test.ts', {
+      const fullTestResult = await runVitestTests('**/*.{test,spec}.ts', {
         cwd: context.workingDir,
       });
       testsRun += fullTestResult.totalTests;

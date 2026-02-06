@@ -3,7 +3,7 @@ id = "nullish-coalescing"
 name = "Nullish Coalescing"
 description = "Replace ternary null checks with nullish coalescing operator"
 risk = 2
-risk_rationale = "Safe - replaces explicit checks with syntactically equivalent operator"
+risk_rationale = "Safe in TypeScript. In Python, only apply when falsy values (0, '', False) are not valid outputs."
 
 [verification]
 required = ["compile", "unit_tests_target_function"]
@@ -92,9 +92,10 @@ def get_value(value: T | None, fallback: T) -> T:
 
 INSTRUCTIONS:
 1. Identify null/undefined fallback patterns
-2. Replace with nullish coalescing (?? in TypeScript, or in Python)
-3. Note: Python's 'or' operator coalesces on any falsy value, not just None
-4. TypeScript's ?? only coalesces on null or undefined
+2. TypeScript: replace with ??
+3. Python: only use 'or' when falsy values (0, '', False) are not valid outcomes
+4. Note: Python's 'or' operator coalesces on any falsy value, not just None
+5. TypeScript's ?? only coalesces on null or undefined
 
 OUTPUT FORMAT:
 Return only the transformed function. Do not include explanations.

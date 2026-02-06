@@ -274,8 +274,8 @@ function calculateMetricsImprovement(result: MassDefectResult): MetricsImproveme
     totalLengthAfter += funcResult.finalMetrics.functionLength;
     totalNestingBefore += funcResult.initialMetrics.nestingDepth;
     totalNestingAfter += funcResult.finalMetrics.nestingDepth;
-    totalCoverageBefore += funcResult.initialMetrics.testCoverage;
-    totalCoverageAfter += funcResult.finalMetrics.testCoverage;
+    totalCoverageBefore += funcResult.initialMetrics.testCoverage ?? 0;
+    totalCoverageAfter += funcResult.finalMetrics.testCoverage ?? 0;
   }
 
   const count = functionResults.length;

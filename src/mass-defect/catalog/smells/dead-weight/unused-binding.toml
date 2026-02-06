@@ -19,5 +19,11 @@ patterns = [
 
 [[applicable_patterns]]
 pattern = "remove-unused-binding"
-risk = 1
-rationale = "Removing unused bindings is a trivial transformation with minimal risk"
+risk = 2
+rationale = "API-breaking if applied to function parameters. Safe for local variables and imports."
+
+[guards]
+conditions = [
+    "Binding is a function/method parameter that may be called externally",
+    "Binding is part of a public API signature"
+]

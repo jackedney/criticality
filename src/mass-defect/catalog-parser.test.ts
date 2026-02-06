@@ -439,7 +439,7 @@ describe('loadCatalog', () => {
           cyclomaticComplexity: 1,
           functionLength: 1,
           nestingDepth: 1,
-          testCoverage: 0,
+          testCoverage: undefined,
         },
         previouslyAttempted: [],
       })

@@ -369,6 +369,10 @@ function mergeConfig(base: Config, partial: PartialConfig): Config {
     mass_defect: {
       ...base.mass_defect,
       ...partial.mass_defect,
+      targets: {
+        ...base.mass_defect.targets,
+        ...partial.mass_defect?.targets,
+      },
     },
   };
 }
