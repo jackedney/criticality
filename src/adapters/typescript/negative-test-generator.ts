@@ -357,9 +357,7 @@ export function generateNegativeTest(claim: Claim, options: NegativeTestOptions 
 
     lines.push(`  it('${escapedTestName}', () => {`);
     lines.push(generateTestBody(claim));
-    lines.push('    },');
-    lines.push(`    { timeout: ${String(timeout)} }`);
-    lines.push('  );');
+    lines.push(`  }, { timeout: ${String(timeout)} });`);
 
     if (claim.functions.length > 1) {
       lines.push('');
