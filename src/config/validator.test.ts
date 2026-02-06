@@ -240,6 +240,142 @@ performance_variance_threshold = 0.001
       });
     });
 
+    describe('mass_defect validation', () => {
+      it('should pass validation for valid mass_defect config', () => {
+        const result = validateConfig(DEFAULT_CONFIG);
+        const massDefectErrors = result.errors.filter((e) => e.field.startsWith('mass_defect.'));
+        expect(massDefectErrors).toHaveLength(0);
+      });
+
+      it('should return error for negative max_cyclomatic_complexity', () => {
+        const toml = `
+[mass_defect.targets]
+max_cyclomatic_complexity = -5
+`;
+        const config = parseConfig(toml);
+        const result = validateConfig(config);
+
+        expect(result.valid).toBe(false);
+        const error = result.errors.find(
+          (e) => e.field === 'mass_defect.targets.max_cyclomatic_complexity'
+        );
+        expect(error).toBeDefined();
+        expect(error?.value).toBe(-5);
+        expect(error?.message).toContain('positive integer');
+      });
+
+      it('should return error for zero max_function_length_lines', () => {
+        const toml = `
+[mass_defect.targets]
+max_function_length_lines = 0
+`;
+        const config = parseConfig(toml);
+        const result = validateConfig(config);
+
+        expect(result.valid).toBe(false);
+        const error = result.errors.find(
+          (e) => e.field === 'mass_defect.targets.max_function_length_lines'
+        );
+        expect(error).toBeDefined();
+        expect(error?.message).toContain('positive integer');
+      });
+
+      it('should return error for negative max_nesting_depth', () => {
+        const toml = `
+[mass_defect.targets]
+max_nesting_depth = -1
+`;
+        const config = parseConfig(toml);
+        const result = validateConfig(config);
+
+        expect(result.valid).toBe(false);
+        const error = result.errors.find(
+          (e) => e.field === 'mass_defect.targets.max_nesting_depth'
+        );
+        expect(error).toBeDefined();
+        expect(error?.value).toBe(-1);
+        expect(error?.message).toContain('positive integer');
+      });
+
+      it('should return error for min_test_coverage <= 0', () => {
+        const toml = `
+[mass_defect.targets]
+min_test_coverage = 0
+`;
+        const config = parseConfig(toml);
+        const result = validateConfig(config);
+
+        expect(result.valid).toBe(false);
+        const error = result.errors.find(
+          (e) => e.field === 'mass_defect.targets.min_test_coverage'
+        );
+        expect(error).toBeDefined();
+        expect(error?.message).toContain('greater than 0');
+      });
+
+      it('should return error for min_test_coverage > 1', () => {
+        const toml = `
+[mass_defect.targets]
+min_test_coverage = 1.5
+`;
+        const config = parseConfig(toml);
+        const result = validateConfig(config);
+
+        expect(result.valid).toBe(false);
+        const error = result.errors.find(
+          (e) => e.field === 'mass_defect.targets.min_test_coverage'
+        );
+        expect(error).toBeDefined();
+        expect(error?.message).toContain('between');
+      });
+
+      it('should pass validation for min_test_coverage at exactly 1.0', () => {
+        const toml = `
+[mass_defect.targets]
+min_test_coverage = 1.0
+`;
+        const config = parseConfig(toml);
+        const result = validateConfig(config);
+
+        const error = result.errors.find(
+          (e) => e.field === 'mass_defect.targets.min_test_coverage'
+        );
+        expect(error).toBeUndefined();
+      });
+
+      it('should return error for excessively large max_cyclomatic_complexity', () => {
+        const toml = `
+[mass_defect.targets]
+max_cyclomatic_complexity = 2000
+`;
+        const config = parseConfig(toml);
+        const result = validateConfig(config);
+
+        expect(result.valid).toBe(false);
+        const error = result.errors.find(
+          (e) => e.field === 'mass_defect.targets.max_cyclomatic_complexity'
+        );
+        expect(error).toBeDefined();
+        expect(error?.message).toContain('exceeds reasonable maximum');
+      });
+
+      it('should return error for non-integer max_function_length_lines', () => {
+        const toml = `
+[mass_defect.targets]
+max_function_length_lines = 50.5
+`;
+        const config = parseConfig(toml);
+        const result = validateConfig(config);
+
+        expect(result.valid).toBe(false);
+        const error = result.errors.find(
+          (e) => e.field === 'mass_defect.targets.max_function_length_lines'
+        );
+        expect(error).toBeDefined();
+        expect(error?.message).toContain('positive integer');
+      });
+    });
+
     describe('path validation', () => {
       it('should not check paths by default', () => {
         const toml = `

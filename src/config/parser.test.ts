@@ -37,6 +37,15 @@ performance_variance_threshold = 0.3
 enabled = true
 channel = "slack"
 endpoint = "https://hooks.slack.com/test"
+
+[mass_defect.targets]
+max_cyclomatic_complexity = 8
+max_function_length_lines = 40
+max_nesting_depth = 3
+min_test_coverage = 0.9
+
+[mass_defect]
+catalog_path = "./custom-catalog"
 `;
         const config = parseConfig(toml);
 
@@ -61,6 +70,12 @@ endpoint = "https://hooks.slack.com/test"
         expect(config.notifications.enabled).toBe(true);
         expect(config.notifications.channel).toBe('slack');
         expect(config.notifications.endpoint).toBe('https://hooks.slack.com/test');
+
+        expect(config.mass_defect.targets.max_cyclomatic_complexity).toBe(8);
+        expect(config.mass_defect.targets.max_function_length_lines).toBe(40);
+        expect(config.mass_defect.targets.max_nesting_depth).toBe(3);
+        expect(config.mass_defect.targets.min_test_coverage).toBe(0.9);
+        expect(config.mass_defect.catalog_path).toBe('./custom-catalog');
       });
 
       it('should use default values for missing optional fields', () => {
@@ -87,6 +102,9 @@ worker_model = "custom-worker"
 
         // Notifications should be defaults
         expect(config.notifications).toEqual(DEFAULT_CONFIG.notifications);
+
+        // Mass Defect should be defaults
+        expect(config.mass_defect).toEqual(DEFAULT_CONFIG.mass_defect);
       });
 
       it('should handle partial sections correctly', () => {
@@ -99,6 +117,41 @@ max_retry_attempts = 10
         expect(config.thresholds.max_retry_attempts).toBe(10);
         expect(config.thresholds.context_token_upgrade).toBe(12000);
         expect(config.thresholds.signature_complexity_upgrade).toBe(5);
+      });
+
+      it('should parse mass_defect targets section with overrides', () => {
+        const toml = `
+[mass_defect.targets]
+max_cyclomatic_complexity = 8
+`;
+        const config = parseConfig(toml);
+
+        expect(config.mass_defect.targets.max_cyclomatic_complexity).toBe(8);
+        expect(config.mass_defect.targets.max_function_length_lines).toBe(50);
+        expect(config.mass_defect.targets.max_nesting_depth).toBe(4);
+        expect(config.mass_defect.targets.min_test_coverage).toBe(0.8);
+      });
+
+      it('should parse mass_defect catalog_path with override', () => {
+        const toml = `
+[mass_defect]
+catalog_path = "./my-catalog"
+`;
+        const config = parseConfig(toml);
+
+        expect(config.mass_defect.catalog_path).toBe('./my-catalog');
+        expect(config.mass_defect.targets).toEqual(DEFAULT_CONFIG.mass_defect.targets);
+      });
+
+      it('should use default mass_defect when section omitted', () => {
+        const config = parseConfig('');
+
+        expect(config.mass_defect).toEqual(DEFAULT_CONFIG.mass_defect);
+        expect(config.mass_defect.targets.max_cyclomatic_complexity).toBe(10);
+        expect(config.mass_defect.targets.max_function_length_lines).toBe(50);
+        expect(config.mass_defect.targets.max_nesting_depth).toBe(4);
+        expect(config.mass_defect.targets.min_test_coverage).toBe(0.8);
+        expect(config.mass_defect.catalog_path).toBe('./mass-defect-catalog');
       });
 
       it('should parse all valid notification channels', () => {

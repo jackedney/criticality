@@ -9,7 +9,7 @@
  * @packageDocumentation
  */
 
-import type { Config, ThresholdConfig } from './types.js';
+import type { Config, MassDefectConfig, ThresholdConfig } from './types.js';
 
 /**
  * Error class for semantic validation errors.
@@ -341,12 +341,81 @@ function validateThresholds(thresholds: ThresholdConfig, errors: ValidationError
 }
 
 /**
+ * Validates Mass Defect configuration.
+ *
+ * @param massDefect - The Mass Defect configuration to validate.
+ * @param errors - Array to accumulate errors into.
+ */
+function validateMassDefect(massDefect: MassDefectConfig, errors: ValidationError[]): void {
+  const targets = massDefect.targets;
+
+  // max_cyclomatic_complexity: positive integer, reasonable range
+  validatePositiveInteger(
+    targets.max_cyclomatic_complexity,
+    'mass_defect.targets.max_cyclomatic_complexity',
+    errors
+  );
+  if (targets.max_cyclomatic_complexity > 1000) {
+    errors.push({
+      field: 'mass_defect.targets.max_cyclomatic_complexity',
+      value: targets.max_cyclomatic_complexity,
+      message: `'mass_defect.targets.max_cyclomatic_complexity' exceeds reasonable maximum of 1000`,
+    });
+  }
+
+  // max_function_length_lines: positive integer, reasonable range
+  validatePositiveInteger(
+    targets.max_function_length_lines,
+    'mass_defect.targets.max_function_length_lines',
+    errors
+  );
+  if (targets.max_function_length_lines > 10000) {
+    errors.push({
+      field: 'mass_defect.targets.max_function_length_lines',
+      value: targets.max_function_length_lines,
+      message: `'mass_defect.targets.max_function_length_lines' exceeds reasonable maximum of 10000`,
+    });
+  }
+
+  // max_nesting_depth: positive integer, reasonable range
+  validatePositiveInteger(
+    targets.max_nesting_depth,
+    'mass_defect.targets.max_nesting_depth',
+    errors
+  );
+  if (targets.max_nesting_depth > 20) {
+    errors.push({
+      field: 'mass_defect.targets.max_nesting_depth',
+      value: targets.max_nesting_depth,
+      message: `'mass_defect.targets.max_nesting_depth' exceeds reasonable maximum of 20`,
+    });
+  }
+
+  // min_test_coverage: must be between 0 and 1 (exclusive 0, inclusive 1)
+  validateThresholdRange(
+    targets.min_test_coverage,
+    'mass_defect.targets.min_test_coverage',
+    0,
+    1,
+    errors
+  );
+  if (targets.min_test_coverage <= 0) {
+    errors.push({
+      field: 'mass_defect.targets.min_test_coverage',
+      value: targets.min_test_coverage,
+      message: `'mass_defect.targets.min_test_coverage' must be greater than 0`,
+    });
+  }
+}
+
+/**
  * Validates configuration semantically.
  *
  * Performs semantic validation beyond type checking:
  * - Validates model names are recognized identifiers
  * - Optionally validates paths exist using a provided checker function
  * - Validates thresholds are within valid ranges
+ * - Validates Mass Defect configuration
  *
  * @param config - The parsed configuration to validate.
  * @param options - Validation options.
@@ -385,6 +454,9 @@ export function validateConfig(
 
   // Validate thresholds
   validateThresholds(config.thresholds, errors);
+
+  // Validate Mass Defect configuration
+  validateMassDefect(config.mass_defect, errors);
 
   return {
     valid: errors.length === 0,

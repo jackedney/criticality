@@ -6,6 +6,8 @@
 
 import type {
   Config,
+  MassDefectConfig,
+  MassDefectTargetsConfig,
   ModelAssignments,
   NotificationConfig,
   PathConfig,
@@ -55,6 +57,24 @@ export const DEFAULT_NOTIFICATIONS: NotificationConfig = {
 };
 
 /**
+ * Default Mass Defect complexity targets.
+ */
+export const DEFAULT_MASS_DEFECT_TARGETS: MassDefectTargetsConfig = {
+  max_cyclomatic_complexity: 10,
+  max_function_length_lines: 50,
+  max_nesting_depth: 4,
+  min_test_coverage: 0.8,
+};
+
+/**
+ * Default Mass Defect configuration.
+ */
+export const DEFAULT_MASS_DEFECT: MassDefectConfig = {
+  targets: DEFAULT_MASS_DEFECT_TARGETS,
+  catalog_path: './mass-defect-catalog',
+};
+
+/**
  * Complete default configuration.
  */
 export const DEFAULT_CONFIG: Config = {
@@ -62,4 +82,5 @@ export const DEFAULT_CONFIG: Config = {
   paths: DEFAULT_PATHS,
   thresholds: DEFAULT_THRESHOLDS,
   notifications: DEFAULT_NOTIFICATIONS,
+  mass_defect: DEFAULT_MASS_DEFECT,
 };

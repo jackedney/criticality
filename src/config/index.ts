@@ -12,6 +12,8 @@
 export { ConfigParseError, getDefaultConfig, parseConfig } from './parser.js';
 export type {
   Config,
+  MassDefectConfig,
+  MassDefectTargetsConfig,
   ModelAssignments,
   NotificationConfig,
   PartialConfig,
@@ -20,6 +22,8 @@ export type {
 } from './types.js';
 export {
   DEFAULT_CONFIG,
+  DEFAULT_MASS_DEFECT,
+  DEFAULT_MASS_DEFECT_TARGETS,
   DEFAULT_MODEL_ASSIGNMENTS,
   DEFAULT_NOTIFICATIONS,
   DEFAULT_PATHS,

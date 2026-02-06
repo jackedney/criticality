@@ -366,6 +366,10 @@ function mergeConfig(base: Config, partial: PartialConfig): Config {
       ...base.notifications,
       ...partial.notifications,
     },
+    mass_defect: {
+      ...base.mass_defect,
+      ...partial.mass_defect,
+    },
   };
 }
 
