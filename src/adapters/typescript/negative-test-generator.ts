@@ -73,8 +73,17 @@ function extractForbiddenAction(claim: Claim): string | null {
 function extractForbiddenOutcome(claim: Claim): string | null {
   const desc = claim.description.toLowerCase();
 
+  // Pattern to capture subject before "cannot be" (e.g., "insufficient funds cannot be created")
+  const subjectBeforeCannotBe = /^([\w\s]+?)\s+cannot\s+be\s+\w+/i;
+  const subjectMatch = subjectBeforeCannotBe.exec(desc);
+  if (subjectMatch !== null) {
+    const subject = subjectMatch[1];
+    if (subject !== undefined && subject.trim().length > 0) {
+      return subject.trim();
+    }
+  }
+
   const patterns = [
-    /^(?:[\w\s]+?)\s+cannot\s+be\s+(\w+)/i,
     /cannot\s+result\s+in\s+(\w+)/i,
     /must\s+not\s+cause\s+(\w+)/i,
     /never\s+(?:produces?|results?\s+in)\s+(\w+)/i,
