@@ -154,8 +154,9 @@ export class Logger {
   }
 
   private log(level: LogLevel, event: string, data?: Record<string, unknown>): void {
+    const timestamp = new Date().toISOString();
     const entry: LogEntry = {
-      timestamp: new Date().toISOString(),
+      timestamp,
       level,
       component: this.component,
       event,
@@ -165,7 +166,19 @@ export class Logger {
       (entry as { data: Record<string, unknown> }).data = data;
     }
 
-    process.stderr.write(JSON.stringify(entry) + '\n');
+    try {
+      process.stderr.write(JSON.stringify(entry) + '\n');
+    } catch (err) {
+      const fallbackEntry = {
+        timestamp,
+        level,
+        component: this.component,
+        event,
+        serializationError: err instanceof Error ? err.message : String(err),
+        originalData: '[unserializable]' as const,
+      };
+      process.stderr.write(JSON.stringify(fallbackEntry) + '\n');
+    }
   }
 }
 
