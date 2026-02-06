@@ -33,9 +33,9 @@ export type {
   InfrastructureFailure,
   InfrastructureFailureType,
   ClusterExecutionError,
-  DEFAULT_TIMEOUT,
-  DEFAULT_MAX_RETRIES,
 } from './cluster-executor.js';
+
+export { DEFAULT_TIMEOUT, DEFAULT_MAX_RETRIES } from './cluster-executor.js';
 
 export type {
   ClusterVerdict,
