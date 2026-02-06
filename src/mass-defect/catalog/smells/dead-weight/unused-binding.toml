@@ -1,0 +1,25 @@
+[smell]
+id = "unused-binding"
+name = "Unused Binding"
+category = "dead-weight"
+description = "Variables, functions, or imports are declared but never used, adding unnecessary clutter."
+
+[detection]
+
+[[detection.tools]]
+name = "eslint"
+rule = "no-unused-vars"
+
+[[detection.heuristics.patterns]]
+"Declared variables never referenced"
+
+[[detection.heuristics.patterns]]
+"Imported modules never used"
+
+[[detection.heuristics.patterns]]
+"Function parameters never referenced"
+
+[[applicable_patterns]]
+pattern = "remove-unused-binding"
+risk = 1
+rationale = "Removing unused bindings is a trivial transformation with minimal risk"

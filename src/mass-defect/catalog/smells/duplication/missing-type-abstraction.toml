@@ -1,0 +1,21 @@
+[smell]
+id = "missing-type-abstraction"
+name = "Missing Type Abstraction"
+category = "duplication"
+description = "Complex types are repeated throughout the codebase instead of being abstracted."
+
+[detection]
+
+[[detection.heuristics.patterns]]
+"Repeated object type definitions"
+
+[[detection.heuristics.patterns]]
+"Repeated interface definitions"
+
+[[detection.heuristics.patterns]]
+"Repeated union types or type aliases"
+
+[[applicable_patterns]]
+pattern = "introduce-type-alias"
+risk = 3
+rationale = "Creating type aliases eliminates type duplication and improves maintainability"

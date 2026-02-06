@@ -1,0 +1,22 @@
+[smell]
+id = "over-documentation"
+name = "Over-Documentation"
+category = "clarity-debt"
+description = "Excessive comments that add no value beyond the self-documenting code."
+
+[detection]
+max_comment_to_code_ratio = 0.5
+
+[[detection.heuristics.patterns]]
+"High comment-to-code ratio in functions"
+
+[[detection.heuristics.patterns]]
+"Comments restating the obvious from the code"
+
+[[detection.heuristics.patterns]]
+"Outdated or incorrect comments"
+
+[[applicable_patterns]]
+pattern = "remove-redundant-comments"
+risk = 1
+rationale = "Removing obvious comments improves readability with minimal risk"

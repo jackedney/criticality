@@ -1,0 +1,25 @@
+[smell]
+id = "repeated-code-blocks"
+name = "Repeated Code Blocks"
+category = "duplication"
+description = "Identical or similar code blocks appear multiple times, violating DRY principle."
+
+[detection]
+
+[[detection.tools]]
+name = "jscpd"
+rule = "duplicate-code"
+
+[[detection.heuristics.patterns]]
+"Identical code sequences in multiple functions"
+
+[[detection.heuristics.patterns]]
+"Similar code blocks with slight variations"
+
+[[detection.heuristics.patterns]]
+"Copy-pasted code in different modules"
+
+[[applicable_patterns]]
+pattern = "extract-helper"
+risk = 3
+rationale = "Extracting common code into shared functions eliminates duplication"
