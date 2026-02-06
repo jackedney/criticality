@@ -142,7 +142,6 @@ function buildFunctionClaimMapping(project: Project, projectPath: string): Funct
  *
  * @param violatedClaims - Array of violated claim IDs.
  * @param functionClaimMapping - Map of function name to claim references.
- * @param cluster - The cluster definition with module list.
  * @returns Array of functions to re-inject with metadata.
  */
 function identifyFunctionsToReinject(
@@ -278,6 +277,7 @@ export function handleClusterVerdict(options: VerdictOptions): VerdictResult {
  *
  * @param violatedClaims - Array of violated claim IDs.
  * @param ledger - Decision ledger instance for recording violations.
+ * @param logger - Optional logger function for error reporting.
  * @returns Array of recorded claim IDs.
  *
  * @example
@@ -291,9 +291,12 @@ export function handleClusterVerdict(options: VerdictOptions): VerdictResult {
  */
 export function recordViolatedClaimsInLedger(
   violatedClaims: readonly string[],
-  ledger: Ledger
+  ledger: Ledger,
+  logger?: (message: string) => void
 ): string[] {
   const recorded: string[] = [];
+  // eslint-disable-next-line no-console
+  const logError = logger ?? console.error;
 
   for (const claimId of violatedClaims) {
     try {
@@ -309,8 +312,7 @@ export function recordViolatedClaimsInLedger(
       recorded.push(claimId);
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error);
-      // eslint-disable-next-line no-console
-      console.error(`[ClusterVerdict] Failed to record violated claim ${claimId}: ${errorMessage}`);
+      logError(`[ClusterVerdict] Failed to record violated claim ${claimId}: ${errorMessage}`);
     }
   }
 
@@ -358,7 +360,7 @@ export function processClusterVerdict(options: VerdictOptions, ledger: Ledger): 
   let recordedInLedger: string[] = [];
 
   if (recordedClaims.length > 0) {
-    recordedInLedger = recordViolatedClaimsInLedger(recordedClaims, ledger);
+    recordedInLedger = recordViolatedClaimsInLedger(recordedClaims, ledger, logger);
 
     logger(
       `[ClusterVerdict] Recorded ${String(recordedInLedger.length)} violated claim(s) in ledger: ${recordedInLedger.join(', ')}`

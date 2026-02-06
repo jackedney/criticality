@@ -375,6 +375,24 @@ export function withdraw(amount: number): number {
       const decisions = ledger.query({ category: 'testing' });
       expect(decisions.length).toBe(2);
     });
+
+    it('should use provided logger for error reporting', () => {
+      const ledger = new Ledger({ project: 'test-project' });
+      const violatedClaims = ['balance_002'];
+      const logger = vi.fn();
+
+      // Mock ledger.append to throw
+      vi.spyOn(ledger, 'append').mockImplementation(() => {
+        throw new Error('Ledger write failed');
+      });
+
+      const recorded = recordViolatedClaimsInLedger(violatedClaims, ledger, logger);
+
+      expect(recorded).toEqual([]);
+      expect(logger).toHaveBeenCalledWith(
+        expect.stringContaining('Failed to record violated claim balance_002: Ledger write failed')
+      );
+    });
   });
 
   describe('processClusterVerdict', () => {
