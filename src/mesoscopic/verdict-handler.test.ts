@@ -14,6 +14,8 @@
 /* eslint-disable security/detect-non-literal-fs-filename -- Test code with temp directories */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import * as fs from 'node:fs/promises';
+import * as os from 'node:os';
+import * as path from 'node:path';
 import type { ClusterDefinition } from './types.js';
 import type { ClaimResult } from './cluster-executor.js';
 import type { ClusterVerdict, FunctionToReinject } from './verdict-handler.js';
@@ -29,11 +31,9 @@ describe('ClusterVerdict', () => {
 
   beforeEach(async () => {
     vi.clearAllMocks();
-    const timestamp = Date.now();
-    tempDir = `/tmp/verdict-handler-test-${String(timestamp)}`;
-    await fs.mkdir(tempDir, { recursive: true });
+    tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'verdict-handler-test-'));
     await fs.writeFile(
-      `${tempDir}/tsconfig.json`,
+      path.join(tempDir, 'tsconfig.json'),
       JSON.stringify({
         compilerOptions: { target: 'ES2020' },
         include: ['src/**/*.ts'],
@@ -149,10 +149,10 @@ describe('ClusterVerdict', () => {
 
     it('should identify functions linked to violated claims via CLAIM_REF', async () => {
       // Create a source file with CLAIM_REF comments
-      const srcDir = `${tempDir}/src/accounting`;
+      const srcDir = path.join(tempDir, 'src', 'accounting');
       await fs.mkdir(srcDir, { recursive: true });
       await fs.writeFile(
-        `${srcDir}/withdraw.ts`,
+        path.join(srcDir, 'withdraw.ts'),
         `/**
  * Withdraw function.
  * CLAIM_REF: balance_001
@@ -257,8 +257,9 @@ export function withdraw(amount: number): number {
     });
 
     it('should throw error with path context when tsconfig.json is missing', async () => {
-      const neverCommittedDir = `/tmp/verdict-handler-no-tsconfig-${String(Date.now())}`;
-      await fs.mkdir(neverCommittedDir, { recursive: true });
+      const neverCommittedDir = await fs.mkdtemp(
+        path.join(os.tmpdir(), 'verdict-handler-no-tsconfig-')
+      );
 
       const claimResults: ClaimResult[] = [
         {
@@ -289,7 +290,7 @@ export function withdraw(amount: number): number {
           claimResults,
           logger,
         })
-      ).toThrow(`tsconfig.json not found at ${neverCommittedDir}/tsconfig.json`);
+      ).toThrow(`tsconfig.json not found at ${path.join(neverCommittedDir, 'tsconfig.json')}`);
 
       await fs.rm(neverCommittedDir, { recursive: true, force: true });
     });
