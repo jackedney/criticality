@@ -130,6 +130,18 @@ describe('ClusterVerdict', () => {
           fc.array(functionToReinjectArbitrary),
           fc.boolean(),
           (pass, violatedClaims, functionsToReinject, fallbackTriggered) => {
+            // Filter out semantically invalid combinations before testing invariants.
+            // A valid ClusterVerdict with pass=true must have fallbackTriggered=false
+            // when there are no violated claims and no functions to re-inject.
+            fc.pre(
+              !(
+                pass &&
+                fallbackTriggered &&
+                violatedClaims.length === 0 &&
+                functionsToReinject.length === 0
+              )
+            );
+
             const verdict: ClusterVerdict = {
               pass,
               violatedClaims,
