@@ -67,7 +67,11 @@ function extractModulesFromSpec(spec: Spec): Module[] {
 
         const allTypeNames = [...params, returnType].flatMap((paramOrReturn) => {
           const match = /^(\w+)(?:<[^>]+>)?$/.exec(paramOrReturn);
-          return match ? [match[1]] : [];
+          if (match) {
+            const typeName = match[1];
+            return typeName !== undefined ? [typeName] : [];
+          }
+          return [];
         });
 
         return allTypeNames;
