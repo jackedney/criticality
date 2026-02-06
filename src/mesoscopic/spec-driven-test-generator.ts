@@ -346,7 +346,6 @@ export class SpecDrivenTestError extends Error {
  * - Uses structurer_model via ModelRouter if enabled
  * - Skips untestable claims with documentation
  * - Logs warnings for performance claims without thresholds
- * - Detects performance regression if baseline is available
  *
  * @param specPath - Path to the spec.toml file.
  * @param functionClaimRefs - Map of function name to array of claim IDs from CLAIM_REF comments.
