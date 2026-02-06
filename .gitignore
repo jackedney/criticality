@@ -45,7 +45,7 @@ coverage/
 # Logs
 *.log
 logs/
-# Local agent and ralph metadata
+# Local agent and AI tool metadata
 .agents/
 .ralph/
 .serena/
@@ -65,6 +65,3 @@ temp/
 .pytest_cache/
 .mypy_cache/
 .ruff_cache/
-*.swp
-*.swo
-*~

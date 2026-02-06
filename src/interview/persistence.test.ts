@@ -379,7 +379,9 @@ describe('Interview Persistence', () => {
 
             expect(restored.extractedRequirements).toHaveLength(state.extractedRequirements.length);
             for (let i = 0; i < state.extractedRequirements.length; i++) {
+              // eslint-disable-next-line security/detect-object-injection
               const original = state.extractedRequirements[i];
+              // eslint-disable-next-line security/detect-object-injection
               const restoredReq = restored.extractedRequirements[i];
               if (original === undefined || restoredReq === undefined) {
                 continue;
@@ -394,7 +396,9 @@ describe('Interview Persistence', () => {
 
             expect(restored.features).toHaveLength(state.features.length);
             for (let i = 0; i < state.features.length; i++) {
+              // eslint-disable-next-line security/detect-object-injection
               const original = state.features[i];
+              // eslint-disable-next-line security/detect-object-injection
               const restoredFeat = restored.features[i];
               if (original === undefined || restoredFeat === undefined) {
                 continue;
@@ -410,7 +414,9 @@ describe('Interview Persistence', () => {
 
             expect(restored.delegationPoints).toHaveLength(state.delegationPoints.length);
             for (let i = 0; i < state.delegationPoints.length; i++) {
+              // eslint-disable-next-line security/detect-object-injection
               const original = state.delegationPoints[i];
+              // eslint-disable-next-line security/detect-object-injection
               const restoredPoint = restored.delegationPoints[i];
               if (original === undefined || restoredPoint === undefined) {
                 continue;
@@ -566,10 +572,10 @@ describe('Interview Persistence', () => {
               const state: Record<string, unknown> = {};
               Object.entries(allFields).forEach(([key, value]) => {
                 if (key !== missingField) {
+                  // eslint-disable-next-line security/detect-object-injection
                   state[key] = value;
                 }
               });
-
               const json = JSON.stringify(state);
               expect(() => deserializeInterviewState(json)).toThrow(InterviewPersistenceError);
             }

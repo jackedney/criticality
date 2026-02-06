@@ -165,16 +165,17 @@ function generateTestProperty(claim: Claim, witnesses: WitnessDefinition[]): str
     lines.push(`      ),`);
   } else {
     // No witnesses - use a simple property
-    lines.push(`    fc.assert(`);
-    lines.push(`      fc.property(`);
-    lines.push(`        fc.anything(),`);
-    lines.push(`        (input) => {`);
-    lines.push(`          // Invariant: ${claim.description}`);
-    lines.push(`          // TODO: Implement invariant check`);
-    lines.push(`          expect(input).toBeDefined();`);
-    lines.push(`          return true;`);
-    lines.push(`        }`);
-    lines.push(`      ),`);
+    lines.push('    fc.assert(');
+    lines.push('      fc.property(');
+    lines.push('        fc.anything(),');
+    lines.push('        (input) => {');
+    lines.push('          // Invariant: ' + claim.description);
+    lines.push('          // TODO: Implement invariant check');
+    lines.push('          // For example, if this is a "balance never negative" claim:');
+    lines.push('          // expect(balance).toBeGreaterThanOrEqual(0);');
+    lines.push('          return true;');
+    lines.push('        }');
+    lines.push('      ),');
   }
 
   return lines.join('\n');

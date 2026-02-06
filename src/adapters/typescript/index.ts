@@ -679,3 +679,23 @@ export class TypeScriptAdapter implements TargetAdapter {
     return null;
   }
 }
+// Re-export test generators
+export {
+  generateTemporalTests,
+  generateTemporalTest,
+  type TemporalTestOptions,
+  DEFAULT_TIMEOUT as TEMPORAL_DEFAULT_TIMEOUT,
+} from './temporal-test-generator.js';
+
+export {
+  generateNegativeTests,
+  generateNegativeTest,
+  type NegativeTestOptions,
+  DEFAULT_TIMEOUT as NEGATIVE_DEFAULT_TIMEOUT,
+} from './negative-test-generator.js';
+
+export {
+  generateSpecDrivenTests,
+  SpecDrivenTestError,
+} from '../../mesoscopic/spec-driven-test-generator.js';
+export type { SpecDrivenTestOptions } from '../../mesoscopic/spec-driven-test-generator.js';
