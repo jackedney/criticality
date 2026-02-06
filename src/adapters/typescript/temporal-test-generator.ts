@@ -8,6 +8,7 @@
  */
 
 import type { Claim } from './claims.js';
+import { escapeString } from './utils.js';
 
 /**
  * Options for temporal test generation.
@@ -20,22 +21,6 @@ export interface TemporalTestOptions {
 }
 
 const DEFAULT_TIMEOUT = 30000;
-
-/**
- * Escapes a string for use in a JavaScript string literal.
- *
- * @param str - The string to escape.
- * @returns The escaped string.
- */
-function escapeString(str: string): string {
-  return str
-    .replace(/\\/g, '\\\\')
-    .replace(/'/g, "\\'")
-    .replace(/`/g, '\\`')
-    .replace(/\$/g, '\\$')
-    .replace(/\n/g, '\\n')
-    .replace(/\r/g, '\\r');
-}
 
 /**
  * Generates a test name from a claim ID and description.
