@@ -54,6 +54,30 @@ export interface ThresholdConfig {
 }
 
 /**
+ * Complexity targets for Mass Defect phase.
+ */
+export interface MassDefectTargetsConfig {
+  /** Maximum allowed cyclomatic complexity. */
+  max_cyclomatic_complexity: number;
+  /** Maximum allowed function length in lines. */
+  max_function_length_lines: number;
+  /** Maximum allowed nesting depth. */
+  max_nesting_depth: number;
+  /** Minimum required test coverage (0-1). */
+  min_test_coverage: number;
+}
+
+/**
+ * Configuration for Mass Defect phase.
+ */
+export interface MassDefectConfig {
+  /** Complexity targets for transformation. */
+  targets: MassDefectTargetsConfig;
+  /** Path to transformation catalog directory relative to project root. */
+  catalog_path: string;
+}
+
+/**
  * Notification configuration for blocking states.
  */
 export interface NotificationConfig {
@@ -77,6 +101,8 @@ export interface Config {
   thresholds: ThresholdConfig;
   /** Notification settings for blocking states. */
   notifications: NotificationConfig;
+  /** Mass Defect phase configuration. */
+  mass_defect: MassDefectConfig;
 }
 
 /**
@@ -88,4 +114,8 @@ export interface PartialConfig {
   paths?: Partial<PathConfig>;
   thresholds?: Partial<ThresholdConfig>;
   notifications?: Partial<NotificationConfig>;
+  mass_defect?: {
+    targets?: Partial<MassDefectTargetsConfig>;
+    catalog_path?: string;
+  };
 }

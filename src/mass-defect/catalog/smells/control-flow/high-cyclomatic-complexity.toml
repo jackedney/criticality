@@ -1,0 +1,29 @@
+[smell]
+id = "high-cyclomatic-complexity"
+name = "High Cyclomatic Complexity"
+category = "control-flow"
+description = "Function has too many independent paths through the code, making it hard to test and maintain."
+
+[detection]
+max_cyclomatic_complexity = 10
+
+[[detection.tools]]
+name = "eslint"
+rule = "complexity"
+
+[detection.heuristics]
+patterns = [
+  "Functions with multiple return statements",
+  "Functions with many conditional branches",
+  "Functions with many loops"
+]
+
+[[applicable_patterns]]
+pattern = "early-return"
+risk = 2
+rationale = "Early returns reduce complexity by inverting conditions"
+
+[[applicable_patterns]]
+pattern = "extract-helper"
+risk = 3
+rationale = "Extracting complex logic reduces complexity of the function"

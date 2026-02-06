@@ -1,0 +1,117 @@
+[pattern]
+id = "early-return"
+name = "Early Return"
+description = "Invert a condition and return early to reduce nesting depth"
+risk = 2
+risk_rationale = "Local transformation, only affects control flow within function"
+
+[verification]
+required = ["compile", "unit_tests_target_function"]
+
+[guards]
+conditions = [
+    "Function has cleanup logic that must run before all exits",
+    "Return value requires computation from both branches",
+    "Function uses a single-exit style mandated by project conventions",
+    "The condition involves side effects that would change execution order"
+]
+
+[enables]
+patterns = ["extract-helper", "loop-to-functional"]
+rationale = "Flattening often reveals extractable blocks or simplifiable loops"
+
+[prompt]
+template = """
+PATTERN: Early Return
+SMELL: Deep nesting / High cyclomatic complexity
+RISK: 2 (Safe - local transformation)
+
+CONTEXT:
+You are refactoring a function that has deeply nested conditionals. The goal is to invert conditions and return early to flatten structure while preserving exact semantics.
+
+DETECTION:
+- Nesting depth exceeds 3 levels
+- Pattern: if (condition) { ...long block... } with no else, or trivial else
+
+GUARDS (do NOT apply if):
+- Function has cleanup logic that must run before all exits
+- Return value requires computation from both branches
+- Function uses a single-exit style mandated by project conventions
+- The condition involves side effects that would change execution order
+
+BEFORE (TypeScript):
+```typescript
+function processUser(user: User | null): Result {
+    if (user !== null) {
+        if (user.isActive) {
+            if (user.hasPermission('read')) {
+                const data = fetchData(user.id);
+                return { success: true, data };
+            } else {
+                return { success: false, error: 'No permission' };
+            }
+        } else {
+            return { success: false, error: 'User inactive' };
+        }
+    } else {
+        return { success: false, error: 'No user' };
+    }
+}
+```
+
+AFTER (TypeScript):
+```typescript
+function processUser(user: User | null): Result {
+    if (user === null) {
+        return { success: false, error: 'No user' };
+    }
+    if (!user.isActive) {
+        return { success: false, error: 'User inactive' };
+    }
+    if (!user.hasPermission('read')) {
+        return { success: false, error: 'No permission' };
+    }
+    const data = fetchData(user.id);
+    return { success: true, data };
+}
+```
+
+BEFORE (Python):
+```python
+def process_user(user: User | None) -> Result:
+    if user is not None:
+        if user.is_active:
+            if user.has_permission('read'):
+                data = fetch_data(user.id)
+                return Result(success=True, data=data)
+            else:
+                return Result(success=False, error='No permission')
+        else:
+            return Result(success=False, error='User inactive')
+    else:
+        return Result(success=False, error='No user')
+```
+
+AFTER (Python):
+```python
+def process_user(user: User | None) -> Result:
+    if user is None:
+        return Result(success=False, error='No user')
+    if not user.is_active:
+        return Result(success=False, error='User inactive')
+    if not user.has_permission('read'):
+        return Result(success=False, error='No permission')
+    data = fetch_data(user.id)
+    return Result(success=True, data=data)
+```
+
+INSTRUCTIONS:
+1. Identify the outermost condition that guards a large block
+2. Invert the condition
+3. Return the "else" case immediately after the inverted check
+4. Move the "then" block contents to the top level (one less indent)
+5. Repeat for remaining nested conditions from outside in
+
+OUTPUT FORMAT:
+Return only the transformed function. Do not include explanations.
+"""

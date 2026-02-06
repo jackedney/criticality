@@ -1,0 +1,111 @@
+[pattern]
+id = "extract-magic-value"
+name = "Extract Magic Value"
+description = "Replace literal value with a named constant"
+risk = 2
+risk_rationale = "Safe - introduces constant, preserves logic but improves maintainability"
+
+[verification]
+required = ["compile", "unit_tests_target_function"]
+
+[guards]
+conditions = [
+    "Literal value is truly arbitrary with no domain meaning",
+    "Value is used in a highly localized context with no reuse benefit",
+    "The constant name would be more confusing than the literal value"
+]
+
+[enables]
+patterns = []
+rationale = ""
+
+[prompt]
+template = """
+PATTERN: Extract Magic Value
+SMELL: Magic values
+RISK: 2 (Safe - introduces constant)
+
+CONTEXT:
+You are replacing magic numbers or string literals with named constants. This makes the code more maintainable and self-documenting.
+
+DETECTION:
+- Numeric literals that represent domain concepts (timeouts, limits, thresholds)
+- String literals used as identifiers or codes
+- Repeated literal values across code
+
+GUARDS (do NOT apply if):
+- Literal value is truly arbitrary with no domain meaning
+- Value is used in a highly localized context with no reuse benefit
+- The constant name would be more confusing than the literal value
+
+BEFORE (TypeScript):
+```typescript
+function checkTimeout(elapsed: number): boolean {
+    return elapsed > 5000;
+}
+
+function retry(maxAttempts: number): void {
+    for (let i = 0; i < maxAttempts; i++) {
+        if (i > 3) {
+            console.warn('Retrying...');
+        }
+        // ...
+    }
+}
+```
+
+AFTER (TypeScript):
+```typescript
+const TIMEOUT_MS = 5000;
+const MAX_RETRIES = 3;
+
+function checkTimeout(elapsed: number): boolean {
+    return elapsed > TIMEOUT_MS;
+}
+
+function retry(maxAttempts: number): void {
+    for (let i = 0; i < maxAttempts; i++) {
+        if (i > MAX_RETRIES) {
+            console.warn('Retrying...');
+        }
+        // ...
+    }
+}
+```
+
+BEFORE (Python):
+```python
+def check_timeout(elapsed: int) -> bool:
+    return elapsed > 5000
+
+def retry(max_attempts: int) -> None:
+    for i in range(max_attempts):
+        if i > 3:
+            print('Retrying...')
+        # ...
+```
+
+AFTER (Python):
+```python
+TIMEOUT_MS = 5000
+MAX_RETRIES = 3
+
+def check_timeout(elapsed: int) -> bool:
+    return elapsed > TIMEOUT_MS
+
+def retry(max_attempts: int) -> None:
+    for i in range(max_attempts):
+        if i > MAX_RETRIES:
+            print('Retrying...')
+        # ...
+```
+
+INSTRUCTIONS:
+1. Identify magic numbers or string literals with domain meaning
+2. Create a named constant with a descriptive name (UPPER_SNAKE_CASE)
+3. Replace all occurrences of the literal with the constant
+4. Place constants at module level or near their first use
+
+OUTPUT FORMAT:
+Return the complete code including the new constants and the refactored function. Do not include explanations.
+"""

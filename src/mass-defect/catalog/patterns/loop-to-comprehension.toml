@@ -1,0 +1,111 @@
+[pattern]
+id = "loop-to-comprehension"
+name = "Loop to Comprehension"
+description = "Replace imperative loop with Python list/dict comprehension"
+risk = 2
+risk_rationale = "Local transformation, comprehension is semantically equivalent to loop"
+
+[verification]
+required = ["compile", "unit_tests_target_function"]
+
+[guards]
+conditions = [
+    "Loop has significant side effects beyond building result",
+    "Loop uses break/continue statements",
+    "Loop has complex logic that would make comprehension unreadable"
+]
+
+[enables]
+patterns = []
+rationale = ""
+
+[prompt]
+template = """
+PATTERN: Loop to Comprehension
+SMELL: Imperative loop
+RISK: 2 (Safe - local transformation)
+
+CONTEXT:
+You are replacing an imperative for loop with a Python list or dictionary comprehension. This makes the code more Pythonic and concise.
+
+DETECTION:
+- For loop that builds a list or dict
+- Simple transformation/filtering of elements
+- No complex control flow (break/continue)
+
+GUARDS (do NOT apply if):
+- Loop has significant side effects beyond building result
+- Loop uses break/continue statements
+- Loop has complex logic that would make comprehension unreadable
+
+BEFORE (Python):
+```python
+def get_squares(numbers: list[int]) -> list[int]:
+    squares = []
+    for n in numbers:
+        squares.append(n ** 2)
+    return squares
+```
+
+AFTER (Python):
+```python
+def get_squares(numbers: list[int]) -> list[int]:
+    return [n ** 2 for n in numbers]
+```
+
+BEFORE (Python):
+```python
+def get_even_numbers(numbers: list[int]) -> list[int]:
+    evens = []
+    for n in numbers:
+        if n % 2 == 0:
+            evens.append(n)
+    return evens
+```
+
+AFTER (Python):
+```python
+def get_even_numbers(numbers: list[int]) -> list[int]:
+    return [n for n in numbers if n % 2 == 0]
+```
+
+BEFORE (Python):
+```python
+def create_user_dict(users: list[User]) -> dict[int, User]:
+    user_dict = {}
+    for user in users:
+        user_dict[user.id] = user
+    return user_dict
+```
+
+AFTER (Python):
+```python
+def create_user_dict(users: list[User]) -> dict[int, User]:
+    return {user.id: user for user in users}
+```
+
+BEFORE (Python):
+```python
+def get_active_user_names(users: list[User]) -> list[str]:
+    names = []
+    for user in users:
+        if user.is_active:
+            names.append(user.name)
+    return names
+```
+
+AFTER (Python):
+```python
+def get_active_user_names(users: list[User]) -> list[str]:
+    return [user.name for user in users if user.is_active]
+```
+
+INSTRUCTIONS:
+1. Identify the loop building a list or dict
+2. For lists: use [expression for item in iterable (if condition)]
+3. For dicts: use {key_expr: value_expr for item in iterable (if condition)}
+4. Include conditional after the for clause if filtering
+
+OUTPUT FORMAT:
+Return only the transformed function. Do not include explanations.
+"""

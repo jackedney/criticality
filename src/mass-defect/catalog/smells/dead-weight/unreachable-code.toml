@@ -1,0 +1,23 @@
+[smell]
+id = "unreachable-code"
+name = "Unreachable Code"
+category = "dead-weight"
+description = "Code that can never be executed due to preceding control flow statements."
+
+[detection]
+
+[[detection.tools]]
+name = "eslint"
+rule = "no-unreachable"
+
+[detection.heuristics]
+patterns = [
+  "Code after return, throw, or continue statements",
+  "Code in conditional branches that can never be true",
+  "Statements after infinite loops"
+]
+
+[[applicable_patterns]]
+pattern = "remove-unreachable"
+risk = 1
+rationale = "Removing unreachable code is trivial with no semantic impact"

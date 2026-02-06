@@ -1,0 +1,23 @@
+[smell]
+id = "magic-values"
+name = "Magic Values"
+category = "duplication"
+description = "Literal values appear directly in code without named constants, reducing maintainability."
+
+[detection]
+
+[[detection.tools]]
+name = "eslint"
+rule = "no-magic-numbers"
+
+[detection.heuristics]
+patterns = [
+  "Numeric literals without semantic meaning",
+  "String literals repeated across the codebase",
+  "Hardcoded configuration values"
+]
+
+[[applicable_patterns]]
+pattern = "extract-magic-value"
+risk = 2
+rationale = "Extracting magic values to named constants improves code clarity"

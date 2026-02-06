@@ -7,6 +7,8 @@
 import * as TOML from '@iarna/toml';
 import {
   DEFAULT_CONFIG,
+  DEFAULT_MASS_DEFECT,
+  DEFAULT_MASS_DEFECT_TARGETS,
   DEFAULT_MODEL_ASSIGNMENTS,
   DEFAULT_NOTIFICATIONS,
   DEFAULT_PATHS,
@@ -14,6 +16,8 @@ import {
 } from './defaults.js';
 import type {
   Config,
+  MassDefectConfig,
+  MassDefectTargetsConfig,
   ModelAssignments,
   NotificationConfig,
   PathConfig,
@@ -237,6 +241,70 @@ function parseNotifications(raw: Record<string, unknown> | undefined): Notificat
 }
 
 /**
+ * Parses Mass Defect targets configuration from raw TOML data.
+ *
+ * @param raw - Raw TOML object for mass_defect.targets section.
+ * @returns Validated targets configuration merged with defaults.
+ */
+function parseMassDefectTargets(raw: Record<string, unknown> | undefined): MassDefectTargetsConfig {
+  if (raw === undefined) {
+    return { ...DEFAULT_MASS_DEFECT_TARGETS };
+  }
+
+  const result: MassDefectTargetsConfig = { ...DEFAULT_MASS_DEFECT_TARGETS };
+
+  if ('max_cyclomatic_complexity' in raw) {
+    result.max_cyclomatic_complexity = validateNumber(
+      raw.max_cyclomatic_complexity,
+      'mass_defect.targets.max_cyclomatic_complexity'
+    );
+  }
+  if ('max_function_length_lines' in raw) {
+    result.max_function_length_lines = validateNumber(
+      raw.max_function_length_lines,
+      'mass_defect.targets.max_function_length_lines'
+    );
+  }
+  if ('max_nesting_depth' in raw) {
+    result.max_nesting_depth = validateNumber(
+      raw.max_nesting_depth,
+      'mass_defect.targets.max_nesting_depth'
+    );
+  }
+  if ('min_test_coverage' in raw) {
+    result.min_test_coverage = validateNumber(
+      raw.min_test_coverage,
+      'mass_defect.targets.min_test_coverage'
+    );
+  }
+
+  return result;
+}
+
+/**
+ * Parses Mass Defect configuration from raw TOML data.
+ *
+ * @param raw - Raw TOML object for mass_defect section.
+ * @returns Validated Mass Defect configuration merged with defaults.
+ */
+function parseMassDefect(raw: Record<string, unknown> | undefined): MassDefectConfig {
+  if (raw === undefined) {
+    return { ...DEFAULT_MASS_DEFECT };
+  }
+
+  const result: MassDefectConfig = { ...DEFAULT_MASS_DEFECT };
+
+  if ('targets' in raw) {
+    result.targets = parseMassDefectTargets(raw.targets as Record<string, unknown> | undefined);
+  }
+  if ('catalog_path' in raw) {
+    result.catalog_path = validateString(raw.catalog_path, 'mass_defect.catalog_path');
+  }
+
+  return result;
+}
+
+/**
  * Parses a TOML string into a validated Config object.
  *
  * @param tomlContent - Raw TOML content as a string.
@@ -275,6 +343,7 @@ export function parseConfig(tomlContent: string): Config {
     paths: parsePaths(parsed.paths as Record<string, unknown> | undefined),
     thresholds: parseThresholds(parsed.thresholds as Record<string, unknown> | undefined),
     notifications: parseNotifications(parsed.notifications as Record<string, unknown> | undefined),
+    mass_defect: parseMassDefect(parsed.mass_defect as Record<string, unknown> | undefined),
   };
 }
 

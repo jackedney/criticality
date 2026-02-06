@@ -1,0 +1,23 @@
+[smell]
+id = "long-function-body"
+name = "Long Function Body"
+category = "control-flow"
+description = "Function is too long, making it difficult to understand and maintain."
+
+[detection]
+max_function_length_lines = 50
+
+[[detection.tools]]
+name = "eslint"
+rule = "max-lines-per-function"
+
+[detection.heuristics]
+patterns = [
+  "Functions with > 50 lines of code",
+  "Functions with multiple responsibilities"
+]
+
+[[applicable_patterns]]
+pattern = "extract-helper"
+risk = 3
+rationale = "Extracting sub-functions reduces function length and improves clarity"

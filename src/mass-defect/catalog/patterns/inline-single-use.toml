@@ -1,0 +1,105 @@
+[pattern]
+id = "inline-single-use"
+name = "Inline Single Use"
+description = "Inline variable that is used exactly once"
+risk = 1
+risk_rationale = "Trivial - pure substitution, no logic change"
+
+[verification]
+required = ["compile"]
+
+[guards]
+conditions = [
+    "Variable expression is complex and would hurt readability if inlined",
+    "Variable name adds meaningful documentation",
+    "Variable is used in multiple expressions despite appearing once in source"
+]
+
+[enables]
+patterns = []
+rationale = ""
+
+[prompt]
+template = """
+PATTERN: Inline Single Use
+SMELL: Unused binding / Clarity debt
+RISK: 1 (Trivial - pure substitution)
+
+CONTEXT:
+You are inlining a variable that is declared and used exactly once. This reduces unnecessary intermediate assignments.
+
+DETECTION:
+- Variable declared and referenced exactly once
+- Variable expression is simple enough to inline
+- Variable name doesn't add significant documentation
+
+GUARDS (do NOT apply if):
+- Variable expression is complex and would hurt readability if inlined
+- Variable name adds meaningful documentation
+- Variable is used in multiple expressions despite appearing once in source
+
+BEFORE (TypeScript):
+```typescript
+function processName(name: string): string {
+    const upper = name.toUpperCase();
+    return upper.trim();
+}
+```
+
+AFTER (TypeScript):
+```typescript
+function processName(name: string): string {
+    return name.toUpperCase().trim();
+}
+```
+
+BEFORE (TypeScript):
+```typescript
+function calculate(x: number, y: number): number {
+    const sum = x + y;
+    return sum * 2;
+}
+```
+
+AFTER (TypeScript):
+```typescript
+function calculate(x: number, y: number): number {
+    return (x + y) * 2;
+}
+```
+
+BEFORE (Python):
+```python
+def process_name(name: str) -> str:
+    upper = name.upper()
+    return upper.strip()
+```
+
+AFTER (Python):
+```python
+def process_name(name: str) -> str:
+    return name.upper().strip()
+```
+
+BEFORE (Python):
+```python
+def calculate(x: int, y: int) -> int:
+    total = x + y
+    return total * 2
+```
+
+AFTER (Python):
+```python
+def calculate(x: int, y: int) -> int:
+    return (x + y) * 2
+```
+
+INSTRUCTIONS:
+1. Identify variables declared and used exactly once
+2. Replace the variable reference with the initialization expression
+3. Remove the variable declaration
+4. Ensure the inlined expression is simple and readable
+
+OUTPUT FORMAT:
+Return only the transformed function. Do not include explanations.
+"""

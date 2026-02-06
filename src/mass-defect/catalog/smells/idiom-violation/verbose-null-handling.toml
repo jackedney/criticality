@@ -1,0 +1,28 @@
+[smell]
+id = "verbose-null-handling"
+name = "Verbose Null Handling"
+category = "idiom-violation"
+description = "Explicit null checks that could be simplified with optional chaining or nullish coalescing."
+
+[detection]
+
+[[detection.tools]]
+name = "manual"
+rule = "none"
+
+[detection.heuristics]
+patterns = [
+  "Explicit null checks before property access",
+  "if (obj !== null && obj !== undefined) patterns",
+  "Ternary operators for null fallbacks"
+]
+
+[[applicable_patterns]]
+pattern = "optional-chaining"
+risk = 2
+rationale = "Optional chaining provides concise null-safe property access"
+
+[[applicable_patterns]]
+pattern = "nullish-coalescing"
+risk = 2
+rationale = "Nullish coalescing simplifies null fallback logic"

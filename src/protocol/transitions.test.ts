@@ -524,5 +524,51 @@ describe('Phase Transitions', () => {
         }
       });
     });
+
+    describe('Acceptance Criteria: Mesoscopic -> MassDefect transition with verifiedCode artifact', () => {
+      it('transitions from Mesoscopic to MassDefect with verifiedCode artifact', () => {
+        const state = createActiveState('Mesoscopic');
+        const artifacts = createTransitionArtifacts(['verifiedCode']);
+
+        const result = transition(state, 'MassDefect', { artifacts });
+
+        expect(result.success).toBe(true);
+        if (result.success) {
+          expect(result.state.phase).toBe('MassDefect');
+          expect(result.state.substate.kind).toBe('Active');
+          expect(result.contextShed).toBe(true);
+        }
+      });
+    });
+
+    describe('Acceptance Criteria: MassDefect -> Complete transition with finalArtifact', () => {
+      it('transitions from MassDefect to Complete with finalArtifact', () => {
+        const state = createActiveState('MassDefect');
+        const artifacts = createTransitionArtifacts(['finalArtifact']);
+
+        const result = transition(state, 'Complete', { artifacts });
+
+        expect(result.success).toBe(true);
+        if (result.success) {
+          expect(result.state.phase).toBe('Complete');
+          expect(result.state.substate.kind).toBe('Active');
+        }
+      });
+    });
+
+    describe('Negative case: MassDefect -> Complete without finalArtifact fails', () => {
+      it('returns MISSING_ARTIFACTS error when finalArtifact not provided', () => {
+        const state = createActiveState('MassDefect');
+
+        const result = transition(state, 'Complete');
+
+        expect(result.success).toBe(false);
+        if (!result.success) {
+          expect(result.error.code).toBe('MISSING_ARTIFACTS');
+          expect(result.error.missingArtifacts).toContain('finalArtifact');
+          expect(result.error.message).toContain('finalArtifact');
+        }
+      });
+    });
   });
 });

@@ -86,6 +86,16 @@ export interface FailedSubstate {
 }
 
 /**
+ * Substates specific to the MassDefect phase.
+ */
+export type MassDefectPhaseState =
+  | 'analyzing'
+  | 'transforming'
+  | 'verifying'
+  | 'converged'
+  | 'manual_review_required';
+
+/**
  * Union type of all possible substates.
  *
  * @remarks

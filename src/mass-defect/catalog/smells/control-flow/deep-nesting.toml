@@ -1,0 +1,29 @@
+[smell]
+id = "deep-nesting"
+name = "Deep Nesting"
+category = "control-flow"
+description = "Control structures nested too deeply, making code difficult to read and maintain."
+
+[detection]
+max_nesting_depth = 3
+
+[[detection.tools]]
+name = "eslint"
+rule = "max-depth"
+
+[detection.heuristics]
+patterns = [
+  "Nested if statements at depth > 3",
+  "Nested loops at depth > 3",
+  "Nested switch statements at depth > 3"
+]
+
+[[applicable_patterns]]
+pattern = "early-return"
+risk = 2
+rationale = "Early returns reduce nesting depth by inverting conditions"
+
+[[applicable_patterns]]
+pattern = "extract-conditional-body"
+risk = 3
+rationale = "Extracting complex conditionals reduces nesting"

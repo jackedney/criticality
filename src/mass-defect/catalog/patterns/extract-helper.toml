@@ -1,0 +1,114 @@
+[pattern]
+id = "extract-helper"
+name = "Extract Helper"
+description = "Extract a block of code into a separate function to improve readability and reusability"
+risk = 3
+risk_rationale = "Creates new function, may affect scoping and require interface changes"
+
+[verification]
+required = ["compile", "unit_tests_target_function", "integration_tests_module"]
+
+[guards]
+conditions = [
+    "Block has side effects that depend on surrounding context",
+    "Block references many local variables making extraction impractical",
+    "Extraction would create a function with only one call site and no clarity benefit"
+]
+
+[enables]
+patterns = []
+rationale = ""
+
+[prompt]
+template = """
+PATTERN: Extract Helper
+SMELL: Long function body / Repeated code blocks
+RISK: 3 (Moderate - creates new function)
+
+CONTEXT:
+You are extracting a block of code into a separate helper function. This improves readability, testability, and reusability.
+
+DETECTION:
+- Function exceeds 50 lines
+- Repeated code blocks across functions
+- Complex logic that can be named and isolated
+
+GUARDS (do NOT apply if):
+- Block has side effects that depend on surrounding context
+- Block references many local variables making extraction impractical
+- Extraction would create a function with only one call site and no clarity benefit
+
+BEFORE (TypeScript):
+```typescript
+function calculateOrderTotal(order: Order): number {
+    let subtotal = 0;
+    for (const item of order.items) {
+        let itemTotal = item.price * item.quantity;
+        if (item.discount) {
+            itemTotal = itemTotal * (1 - item.discount);
+        }
+        if (item.taxRate) {
+            itemTotal = itemTotal * (1 + item.taxRate);
+        }
+        subtotal += itemTotal;
+    }
+    return subtotal;
+}
+```
+
+AFTER (TypeScript):
+```typescript
+function calculateItemTotal(item: OrderItem): number {
+    let total = item.price * item.quantity;
+    if (item.discount) {
+        total = total * (1 - item.discount);
+    }
+    if (item.taxRate) {
+        total = total * (1 + item.taxRate);
+    }
+    return total;
+}
+
+function calculateOrderTotal(order: Order): number {
+    return order.items.reduce((sum, item) => sum + calculateItemTotal(item), 0);
+}
+```
+
+BEFORE (Python):
+```python
+def calculate_order_total(order: Order) -> float:
+    subtotal = 0.0
+    for item in order.items:
+        item_total = item.price * item.quantity
+        if item.discount:
+            item_total = item_total * (1 - item.discount)
+        if item.tax_rate:
+            item_total = item_total * (1 + item.tax_rate)
+        subtotal += item_total
+    return subtotal
+```
+
+AFTER (Python):
+```python
+def calculate_item_total(item: OrderItem) -> float:
+    total = item.price * item.quantity
+    if item.discount:
+        total = total * (1 - item.discount)
+    if item.tax_rate:
+        total = total * (1 + item.tax_rate)
+    return total
+
+def calculate_order_total(order: Order) -> float:
+    return sum(calculate_item_total(item) for item in order.items)
+```
+
+INSTRUCTIONS:
+1. Identify a cohesive block of code with a single responsibility
+2. Create a new function with a descriptive name
+3. Pass required values as parameters
+4. Replace the original block with a call to the new function
+5. Use the extracted function for repeated blocks
+
+OUTPUT FORMAT:
+Return the complete code with both the new helper function and the refactored original function. Do not include explanations.
+"""

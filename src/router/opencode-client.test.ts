@@ -53,6 +53,15 @@ function createTestConfig(): Config {
     notifications: {
       enabled: false,
     },
+    mass_defect: {
+      targets: {
+        max_cyclomatic_complexity: 10,
+        max_function_length_lines: 50,
+        max_nesting_depth: 4,
+        min_test_coverage: 0.8,
+      },
+      catalog_path: './mass-defect-catalog',
+    },
   };
 }
 

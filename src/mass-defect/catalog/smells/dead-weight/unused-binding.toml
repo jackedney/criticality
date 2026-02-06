@@ -1,0 +1,29 @@
+[smell]
+id = "unused-binding"
+name = "Unused Binding"
+category = "dead-weight"
+description = "Variables, functions, or imports are declared but never used, adding unnecessary clutter."
+
+[detection]
+
+[[detection.tools]]
+name = "eslint"
+rule = "no-unused-vars"
+
+[detection.heuristics]
+patterns = [
+  "Declared variables never referenced",
+  "Imported modules never used",
+  "Function parameters never referenced"
+]
+
+[[applicable_patterns]]
+pattern = "remove-unused-binding"
+risk = 2
+rationale = "API-breaking if applied to function parameters. Safe for local variables and imports."
+
+[guards]
+conditions = [
+    "Binding is a function/method parameter that may be called externally",
+    "Binding is part of a public API signature"
+]

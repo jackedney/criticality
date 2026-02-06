@@ -1,0 +1,121 @@
+[pattern]
+id = "loop-to-map"
+name = "Loop to Map"
+description = "Replace imperative for loop with functional map/filter/reduce operations"
+risk = 2
+risk_rationale = "Local transformation, functional style is semantically equivalent"
+
+[verification]
+required = ["compile", "unit_tests_target_function"]
+
+[guards]
+conditions = [
+    "Loop has significant side effects beyond building result",
+    "Loop uses break/continue statements",
+    "Loop performance is critical and functional approach would add overhead"
+]
+
+[enables]
+patterns = ["extract-helper"]
+rationale = "Functional chains often reveal extractable transformations"
+
+[prompt]
+template = """
+PATTERN: Loop to Map
+SMELL: Imperative loop
+RISK: 2 (Safe - local transformation)
+
+CONTEXT:
+You are replacing an imperative for loop with functional operations (map, filter, reduce). This makes the code more declarative and often more concise.
+
+DETECTION:
+- For loop that transforms an array into another array (use map)
+- For loop that filters elements (use filter)
+- For loop that accumulates a single value (use reduce)
+
+GUARDS (do NOT apply if):
+- Loop has significant side effects beyond building result
+- Loop uses break/continue statements
+- Loop performance is critical and functional approach would add overhead
+
+BEFORE (TypeScript):
+```typescript
+function getActiveUserIds(users: User[]): number[] {
+    const activeIds: number[] = [];
+    for (const user of users) {
+        if (user.isActive) {
+            activeIds.push(user.id);
+        }
+    }
+    return activeIds;
+}
+```
+
+AFTER (TypeScript):
+```typescript
+function getActiveUserIds(users: User[]): number[] {
+    return users
+        .filter(user => user.isActive)
+        .map(user => user.id);
+}
+```
+
+BEFORE (TypeScript):
+```typescript
+function calculateTotal(cart: CartItem[]): number {
+    let total = 0;
+    for (const item of cart) {
+        total += item.price * item.quantity;
+    }
+    return total;
+}
+```
+
+AFTER (TypeScript):
+```typescript
+function calculateTotal(cart: CartItem[]): number {
+    return cart.reduce((sum, item) => sum + item.price * item.quantity, 0);
+}
+```
+
+BEFORE (Python):
+```python
+def get_active_user_ids(users: list[User]) -> list[int]:
+    active_ids = []
+    for user in users:
+        if user.is_active:
+            active_ids.append(user.id)
+    return active_ids
+```
+
+AFTER (Python):
+```python
+def get_active_user_ids(users: list[User]) -> list[int]:
+    return [user.id for user in users if user.is_active]
+```
+
+BEFORE (Python):
+```python
+def calculate_total(cart: list[CartItem]) -> float:
+    total = 0.0
+    for item in cart:
+        total += item.price * item.quantity
+    return total
+```
+
+AFTER (Python):
+```python
+def calculate_total(cart: list[CartItem]) -> float:
+    return sum(item.price * item.quantity for item in cart)
+```
+
+INSTRUCTIONS:
+1. Identify the loop pattern: mapping, filtering, or reducing
+2. Replace with appropriate functional operation
+3. For mapping: use map() or list comprehension
+4. For filtering: use filter() or list comprehension with condition
+5. For reducing: use reduce() or sum()
+
+OUTPUT FORMAT:
+Return only the transformed function. Do not include explanations.
+"""

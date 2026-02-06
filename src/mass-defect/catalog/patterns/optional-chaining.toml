@@ -1,0 +1,105 @@
+[pattern]
+id = "optional-chaining"
+name = "Optional Chaining"
+description = "Replace nested null checks with optional chaining operator"
+risk = 2
+risk_rationale = "Safe - replaces explicit checks with syntactically equivalent operator"
+
+[verification]
+required = ["compile", "unit_tests_target_function"]
+
+[guards]
+conditions = [
+    "Explicit null checks have different side effects in each branch",
+    "Need to distinguish between null and undefined"
+]
+
+[enables]
+patterns = []
+rationale = ""
+
+[prompt]
+template = """
+PATTERN: Optional Chaining
+SMELL: Verbose null handling
+RISK: 2 (Safe - syntactic sugar)
+
+CONTEXT:
+You are replacing nested null/undefined checks with the optional chaining operator (?.). This makes the code more concise and readable.
+
+DETECTION:
+- Nested property access with repeated null checks
+- if (obj && obj.prop && obj.prop.value) pattern
+- obj && obj.prop && obj.prop.prop2 pattern
+
+GUARDS (do NOT apply if):
+- Explicit null checks have different side effects in each branch
+- Need to distinguish between null and undefined
+
+BEFORE (TypeScript):
+```typescript
+function getUserName(user: User | null): string | null {
+    if (user !== null && user.profile !== null && user.profile.name !== null) {
+        return user.profile.name;
+    }
+    return null;
+}
+
+function getAddress(user: User | undefined): string | undefined {
+    if (user && user.address) {
+        return user.address.street;
+    }
+    return undefined;
+}
+```
+
+AFTER (TypeScript):
+```typescript
+function getUserName(user: User | null): string | null {
+    return user?.profile?.name ?? null;
+}
+
+function getAddress(user: User | undefined): string | undefined {
+    return user?.address?.street;
+}
+```
+
+BEFORE (Python):
+```python
+def get_user_name(user: User | None) -> str | None:
+    if user is not None and user.profile is not None and user.profile.name is not None:
+        return user.profile.name
+    return None
+
+def get_address(user: User | None) -> str | None:
+    if user is not None and user.address is not None:
+        return user.address.street
+    return None
+```
+
+AFTER (Python):
+```python
+def get_user_name(user: User | None) -> str | None:
+    # Use getattr for safe attribute access
+    profile = getattr(user, 'profile', None)
+    return getattr(profile, 'name', None) if profile is not None else None
+
+def get_address(user: User | None) -> str | None:
+    # Keep explicit None checks for semantic correctness
+    if user is None:
+        return None
+    if user.address is None:
+        return None
+    return user.address.street
+```
+
+INSTRUCTIONS:
+1. Identify nested property access with null checks
+2. TypeScript: Replace explicit checks with optional chaining (?.)
+3. Python: Use getattr for safe attribute access or keep explicit None checks (Python's 'and' short-circuits on all falsy values, not just None)
+4. For TypeScript, consider combining with nullish coalescing (??) for defaults
+5. Ensure the behavior is equivalent (short-circuiting on null/undefined)
+
+OUTPUT FORMAT:
+Return only the transformed function. Do not include explanations.
+"""
