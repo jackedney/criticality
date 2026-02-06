@@ -6,7 +6,7 @@
 
 /* eslint-disable @typescript-eslint/restrict-template-expressions */
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
-import type { ModelRouter } from '../router/types.js';
+import type { ModelRouter, ModelRouterResult, StreamChunk } from '../router/types.js';
 import {
   generateSpecDrivenTests,
   type SpecDrivenTestOptions,
@@ -14,14 +14,7 @@ import {
 import * as fs from 'node:fs/promises';
 
 const mockRouter: ModelRouter = {
-  prompt: (): Promise<{
-    success: true;
-    response: {
-      content: 'generated test code';
-      usage: { promptTokens: 100; completionTokens: 50; totalTokens: 150 };
-      metadata: { modelId: 'test-model'; provider: 'test'; latencyMs: 100 };
-    };
-  }> =>
+  prompt: (): Promise<ModelRouterResult> =>
     Promise.resolve({
       success: true,
       response: {
@@ -30,14 +23,7 @@ const mockRouter: ModelRouter = {
         metadata: { modelId: 'test-model', provider: 'test', latencyMs: 100 },
       },
     }),
-  complete: (): Promise<{
-    success: true;
-    response: {
-      content: 'generated test code';
-      usage: { promptTokens: 100; completionTokens: 50; totalTokens: 150 };
-      metadata: { modelId: 'test-model'; provider: 'test'; latencyMs: 100 };
-    };
-  }> =>
+  complete: (): Promise<ModelRouterResult> =>
     Promise.resolve({
       success: true,
       response: {
@@ -46,11 +32,7 @@ const mockRouter: ModelRouter = {
         metadata: { modelId: 'test-model', provider: 'test', latencyMs: 100 },
       },
     }),
-  stream: async function* (): AsyncGenerator<{
-    content: 'test';
-    done: true;
-    usage: { promptTokens: 100; completionTokens: 50; totalTokens: 150 };
-  }> {
+  stream: async function* (): AsyncGenerator<StreamChunk, ModelRouterResult, unknown> {
     await Promise.resolve(); // Satisfy require-await
     yield {
       content: 'test',
