@@ -1,0 +1,119 @@
+[pattern]
+id = "extract-explanatory-variable"
+name = "Extract Explanatory Variable"
+description = "Name intermediate computation to replace comment"
+risk = 2
+risk_rationale = "Safe - introduces variable with clear meaning, improves readability"
+
+[verification]
+required = ["compile", "unit_tests_target_function"]
+
+[guards]
+conditions = [
+    "Computation is simple and self-explanatory",
+    "Variable would only be used once and naming adds no value",
+    "Computation is too complex for a single descriptive name"
+]
+
+[enables]
+patterns = ["extract-helper"]
+rationale = "Explanatory variables often reveal opportunities for helper extraction"
+
+[prompt]
+template = """
+PATTERN: Extract Explanatory Variable
+SMELL: Over-documentation
+RISK: 2 (Safe - introduces variable)
+
+CONTEXT:
+You are extracting a complex expression into a named variable to make the code self-documenting. This replaces the need for comments explaining the logic.
+
+DETECTION:
+- Complex boolean condition with comment
+- Arithmetic expression that needs explanation
+- Magic calculation that should be named
+
+GUARDS (do NOT apply if):
+- Computation is simple and self-explanatory
+- Variable would only be used once and naming adds no value
+- Computation is too complex for a single descriptive name
+
+BEFORE (TypeScript):
+```typescript
+function canVote(age: number, isCitizen: boolean): boolean {
+    // User is eligible to vote if they are 18 or older and a citizen
+    return age >= 18 && isCitizen;
+}
+
+function calculateInterest(principal: number, rate: number, years: number): number {
+    // Compound interest formula: P * (1 + r)^t - P
+    return principal * Math.pow(1 + rate, years) - principal;
+}
+
+function isValidUser(user: User): boolean {
+    // User must have email, be active, and have no violations
+    return user.email !== null && user.isActive && user.violations.length === 0;
+}
+```
+
+AFTER (TypeScript):
+```typescript
+function canVote(age: number, isCitizen: boolean): boolean {
+    const isOfVotingAge = age >= 18;
+    return isOfVotingAge && isCitizen;
+}
+
+function calculateInterest(principal: number, rate: number, years: number): number {
+    const compoundFactor = Math.pow(1 + rate, years);
+    return principal * compoundFactor - principal;
+}
+
+function isValidUser(user: User): boolean {
+    const hasEmail = user.email !== null;
+    const isActive = user.isActive;
+    const hasNoViolations = user.violations.length === 0;
+    return hasEmail && isActive && hasNoViolations;
+}
+```
+
+BEFORE (Python):
+```python
+def can_vote(age: int, is_citizen: bool) -> bool:
+    # User is eligible to vote if they are 18 or older and a citizen
+    return age >= 18 and is_citizen
+
+def calculate_interest(principal: float, rate: float, years: int) -> float:
+    # Compound interest formula: P * (1 + r)^t - P
+    return principal * (1 + rate) ** years - principal
+
+def is_valid_user(user: User) -> bool:
+    # User must have email, be active, and have no violations
+    return user.email is not None and user.is_active and len(user.violations) == 0
+```
+
+AFTER (Python):
+```python
+def can_vote(age: int, is_citizen: bool) -> bool:
+    is_of_voting_age = age >= 18
+    return is_of_voting_age and is_citizen
+
+def calculate_interest(principal: float, rate: float, years: int) -> float:
+    compound_factor = (1 + rate) ** years
+    return principal * compound_factor - principal
+
+def is_valid_user(user: User) -> bool:
+    has_email = user.email is not None
+    is_active = user.is_active
+    has_no_violations = len(user.violations) == 0
+    return has_email and is_active and has_no_violations
+```
+
+INSTRUCTIONS:
+1. Identify complex expressions that need explanation
+2. Create a variable with a descriptive name that explains the computation
+3. Replace the expression with the variable
+4. Remove explanatory comments
+
+OUTPUT FORMAT:
+Return only the transformed function. Do not include explanations.
+"""

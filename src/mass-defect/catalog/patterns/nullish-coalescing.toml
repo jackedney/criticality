@@ -1,0 +1,101 @@
+[pattern]
+id = "nullish-coalescing"
+name = "Nullish Coalescing"
+description = "Replace ternary null checks with nullish coalescing operator"
+risk = 2
+risk_rationale = "Safe - replaces explicit checks with syntactically equivalent operator"
+
+[verification]
+required = ["compile", "unit_tests_target_function"]
+
+[guards]
+conditions = [
+    "Need to distinguish between falsy values and null/undefined",
+    "Default value depends on explicit false or 0 values"
+]
+
+[enables]
+patterns = []
+rationale = ""
+
+[prompt]
+template = """
+PATTERN: Nullish Coalescing
+SMELL: Verbose null handling
+RISK: 2 (Safe - syntactic sugar)
+
+CONTEXT:
+You are replacing explicit null/undefined checks with the nullish coalescing operator (??). This makes the code more concise and only coalesces on null or undefined, not on falsy values.
+
+DETECTION:
+- if (value === null || value === undefined) pattern
+- value !== null ? value : defaultValue pattern
+- value != null ? value : defaultValue pattern (JavaScript)
+
+GUARDS (do NOT apply if):
+- Need to distinguish between falsy values and null/undefined
+- Default value depends on explicit false or 0 values
+
+BEFORE (TypeScript):
+```typescript
+function getName(name: string | null): string {
+    return name !== null ? name : 'Unknown';
+}
+
+function getCount(count: number | undefined): number {
+    return count !== undefined ? count : 0;
+}
+
+function getValue<T>(value: T | null | undefined, fallback: T): T {
+    return value !== null && value !== undefined ? value : fallback;
+}
+```
+
+AFTER (TypeScript):
+```typescript
+function getName(name: string | null): string {
+    return name ?? 'Unknown';
+}
+
+function getCount(count: number | undefined): number {
+    return count ?? 0;
+}
+
+function getValue<T>(value: T | null | undefined, fallback: T): T {
+    return value ?? fallback;
+}
+```
+
+BEFORE (Python):
+```python
+def get_name(name: str | None) -> str:
+    return name if name is not None else 'Unknown'
+
+def get_count(count: int | None) -> int:
+    return count if count is not None else 0
+
+def get_value(value: T | None, fallback: T) -> T:
+    return value if value is not None else fallback
+```
+
+AFTER (Python):
+```python
+def get_name(name: str | None) -> str:
+    return name or 'Unknown'
+
+def get_count(count: int | None) -> int:
+    return count or 0
+
+def get_value(value: T | None, fallback: T) -> T:
+    return value or fallback
+```
+
+INSTRUCTIONS:
+1. Identify null/undefined fallback patterns
+2. Replace with nullish coalescing (?? in TypeScript, or in Python)
+3. Note: Python's 'or' operator coalesces on any falsy value, not just None
+4. TypeScript's ?? only coalesces on null or undefined
+
+OUTPUT FORMAT:
+Return only the transformed function. Do not include explanations.
+"""

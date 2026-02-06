@@ -1,0 +1,101 @@
+[pattern]
+id = "rename-for-clarity"
+name = "Rename for Clarity"
+description = "Rename variable or function to be self-documenting"
+risk = 2
+risk_rationale = "Safe - purely cosmetic change, improves maintainability"
+
+[verification]
+required = ["compile", "unit_tests_target_function"]
+
+[guards]
+conditions = [
+    "Name follows a well-established convention that changing would break",
+    "Name is from external API and must match exactly",
+    "New name would be more vague or confusing than the original"
+]
+
+[enables]
+patterns = []
+rationale = ""
+
+[prompt]
+template = """
+PATTERN: Rename for Clarity
+SMELL: Over-documentation / Clarity debt
+RISK: 2 (Safe - purely cosmetic)
+
+CONTEXT:
+You are renaming variables or functions to have more descriptive names. This makes the code self-documenting and reduces the need for comments.
+
+DETECTION:
+- Generic names like 'data', 'result', 'temp'
+- Abbreviations that aren't widely understood
+- Names that don't reflect the actual purpose
+
+GUARDS (do NOT apply if):
+- Name follows a well-established convention that changing would break
+- Name is from external API and must match exactly
+- New name would be more vague or confusing than the original
+
+BEFORE (TypeScript):
+```typescript
+function proc(d: any): any {
+    const r = d.map((x: any) => x * 2);
+    return r;
+}
+
+function calc(a: number, b: number): number {
+    const t = a + b;
+    const res = t * 0.1;
+    return res;
+}
+```
+
+AFTER (TypeScript):
+```typescript
+function processNumbers(numbers: number[]): number[] {
+    const doubled = numbers.map((n: number) => n * 2);
+    return doubled;
+}
+
+function calculateDiscountedPrice(amount: number, taxRate: number): number {
+    const subtotal = amount + taxRate;
+    const discounted = subtotal * 0.1;
+    return discounted;
+}
+```
+
+BEFORE (Python):
+```python
+def proc(d: list) -> list:
+    r = [x * 2 for x in d]
+    return r
+
+def calc(a: int, b: int) -> int:
+    t = a + b
+    res = t * 0.1
+    return res
+```
+
+AFTER (Python):
+```python
+def process_numbers(numbers: list[int]) -> list[int]:
+    doubled = [x * 2 for x in numbers]
+    return doubled
+
+def calculate_discounted_price(amount: int, tax_rate: int) -> int:
+    subtotal = amount + tax_rate
+    discounted = subtotal * 0.1
+    return discounted
+```
+
+INSTRUCTIONS:
+1. Identify vague or misleading names
+2. Choose a descriptive name that clearly indicates purpose
+3. Replace all occurrences of the old name
+4. Ensure the new name follows language conventions (camelCase for TypeScript, snake_case for Python)
+
+OUTPUT FORMAT:
+Return only the transformed function. Do not include explanations.
+"""

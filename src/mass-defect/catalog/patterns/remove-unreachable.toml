@@ -1,0 +1,128 @@
+[pattern]
+id = "remove-unreachable"
+name = "Remove Unreachable Code"
+description = "Remove code that can never be executed"
+risk = 1
+risk_rationale = "Trivial - pure removal, no logic change"
+
+[verification]
+required = ["compile"]
+
+[guards]
+conditions = []
+
+[enables]
+patterns = []
+rationale = ""
+
+[prompt]
+template = """
+PATTERN: Remove Unreachable Code
+SMELL: Unreachable code
+RISK: 1 (Trivial - pure removal)
+
+CONTEXT:
+You are removing code that can never be executed because it appears after an unconditional return, throw, or break.
+
+DETECTION:
+- Code after return statement
+- Code after throw statement
+- Code after unconditional break or continue
+
+GUARDS:
+None
+
+BEFORE (TypeScript):
+```typescript
+function getValue(input: number): number {
+    if (input < 0) {
+        return 0;
+    } else {
+        return input * 2;
+    }
+    console.log('This never executes');
+    return -1;
+}
+```
+
+AFTER (TypeScript):
+```typescript
+function getValue(input: number): number {
+    if (input < 0) {
+        return 0;
+    } else {
+        return input * 2;
+    }
+}
+```
+
+BEFORE (TypeScript):
+```typescript
+function process(value: string): Result {
+    if (!value) {
+        throw new Error('Invalid value');
+    }
+    const result = value.toUpperCase();
+    return { success: true, data: result };
+    console.log('Done'); // unreachable
+}
+```
+
+AFTER (TypeScript):
+```typescript
+function process(value: string): Result {
+    if (!value) {
+        throw new Error('Invalid value');
+    }
+    const result = value.toUpperCase();
+    return { success: true, data: result };
+}
+```
+
+BEFORE (Python):
+```python
+def get_value(input: int) -> int:
+    if input < 0:
+        return 0
+    else:
+        return input * 2
+    print('This never executes')
+    return -1
+```
+
+AFTER (Python):
+```python
+def get_value(input: int) -> int:
+    if input < 0:
+        return 0
+    else:
+        return input * 2
+```
+
+BEFORE (Python):
+```python
+def process(value: str) -> Result:
+    if not value:
+        raise ValueError('Invalid value')
+    result = value.upper()
+    return Result(success=True, data=result)
+    print('Done')  # unreachable
+```
+
+AFTER (Python):
+```python
+def process(value: str) -> Result:
+    if not value:
+        raise ValueError('Invalid value')
+    result = value.upper()
+    return Result(success=True, data=result)
+```
+
+INSTRUCTIONS:
+1. Identify code after unconditional return, throw, break, or continue
+2. Remove all unreachable statements
+3. Ensure remaining code is still correct
+
+OUTPUT FORMAT:
+Return only the transformed function. Do not include explanations.
+"""

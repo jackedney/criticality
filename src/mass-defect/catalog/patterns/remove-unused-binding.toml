@@ -1,0 +1,102 @@
+[pattern]
+id = "remove-unused-binding"
+name = "Remove Unused Binding"
+description = "Remove variable or parameter that is never used"
+risk = 1
+risk_rationale = "Trivial - pure removal, no logic change"
+
+[verification]
+required = ["compile"]
+
+[guards]
+conditions = []
+
+[enables]
+patterns = []
+rationale = ""
+
+[prompt]
+template = """
+PATTERN: Remove Unused Binding
+SMELL: Unused binding
+RISK: 1 (Trivial - pure removal)
+
+CONTEXT:
+You are removing a variable or parameter that is declared but never used. This reduces code noise and improves maintainability.
+
+DETECTION:
+- Variable declared but never referenced
+- Function parameter never used in body
+- Import statement never used
+
+GUARDS:
+None
+
+BEFORE (TypeScript):
+```typescript
+function process(data: string, options: ProcessOptions): Result {
+    const config = loadConfig();
+    console.log('Processing...');
+    return { success: true };
+}
+```
+
+AFTER (TypeScript):
+```typescript
+function process(data: string, options: ProcessOptions): Result {
+    console.log('Processing...');
+    return { success: true };
+}
+```
+
+BEFORE (TypeScript):
+```typescript
+function calculate(x: number, y: number, z: number): number {
+    const result = x + y;
+    return result * 2;
+}
+```
+
+AFTER (TypeScript):
+```typescript
+function calculate(x: number, y: number, z: number): number {
+    return (x + y) * 2;
+}
+```
+
+BEFORE (Python):
+```python
+def process_data(data: str, options: dict) -> Result:
+    config = load_config()
+    print('Processing...')
+    return Result(success=True)
+```
+
+AFTER (Python):
+```python
+def process_data(data: str, options: dict) -> Result:
+    print('Processing...')
+    return Result(success=True)
+```
+
+BEFORE (Python):
+```python
+def calculate(x: int, y: int, z: int) -> int:
+    result = x + y
+    return result * 2
+```
+
+AFTER (Python):
+```python
+def calculate(x: int, y: int, z: int) -> int:
+    return (x + y) * 2
+```
+
+INSTRUCTIONS:
+1. Identify unused variables, parameters, or imports
+2. Remove the unused binding entirely
+3. If the removal makes code simpler, inline remaining logic
+
+OUTPUT FORMAT:
+Return only the transformed function. Do not include explanations.
+"""

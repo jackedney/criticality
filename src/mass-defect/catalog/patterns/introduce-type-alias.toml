@@ -1,0 +1,133 @@
+[pattern]
+id = "introduce-type-alias"
+name = "Introduce Type Alias"
+description = "Create type alias for repeated complex types"
+risk = 3
+risk_rationale = "Moderate - introduces new type, may affect multiple call sites"
+
+[verification]
+required = ["compile", "unit_tests_target_function", "integration_tests_module"]
+
+[guards]
+conditions = [
+    "Type is not repeated enough to warrant abstraction",
+    "Type combination is unique to a single use case",
+    "Type alias name would be more confusing than the inline type"
+]
+
+[enables]
+patterns = ["extract-helper"]
+rationale = "Type aliases often reveal opportunities for helper function extraction"
+
+[prompt]
+template = """
+PATTERN: Introduce Type Alias
+SMELL: Missing type abstraction
+RISK: 3 (Moderate - introduces new type)
+
+CONTEXT:
+You are creating a type alias for a repeated complex type. This improves readability and makes future changes easier.
+
+DETECTION:
+- Same complex type annotation repeated multiple times
+- Union types or intersection types used frequently
+- Generic types with long parameter lists repeated
+
+GUARDS (do NOT apply if):
+- Type is not repeated enough to warrant abstraction
+- Type combination is unique to a single use case
+- Type alias name would be more confusing than the inline type
+
+BEFORE (TypeScript):
+```typescript
+function processUser(user: { id: number; name: string; email: string }): void {
+    console.log(user.id, user.name);
+}
+
+function validateUser(user: { id: number; name: string; email: string }): boolean {
+    return user.id > 0 && user.name.length > 0;
+}
+```
+
+AFTER (TypeScript):
+```typescript
+type User = { id: number; name: string; email: string };
+
+function processUser(user: User): void {
+    console.log(user.id, user.name);
+}
+
+function validateUser(user: User): boolean {
+    return user.id > 0 && user.name.length > 0;
+}
+```
+
+BEFORE (TypeScript):
+```typescript
+function loadData(): Result<string, Error> | null {
+    return null;
+}
+
+function saveData(data: Result<string, Error>): void {
+    // ...
+}
+
+function processData(data: Result<string, Error>): Result<string, Error> {
+    return data;
+}
+```
+
+AFTER (TypeScript):
+```typescript
+type StringResult = Result<string, Error>;
+
+function loadData(): StringResult | null {
+    return null;
+}
+
+function saveData(data: StringResult): void {
+    // ...
+}
+
+function processData(data: StringResult): StringResult {
+    return data;
+}
+```
+
+BEFORE (Python):
+```python
+from typing import TypedDict
+
+def process_user(user: dict[str, int | str | list[str]]) -> None:
+    print(user['id'], user['name'])
+
+def validate_user(user: dict[str, int | str | list[str]]) -> bool:
+    return user['id'] > 0 and len(user['name']) > 0
+```
+
+AFTER (Python):
+```python
+from typing import TypedDict, Union
+
+class User(TypedDict):
+    id: int
+    name: str
+    email: str
+    tags: list[str]
+
+def process_user(user: User) -> None:
+    print(user['id'], user['name'])
+
+def validate_user(user: User) -> bool:
+    return user['id'] > 0 and len(user['name']) > 0
+```
+
+INSTRUCTIONS:
+1. Identify repeated complex types
+2. Create a type alias with a descriptive name
+3. Replace all occurrences of the complex type with the alias
+4. Use PascalCase for type names (TypeScript) or snake_case for TypedDict (Python)
+
+OUTPUT FORMAT:
+Return the complete code including the new type alias and the refactored functions. Do not include explanations.
+"""

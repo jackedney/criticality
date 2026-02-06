@@ -1,0 +1,115 @@
+[pattern]
+id = "guard-clause"
+name = "Guard Clause"
+description = "Move precondition checks to the top of the function to reduce nesting"
+risk = 2
+risk_rationale = "Local transformation, only affects control flow order, preserves all logic"
+
+[verification]
+required = ["compile", "unit_tests_target_function"]
+
+[guards]
+conditions = [
+    "Preconditions have side effects that must occur in specific order",
+    "Function relies on early execution of certain statements before validation",
+    "Preconditions reference variables computed in the function body"
+]
+
+[enables]
+patterns = ["early-return", "extract-helper"]
+rationale = "Guard clauses often reveal opportunities for further early returns or extraction"
+
+[prompt]
+template = """
+PATTERN: Guard Clause
+SMELL: Deep nesting
+RISK: 2 (Safe - local transformation)
+
+CONTEXT:
+You are refactoring a function by moving precondition checks (validations, edge cases) to the top of the function as guard clauses. This reduces nesting and makes the main logic more prominent.
+
+DETECTION:
+- Nested conditions checking preconditions at the start
+- Pattern: if (valid) { mainLogic() } else { handleError() }
+
+GUARDS (do NOT apply if):
+- Preconditions have side effects that must occur in specific order
+- Function relies on early execution of certain statements before validation
+- Preconditions reference variables computed in the function body
+
+BEFORE (TypeScript):
+```typescript
+function processPayment(order: Order): PaymentResult {
+    if (order !== null) {
+        if (order.items.length > 0) {
+            if (order.user.hasPaymentMethod) {
+                const result = chargePayment(order);
+                return { success: true, result };
+            } else {
+                return { success: false, error: 'No payment method' };
+            }
+        } else {
+            return { success: false, error: 'Empty order' };
+        }
+    } else {
+        return { success: false, error: 'Invalid order' };
+    }
+}
+```
+
+AFTER (TypeScript):
+```typescript
+function processPayment(order: Order): PaymentResult {
+    if (order === null) {
+        return { success: false, error: 'Invalid order' };
+    }
+    if (order.items.length === 0) {
+        return { success: false, error: 'Empty order' };
+    }
+    if (!order.user.hasPaymentMethod) {
+        return { success: false, error: 'No payment method' };
+    }
+    const result = chargePayment(order);
+    return { success: true, result };
+}
+```
+
+BEFORE (Python):
+```python
+def process_payment(order: Order | None) -> PaymentResult:
+    if order is not None:
+        if len(order.items) > 0:
+            if order.user.has_payment_method():
+                result = charge_payment(order)
+                return PaymentResult(success=True, result=result)
+            else:
+                return PaymentResult(success=False, error='No payment method')
+        else:
+            return PaymentResult(success=False, error='Empty order')
+    else:
+        return PaymentResult(success=False, error='Invalid order')
+```
+
+AFTER (Python):
+```python
+def process_payment(order: Order | None) -> PaymentResult:
+    if order is None:
+        return PaymentResult(success=False, error='Invalid order')
+    if len(order.items) == 0:
+        return PaymentResult(success=False, error='Empty order')
+    if not order.user.has_payment_method():
+        return PaymentResult(success=False, error='No payment method')
+    result = charge_payment(order)
+    return PaymentResult(success=True, result=result)
+```
+
+INSTRUCTIONS:
+1. Identify all precondition checks at the start of the function
+2. Invert each precondition check
+3. Move the error case as an early return at the top
+4. Reduce indentation of the remaining main logic
+5. Preserve the order of preconditions (most specific first)
+
+OUTPUT FORMAT:
+Return only the transformed function. Do not include explanations.
+"""
