@@ -54,7 +54,7 @@ export function createCliApp(config: CliConfig = {}): CliContext {
 export function runCliApp(context: CliContext, _rootRenderable?: unknown): void {
   const { renderer } = context;
 
-  if (Object.keys(renderer).length > 0) {
+  if (Object.keys(renderer).length === 0) {
     throw new Error('Renderer not initialized. TUI mode not yet implemented.');
   }
 }
@@ -68,7 +68,7 @@ export function runCliApp(context: CliContext, _rootRenderable?: unknown): void 
 export function stopCliApp(context: CliContext): void {
   const { renderer } = context;
 
-  if (Object.keys(renderer).length > 0) {
+  if (Object.keys(renderer).length === 0) {
     throw new Error('Renderer not initialized. TUI mode not yet implemented.');
   }
 }
