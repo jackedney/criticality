@@ -22,7 +22,7 @@ import {
   type TickResult,
   type TickStopReason,
 } from '../../protocol/orchestrator.js';
-import { Spinner } from '../components/Spinner.js';
+import { LiveDisplay } from '../components/LiveDisplay.js';
 import { createCliOperations, type OperationTelemetry } from '../operations.js';
 import { TelemetryCollector } from '../telemetry.js';
 import { existsSync, readFileSync } from 'node:fs';
@@ -279,18 +279,17 @@ export async function handleResumeCommand(context: CliContext): Promise<CliComma
       operations,
     });
 
-    // Create and start spinner
-    const spinner = new Spinner({
+    const liveDisplay = new LiveDisplay({
       colors: options.colors,
       unicode: options.unicode,
-      interval: 100,
+      maxLogEntries: 5,
     });
 
-    spinner.update(
+    liveDisplay.updatePhase(
       orchestrator.state.snapshot.state.phase,
       orchestrator.state.snapshot.state.substate
     );
-    spinner.start();
+    liveDisplay.start();
 
     // Set up SIGINT handler for graceful shutdown
     const sigintHandler = (): void => {
@@ -301,7 +300,7 @@ export async function handleResumeCommand(context: CliContext): Promise<CliComma
       }
 
       gracefulShutdown = true;
-      spinner.stop('Stopping after current operation...');
+      liveDisplay.stop();
       console.log('Stopping... (Ctrl+C again to force quit)');
     };
 
@@ -315,16 +314,27 @@ export async function handleResumeCommand(context: CliContext): Promise<CliComma
     do {
       tickCount++;
 
-      // Update spinner with new phase/substate
-      spinner.update(result.snapshot.state.phase, result.snapshot.state.substate);
+      // Update display with new phase/substate
+      liveDisplay.updatePhase(result.snapshot.state.phase, result.snapshot.state.substate);
+
+      // Add log entries for significant events
+      if (result.transitioned) {
+        const fromPhase = orchestrator.state.snapshot.state.phase;
+        const toPhase = result.snapshot.state.phase;
+        if (fromPhase !== toPhase) {
+          liveDisplay.addLog(`Transitioned: ${fromPhase} → ${toPhase}`);
+        }
+      }
 
       // Check for graceful shutdown after processing tick
       // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition
       if (gracefulShutdown) {
         // Stop after current tick
         shouldContinueLoop = false;
-        spinner.stop('Interrupted by user');
+        liveDisplay.stop();
+        console.log('Interrupted by user');
         console.log();
+
         displayExecutionSummary(
           tickCount,
           'EXTERNAL_ERROR',
@@ -368,7 +378,7 @@ export async function handleResumeCommand(context: CliContext): Promise<CliComma
 
     // Clean up
     process.removeListener('SIGINT', sigintHandler);
-    spinner.stop();
+    liveDisplay.stop();
 
     // Save telemetry to state file after normal completion
     // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition
