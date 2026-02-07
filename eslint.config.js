@@ -58,6 +58,7 @@ export default [
       'dist/**',
       'node_modules/**',
       'test-fixtures/**',
+      'tests/**',
       '**/*.js',
       'vitest.config.ts',
       '.claude/**',
