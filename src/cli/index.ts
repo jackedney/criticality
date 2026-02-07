@@ -75,7 +75,13 @@ function main(): void {
     process.exit(0);
   }
 
-  const [command, ...commandArgs] = args;
+  const command = args[0] ?? '';
+  const commandArgs = args.slice(1);
+
+  if (!command) {
+    showHelp();
+    process.exit(0);
+  }
 
   switch (command) {
     case 'help':
@@ -120,7 +126,7 @@ function main(): void {
       break;
 
     default:
-      showError(`Unknown command: ${String(command)}`);
+      showError(`Unknown command: ${command}`);
       process.exit(1);
   }
 }
