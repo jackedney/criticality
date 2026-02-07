@@ -459,6 +459,9 @@ async function attemptTransformation(
  * Updates the source file with transformed code.
  *
  * Uses start line number to disambiguate functions with the same name.
+ * Locates the temp function by name to handle cases where transformed code
+ * contains multiple functions (e.g., after extract-helper transforms).
+ * Replaces the entire function text to preserve signature-level changes.
  *
  * @returns True if the update succeeded, false otherwise.
  */
@@ -471,28 +474,34 @@ function updateSourceFile(state: FunctionIterationState, newCode: string): boole
     return false;
   }
 
-  const body = func.getBody();
-  if (!body) {
+  const project = new Project({ useInMemoryFileSystem: true });
+  const tempSourceFile = project.createSourceFile('temp.ts', newCode);
+  const tempFunctions = tempSourceFile.getFunctions();
+
+  // Locate temp function by name (matching original target function name)
+  let tempFunc = tempFunctions.find((f) => f.getName() === state.functionName);
+
+  // Fallback: if not found by name and only one function exists, use it
+  if (!tempFunc && tempFunctions.length === 1) {
+    tempFunc = tempFunctions[0];
+  }
+
+  if (!tempFunc) {
     return false;
   }
 
-  const project = new Project({ useInMemoryFileSystem: true });
-  const tempSourceFile = project.createSourceFile('temp.ts', newCode);
-  const tempFunc = tempSourceFile.getFunctions()[0];
-  const tempBody = tempFunc?.getBody();
-
-  if (tempBody) {
-    body.replaceWithText(tempBody.getFullText());
-    return true;
-  }
-
-  return false;
+  // Replace entire function text to preserve signature-level changes
+  func.replaceWithText(tempFunc.getFullText());
+  return true;
 }
 
 /**
  * Reverts the source file to original code.
  *
  * Uses start line number to disambiguate functions with the same name.
+ * Locates the temp function by name to handle cases where transformed code
+ * contains multiple functions (e.g., after extract-helper transforms).
+ * Replaces the entire function text to preserve signature-level changes.
  *
  * @returns True if the revert succeeded, false otherwise.
  */
@@ -505,22 +514,25 @@ function revertSourceFile(state: FunctionIterationState, originalCode: string): 
     return false;
   }
 
-  const body = func.getBody();
-  if (!body) {
+  const project = new Project({ useInMemoryFileSystem: true });
+  const tempSourceFile = project.createSourceFile('temp.ts', originalCode);
+  const tempFunctions = tempSourceFile.getFunctions();
+
+  // Locate temp function by name (matching original target function name)
+  let tempFunc = tempFunctions.find((f) => f.getName() === state.functionName);
+
+  // Fallback: if not found by name and only one function exists, use it
+  if (!tempFunc && tempFunctions.length === 1) {
+    tempFunc = tempFunctions[0];
+  }
+
+  if (!tempFunc) {
     return false;
   }
 
-  const project = new Project({ useInMemoryFileSystem: true });
-  const tempSourceFile = project.createSourceFile('temp.ts', originalCode);
-  const tempFunc = tempSourceFile.getFunctions()[0];
-  const tempBody = tempFunc?.getBody();
-
-  if (tempBody) {
-    body.replaceWithText(tempBody.getFullText());
-    return true;
-  }
-
-  return false;
+  // Replace entire function text to preserve signature-level changes
+  func.replaceWithText(tempFunc.getFullText());
+  return true;
 }
 
 /**
