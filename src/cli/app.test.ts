@@ -2,7 +2,7 @@
  * Tests for CLI config loading functionality.
  */
 
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { existsSync, readFileSync } from 'node:fs';
 import { createCliApp } from './app.js';
 
@@ -20,6 +20,11 @@ const mockExistsSync = vi.mocked(existsSync);
 const mockReadFileSync = vi.mocked(readFileSync);
 
 describe('createCliApp', () => {
+  beforeEach(() => {
+    mockExistsSync.mockReset();
+    mockReadFileSync.mockReset();
+  });
+
   it('uses default values when no config file exists', () => {
     mockExistsSync.mockReturnValue(false);
 
