@@ -382,6 +382,7 @@ export async function handleStatusCommand(context: CliContext): Promise<CliComma
     // eslint-disable-next-line @typescript-eslint/return-await
     return new Promise<CliCommandResult>((resolve) => {
       let running = true;
+      let intervalId: ReturnType<typeof setInterval> | undefined;
 
       const updateStatus = async (): Promise<void> => {
         if (!running) {
@@ -413,27 +414,45 @@ export async function handleStatusCommand(context: CliContext): Promise<CliComma
 
       const gracefulShutdown = (): void => {
         running = false;
+        if (intervalId !== undefined) {
+          clearInterval(intervalId);
+          intervalId = undefined;
+        }
+        process.off('SIGINT', gracefulShutdown);
+        process.off('beforeExit', beforeExitHandler);
         console.log('\nWatch mode stopped.');
         resolve({ exitCode: 0 });
+      };
+
+      const beforeExitHandler = (): void => {
+        if (intervalId !== undefined) {
+          clearInterval(intervalId);
+          intervalId = undefined;
+        }
+        process.off('SIGINT', gracefulShutdown);
+        process.off('beforeExit', beforeExitHandler);
       };
 
       process.on('SIGINT', gracefulShutdown);
 
       void updateStatus().then(() => {
-        const intervalId = setInterval(() => {
+        intervalId = setInterval(() => {
           if (running) {
             void updateStatus().catch(() => {
               // Silently handle errors during watch updates
             });
           } else {
-            clearInterval(intervalId);
+            if (intervalId !== undefined) {
+              clearInterval(intervalId);
+              intervalId = undefined;
+            }
+            process.off('SIGINT', gracefulShutdown);
+            process.off('beforeExit', beforeExitHandler);
           }
         }, interval);
 
-        // Clean up interval on resolve
-        process.on('beforeExit', () => {
-          clearInterval(intervalId);
-        });
+        // Clean up interval and listeners on beforeExit
+        process.on('beforeExit', beforeExitHandler);
       });
     });
   } catch (error) {
