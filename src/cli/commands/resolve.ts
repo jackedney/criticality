@@ -6,15 +6,56 @@
  */
 
 import type { CliContext, CliCommandResult } from '../types.js';
-import { loadState, StatePersistenceError } from '../../protocol/persistence.js';
+import { loadState, StatePersistenceError, saveState } from '../../protocol/persistence.js';
 import type { ProtocolStateSnapshot } from '../../protocol/persistence.js';
 import type { BlockingRecord } from '../../protocol/blocking.js';
+import { resolveBlocking } from '../../protocol/blocking.js';
+import { Ledger } from '../../ledger/index.js';
 
 const DEFAULT_STATE_PATH = '.criticality-state.json';
 
 interface ResolveDisplayOptions {
   colors: boolean;
   unicode: boolean;
+}
+
+/**
+ * Interface for reading user input.
+ * Abstracted for testability.
+ */
+interface InputReader {
+  /** Read a line of input. */
+  readLine(prompt: string): Promise<string>;
+  /** Close the reader. */
+  close(): void;
+}
+
+/**
+ * Creates a readline-based input reader.
+ *
+ * @returns A Promise resolving to an InputReader using Node's readline.
+ */
+async function createInputReader(): Promise<InputReader> {
+  // Use dynamic import to avoid issues in test environments
+  const readline = await import('node:readline');
+
+  const rl = readline.createInterface({
+    input: process.stdin,
+    output: process.stdout,
+  });
+
+  return {
+    readLine(prompt: string): Promise<string> {
+      return new Promise((resolve) => {
+        rl.question(prompt, (answer) => {
+          resolve(answer);
+        });
+      });
+    },
+    close(): void {
+      rl.close();
+    },
+  };
 }
 
 /**
@@ -165,6 +206,75 @@ function renderQueries(snapshot: ProtocolStateSnapshot, options: ResolveDisplayO
 }
 
 /**
+ * Prompts user to select an option for a blocking query.
+ *
+ * @param query - The blocking query to select an option for.
+ * @param reader - Input reader for getting user input.
+ * @param options - Display options.
+ * @returns The selected option, or undefined if user cancelled.
+ */
+async function promptForSelection(
+  query: BlockingRecord,
+  reader: InputReader,
+  options: ResolveDisplayOptions
+): Promise<string | undefined> {
+  const yellowCode = options.colors ? '\x1b[33m' : '';
+  const resetCode = options.colors ? '\x1b[0m' : '';
+
+  if (!query.options || query.options.length === 0) {
+    console.error('No options available for this query.');
+    return undefined;
+  }
+
+  const optionCount = query.options.length;
+
+  for (;;) {
+    const input = await reader.readLine(`Select option (1-${String(optionCount)}): `);
+    const trimmedInput = input.trim();
+
+    if (trimmedInput === '') {
+      console.log('Please enter an option number.');
+      continue;
+    }
+
+    const selection = parseInt(trimmedInput, 10);
+
+    if (isNaN(selection)) {
+      console.log('Please enter a valid number.');
+      continue;
+    }
+
+    if (selection < 1 || selection > optionCount) {
+      console.log(`Invalid option. Please enter 1-${String(optionCount)}.`);
+      continue;
+    }
+
+    const selectedIndex = selection - 1;
+    const selectedOption = query.options[selectedIndex];
+
+    if (selectedOption === undefined) {
+      console.log(`Invalid option. Please enter 1-${String(optionCount)}.`);
+      continue;
+    }
+
+    console.log(`You selected: ${yellowCode}${selectedOption}${resetCode}. Confirm? (y/n)`);
+
+    const confirmationInput = await reader.readLine('> ');
+    const confirmation = confirmationInput.trim().toLowerCase();
+
+    if (confirmation === 'y' || confirmation === 'yes') {
+      return selectedOption;
+    } else if (confirmation === 'n' || confirmation === 'no') {
+      console.log('Selection cancelled. Please try again.');
+      continue;
+    } else {
+      console.log('Please enter y or n.');
+      continue;
+    }
+  }
+}
+
+/**
  * Handles the resolve command.
  *
  * @param context - The CLI context.
@@ -180,8 +290,73 @@ export async function handleResolveCommand(context: CliContext): Promise<CliComm
 
   try {
     const snapshot = await loadState(statePath);
+    const pendingQueries = snapshot.blockingQueries.filter((q) => !q.resolved);
+
+    if (pendingQueries.length === 0) {
+      console.log('No queries pending. Protocol is not blocked.');
+      return { exitCode: 0 };
+    }
+
     renderQueries(snapshot, options);
-    return { exitCode: 0 };
+
+    const reader = await createInputReader();
+
+    try {
+      for (const query of pendingQueries) {
+        const selectedOption = await promptForSelection(query, reader, options);
+
+        if (selectedOption === undefined) {
+          console.log('Selection cancelled.');
+          return { exitCode: 0 };
+        }
+
+        const ledger = new Ledger({ project: 'cli-resolution' });
+
+        const resolveResult = resolveBlocking(
+          snapshot.state,
+          query,
+          {
+            response: selectedOption,
+            allowCustomResponse: false,
+          },
+          ledger
+        );
+
+        if (!resolveResult.success) {
+          console.error(`Error resolving query: ${resolveResult.error.message}`);
+          return { exitCode: 1, message: resolveResult.error.message };
+        }
+
+        const updatedQueries = snapshot.blockingQueries.map((q) =>
+          q.id === query.id ? resolveResult.record : q
+        );
+
+        const updatedSnapshot: ProtocolStateSnapshot = {
+          state: resolveResult.state,
+          artifacts: snapshot.artifacts,
+          blockingQueries: updatedQueries,
+        };
+
+        await saveState(updatedSnapshot, statePath);
+
+        console.log(`Query "${query.id}" resolved successfully.`);
+
+        const remainingQueries = updatedQueries.filter((q) => !q.resolved);
+        if (remainingQueries.length > 0) {
+          console.log();
+          console.log(
+            `${String(remainingQueries.length)} more quer${remainingQueries.length === 1 ? 'y' : 'ies'} pending.`
+          );
+          console.log();
+        } else {
+          console.log('All queries resolved. Protocol is no longer blocked.');
+        }
+      }
+
+      return { exitCode: 0 };
+    } finally {
+      reader.close();
+    }
   } catch (error) {
     if (error instanceof StatePersistenceError) {
       if (error.errorType === 'file_error' && error.details?.includes('does not exist')) {
