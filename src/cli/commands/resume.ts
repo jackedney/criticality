@@ -132,8 +132,8 @@ async function displayResumeSummary(
  */
 export async function handleResumeCommand(context: CliContext): Promise<CliCommandResult> {
   const options: ResumeDisplayOptions = {
-    colors: context.config.colors ?? true,
-    unicode: context.config.unicode ?? true,
+    colors: context.config.colors,
+    unicode: context.config.unicode,
   };
 
   const statePath = getStatePath();

@@ -44,17 +44,17 @@ export interface CliConfig {
   /**
    * Whether to use colors in output.
    */
-  colors?: boolean;
+  colors: boolean;
 
   /**
    * Whether to use Unicode box-drawing characters.
    */
-  unicode?: boolean;
+  unicode: boolean;
 
   /**
    * Watch mode refresh interval in milliseconds.
    */
-  watchInterval?: number;
+  watchInterval: number;
 }
 
 /**

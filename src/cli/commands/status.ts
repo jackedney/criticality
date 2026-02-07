@@ -363,8 +363,8 @@ export async function handleStatusCommand(context: CliContext): Promise<CliComma
   const { watch, interval } = parseStatusArgs(context.args);
 
   const options: StatusDisplayOptions = {
-    colors: context.config.colors ?? true,
-    unicode: context.config.unicode ?? true,
+    colors: context.config.colors,
+    unicode: context.config.unicode,
     watch,
     interval,
   };

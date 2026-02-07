@@ -12,15 +12,14 @@ import type { CliConfig, CliContext } from './types.js';
  * @param config - CLI configuration options (overrides config file values).
  * @returns A promise resolving to CLI context.
  */
-export function createCliApp(config: CliConfig = {}): CliContext {
+export function createCliApp(config: Partial<CliConfig> = {}): CliContext {
   const context: CliContext = {
     renderer: {},
     args: process.argv.slice(2),
     config: {
-      colors: true,
-      unicode: true,
-      watchInterval: 2000,
-      ...config,
+      colors: config.colors ?? true,
+      unicode: config.unicode ?? true,
+      watchInterval: config.watchInterval ?? 2000,
     },
   };
 

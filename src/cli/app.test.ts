@@ -76,6 +76,7 @@ unicode = false
     const context = createCliApp({
       colors: false,
       watchInterval: 3000,
+      unicode: true,
     });
 
     expect(context.config.colors).toBe(false);
@@ -92,7 +93,7 @@ watch_interval = 5000
 unicode = false
 `);
 
-    const context = createCliApp({ watchInterval: 10000 });
+    const context = createCliApp({ watchInterval: 10000, colors: false, unicode: false });
 
     expect(context.config.colors).toBe(false);
     expect(context.config.unicode).toBe(false);

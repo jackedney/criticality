@@ -580,8 +580,8 @@ async function promptForClarification(
  */
 export async function handleResolveCommand(context: CliContext): Promise<CliCommandResult> {
   const options: ResolveDisplayOptions = {
-    colors: context.config.colors ?? true,
-    unicode: context.config.unicode ?? true,
+    colors: context.config.colors,
+    unicode: context.config.unicode,
   };
 
   const statePath = getStatePath();
