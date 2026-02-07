@@ -463,6 +463,10 @@ async function attemptTransformation(
  * contains multiple functions (e.g., after extract-helper transforms).
  * Replaces the entire function text to preserve signature-level changes.
  *
+ * Rejects transformations that produce additional top-level helpers or
+ * multiple functions, as these cannot be safely applied by replacing
+ * only the target function text.
+ *
  * @returns True if the update succeeded, false otherwise.
  */
 function updateSourceFile(state: FunctionIterationState, newCode: string): boolean {
@@ -477,6 +481,22 @@ function updateSourceFile(state: FunctionIterationState, newCode: string): boole
   const project = new Project({ useInMemoryFileSystem: true });
   const tempSourceFile = project.createSourceFile('temp.ts', newCode);
   const tempFunctions = tempSourceFile.getFunctions();
+
+  // Reject if transformed code contains multiple functions (e.g., extracted helpers)
+  // These cannot be safely applied by replacing only the target function
+  if (tempFunctions.length > 1) {
+    return false;
+  }
+
+  // Check for additional top-level statements beyond the target function
+  // (e.g., type aliases, const declarations, class definitions)
+  const topLevelStatements = tempSourceFile.getStatements();
+  const nonFunctionStatements = topLevelStatements.filter(
+    (stmt) => stmt.getKind() !== SyntaxKind.FunctionDeclaration
+  );
+  if (nonFunctionStatements.length > 0) {
+    return false;
+  }
 
   // Locate temp function by name (matching original target function name)
   let tempFunc = tempFunctions.find((f) => f.getName() === state.functionName);
