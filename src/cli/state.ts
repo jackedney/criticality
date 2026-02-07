@@ -14,7 +14,7 @@ import {
 } from '../protocol/persistence.js';
 import type { BlockingRecord } from '../protocol/blocking.js';
 import { renameSync } from 'node:fs';
-import { stat } from 'node:fs/promises';
+import { stat, writeFile, rename, unlink } from 'node:fs/promises';
 import path from 'node:path';
 
 /**
@@ -142,25 +142,23 @@ export async function saveCliState(
     const serializedState = serializeCliState(snapshot, options);
     const tempPath = `${filePath}.tmp`;
 
-    await import('node:fs/promises').then(async (fs) => {
+    try {
+      await writeFile(tempPath, serializedState, 'utf-8');
+      await rename(tempPath, filePath);
+    } catch (writeError) {
       try {
-        await fs.writeFile(tempPath, serializedState, 'utf-8');
-        await fs.rename(tempPath, filePath);
-      } catch (writeError) {
-        try {
-          await fs.unlink(tempPath);
-        } catch {
-          // Ignore cleanup errors
-        }
-
-        const fileError = writeError instanceof Error ? writeError : new Error(String(writeError));
-        throw new StatePersistenceError(
-          `Failed to save CLI state to "${filePath}": ${fileError.message}`,
-          'file_error',
-          { cause: fileError, details: 'Check that directory exists and is writable' }
-        );
+        await unlink(tempPath);
+      } catch {
+        // Ignore cleanup errors
       }
-    });
+
+      const fileError = writeError instanceof Error ? writeError : new Error(String(writeError));
+      throw new StatePersistenceError(
+        `Failed to save CLI state to "${filePath}": ${fileError.message}`,
+        'file_error',
+        { cause: fileError, details: 'Check that directory exists and is writable' }
+      );
+    }
   } catch (error) {
     if (error instanceof StatePersistenceError) {
       throw error;
