@@ -1199,3 +1199,29 @@ source = "design_review_b"
 confidence = "canonical"
 phase = "design"
 dependencies = ["block_004"]
+
+# =============================================================================
+# CLI DECISIONS
+# =============================================================================
+
+[[decisions]]
+id = "cli_001"
+timestamp = "2026-02-07T00:00:00Z"
+category = "cli"
+constraint = "Resolve command uses interactive arrow-key selection as primary interface, not argument-based selection"
+rationale = """
+Interactive mode provides better UX for complex queries with implications that
+require human consideration. Users can see full option details (including
+consequences and trade-offs) before committing to a selection. Arrow-key
+navigation is intuitive and prevents accidental mis-selections that could
+occur with numeric arguments. While this approach is less scriptable than
+argument-based selection, blocking queries inherently require human attention
+anywhere, so scriptability is not a primary concern. The interactive flow
+(see SPECIFICATION.md Section 9) enables: (1) clear display of the blocking
+query, (2) comprehensive option descriptions with implications, (3) intuitive
+navigation and confirmation, (4) numbered input as alternative for power users.
+"""
+source = "design"
+confidence = "canonical"
+phase = "design"
+dependencies = ["block_004", "orch_008"]
