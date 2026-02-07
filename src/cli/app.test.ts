@@ -25,17 +25,17 @@ describe('createCliApp', () => {
     mockReadFileSync.mockReset();
   });
 
-  it('uses default values when no config file exists', () => {
+  it('uses default values when no config file exists', async () => {
     mockExistsSync.mockReturnValue(false);
 
-    const context = createCliApp();
+    const context = await createCliApp();
 
     expect(context.config.colors).toBe(true);
     expect(context.config.unicode).toBe(true);
     expect(context.config.watchInterval).toBe(2000);
   });
 
-  it('loads CLI settings from criticality.toml when file exists', () => {
+  it('loads CLI settings from criticality.toml when file exists', async () => {
     mockExistsSync.mockReturnValue(true);
     mockReadFileSync.mockReturnValue(`
 [cli]
@@ -44,20 +44,20 @@ watch_interval = 5000
 unicode = false
 `);
 
-    const context = createCliApp();
+    const context = await createCliApp();
 
     expect(context.config.colors).toBe(false);
     expect(context.config.unicode).toBe(false);
     expect(context.config.watchInterval).toBe(5000);
   });
 
-  it('uses defaults when config file has parse error', () => {
+  it('uses defaults when config file has parse error', async () => {
     const consoleWarnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
 
     mockExistsSync.mockReturnValue(true);
     mockReadFileSync.mockReturnValue('invalid [ toml');
 
-    const context = createCliApp();
+    const context = await createCliApp();
 
     expect(consoleWarnSpy).toHaveBeenCalledWith(
       expect.stringContaining('Warning: Failed to load config from criticality.toml')
@@ -70,10 +70,10 @@ unicode = false
     consoleWarnSpy.mockRestore();
   });
 
-  it('allows override via function parameter', () => {
+  it('allows override via function parameter', async () => {
     mockExistsSync.mockReturnValue(false);
 
-    const context = createCliApp({
+    const context = await createCliApp({
       colors: false,
       watchInterval: 3000,
       unicode: true,
@@ -84,7 +84,7 @@ unicode = false
     expect(context.config.watchInterval).toBe(3000);
   });
 
-  it('merges config file with parameter overrides', () => {
+  it('merges config file with parameter overrides', async () => {
     mockExistsSync.mockReturnValue(true);
     mockReadFileSync.mockReturnValue(`
 [cli]
@@ -93,7 +93,7 @@ watch_interval = 5000
 unicode = false
 `);
 
-    const context = createCliApp({ watchInterval: 10000, colors: false, unicode: false });
+    const context = await createCliApp({ watchInterval: 10000, colors: false, unicode: false });
 
     expect(context.config.colors).toBe(false);
     expect(context.config.unicode).toBe(false);

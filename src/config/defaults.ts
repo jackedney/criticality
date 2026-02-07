@@ -55,6 +55,7 @@ export const DEFAULT_THRESHOLDS: ThresholdConfig = {
  */
 export const DEFAULT_NOTIFICATIONS: NotificationConfig = {
   enabled: false,
+  hooks: {},
 };
 
 /**

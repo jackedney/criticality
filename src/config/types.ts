@@ -90,6 +90,31 @@ export interface CliSettingsConfig {
 }
 
 /**
+ * Notification hook configuration.
+ * Hooks are shell commands executed on specific protocol events.
+ */
+export interface NotificationHook {
+  /** Shell command to execute when hook triggers. */
+  command: string;
+  /** Whether the hook is enabled. */
+  enabled: boolean;
+}
+
+/**
+ * All notification hooks for different protocol events.
+ */
+export interface NotificationHooks {
+  /** Hook triggered when protocol enters blocking state. */
+  on_block?: NotificationHook;
+  /** Hook triggered when protocol completes successfully. */
+  on_complete?: NotificationHook;
+  /** Hook triggered when an error occurs. */
+  on_error?: NotificationHook;
+  /** Hook triggered when phase changes. */
+  on_phase_change?: NotificationHook;
+}
+
+/**
  * Notification configuration for blocking states.
  */
 export interface NotificationConfig {
@@ -99,6 +124,8 @@ export interface NotificationConfig {
   channel?: 'slack' | 'email' | 'webhook';
   /** Webhook URL or email address. */
   endpoint?: string;
+  /** Shell command hooks for protocol events. */
+  hooks?: NotificationHooks;
 }
 
 /**
@@ -127,7 +154,9 @@ export interface PartialConfig {
   models?: Partial<ModelAssignments>;
   paths?: Partial<PathConfig>;
   thresholds?: Partial<ThresholdConfig>;
-  notifications?: Partial<NotificationConfig>;
+  notifications?: Partial<NotificationConfig> & {
+    hooks?: Partial<NotificationHooks>;
+  };
   mass_defect?: {
     targets?: Partial<MassDefectTargetsConfig>;
     catalog_path?: string;

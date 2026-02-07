@@ -5,12 +5,12 @@ import { ConfigParseError, DEFAULT_CONFIG, getDefaultConfig, parseConfig } from 
 describe('Config Parser', () => {
   describe('parseConfig', () => {
     describe('valid TOML parsing', () => {
-      it('should parse empty TOML to default config', () => {
-        const config = parseConfig('');
+      it('should parse empty TOML to default config', async () => {
+        const config = await parseConfig('');
         expect(config).toEqual(DEFAULT_CONFIG);
       });
 
-      it('should parse complete valid configuration', () => {
+      it('should parse complete valid configuration', async () => {
         const toml = `
 [models]
 architect_model = "custom-architect"
@@ -38,6 +38,10 @@ enabled = true
 channel = "slack"
 endpoint = "https://hooks.slack.com/test"
 
+[notifications.hooks]
+on_block = { command = "notify-send", enabled = true }
+on_complete = { command = "notify-send", enabled = false }
+
 [mass_defect.targets]
 max_cyclomatic_complexity = 8
 max_function_length_lines = 40
@@ -47,7 +51,7 @@ min_test_coverage = 0.9
 [mass_defect]
 catalog_path = "./custom-catalog"
 `;
-        const config = parseConfig(toml);
+        const config = await parseConfig(toml);
 
         expect(config.models.architect_model).toBe('custom-architect');
         expect(config.models.auditor_model).toBe('custom-auditor');
@@ -71,6 +75,11 @@ catalog_path = "./custom-catalog"
         expect(config.notifications.channel).toBe('slack');
         expect(config.notifications.endpoint).toBe('https://hooks.slack.com/test');
 
+        expect(config.notifications.hooks?.on_block?.command).toBe('notify-send');
+        expect(config.notifications.hooks?.on_block?.enabled).toBe(true);
+        expect(config.notifications.hooks?.on_complete?.command).toBe('notify-send');
+        expect(config.notifications.hooks?.on_complete?.enabled).toBe(false);
+
         expect(config.mass_defect.targets.max_cyclomatic_complexity).toBe(8);
         expect(config.mass_defect.targets.max_function_length_lines).toBe(40);
         expect(config.mass_defect.targets.max_nesting_depth).toBe(3);
@@ -78,53 +87,47 @@ catalog_path = "./custom-catalog"
         expect(config.mass_defect.catalog_path).toBe('./custom-catalog');
       });
 
-      it('should use default values for missing optional fields', () => {
+      it('should use default values for missing optional fields', async () => {
         const toml = `
 [models]
 worker_model = "custom-worker"
 `;
-        const config = parseConfig(toml);
+        const config = await parseConfig(toml);
 
-        // Provided field should be set
         expect(config.models.worker_model).toBe('custom-worker');
 
-        // Other model fields should use defaults
         expect(config.models.architect_model).toBe('claude-opus-4.5');
         expect(config.models.auditor_model).toBe('kimi-k2');
         expect(config.models.structurer_model).toBe('claude-sonnet-4.5');
         expect(config.models.fallback_model).toBe('claude-sonnet-4.5');
 
-        // Paths should all be defaults
         expect(config.paths).toEqual(DEFAULT_CONFIG.paths);
 
-        // Thresholds should all be defaults
         expect(config.thresholds).toEqual(DEFAULT_CONFIG.thresholds);
 
-        // Notifications should be defaults
         expect(config.notifications).toEqual(DEFAULT_CONFIG.notifications);
 
-        // Mass Defect should be defaults
         expect(config.mass_defect).toEqual(DEFAULT_CONFIG.mass_defect);
       });
 
-      it('should handle partial sections correctly', () => {
+      it('should handle partial sections correctly', async () => {
         const toml = `
 [thresholds]
 max_retry_attempts = 10
 `;
-        const config = parseConfig(toml);
+        const config = await parseConfig(toml);
 
         expect(config.thresholds.max_retry_attempts).toBe(10);
         expect(config.thresholds.context_token_upgrade).toBe(12000);
         expect(config.thresholds.signature_complexity_upgrade).toBe(5);
       });
 
-      it('should parse mass_defect targets section with overrides', () => {
+      it('should parse mass_defect targets section with overrides', async () => {
         const toml = `
 [mass_defect.targets]
 max_cyclomatic_complexity = 8
 `;
-        const config = parseConfig(toml);
+        const config = await parseConfig(toml);
 
         expect(config.mass_defect.targets.max_cyclomatic_complexity).toBe(8);
         expect(config.mass_defect.targets.max_function_length_lines).toBe(50);
@@ -132,19 +135,19 @@ max_cyclomatic_complexity = 8
         expect(config.mass_defect.targets.min_test_coverage).toBe(0.8);
       });
 
-      it('should parse mass_defect catalog_path with override', () => {
+      it('should parse mass_defect catalog_path with override', async () => {
         const toml = `
 [mass_defect]
 catalog_path = "./my-catalog"
 `;
-        const config = parseConfig(toml);
+        const config = await parseConfig(toml);
 
         expect(config.mass_defect.catalog_path).toBe('./my-catalog');
         expect(config.mass_defect.targets).toEqual(DEFAULT_CONFIG.mass_defect.targets);
       });
 
-      it('should use default mass_defect when section omitted', () => {
-        const config = parseConfig('');
+      it('should use default mass_defect when section omitted', async () => {
+        const config = await parseConfig('');
 
         expect(config.mass_defect).toEqual(DEFAULT_CONFIG.mass_defect);
         expect(config.mass_defect.targets.max_cyclomatic_complexity).toBe(10);
@@ -154,7 +157,7 @@ catalog_path = "./my-catalog"
         expect(config.mass_defect.catalog_path).toBe('./mass-defect-catalog');
       });
 
-      it('should parse all valid notification channels', () => {
+      it('should parse all valid notification channels', async () => {
         const channels = ['slack', 'email', 'webhook'] as const;
 
         for (const channel of channels) {
@@ -164,55 +167,55 @@ enabled = true
 channel = "${channel}"
 endpoint = "test-endpoint"
 `;
-          const config = parseConfig(toml);
+          const config = await parseConfig(toml);
           expect(config.notifications.channel).toBe(channel);
         }
       });
     });
 
     describe('invalid TOML syntax', () => {
-      it('should return descriptive error for malformed TOML', () => {
+      it('should return descriptive error for malformed TOML', async () => {
         const invalidToml = `
 [models
 worker_model = "test"
 `;
-        expect(() => parseConfig(invalidToml)).toThrow(ConfigParseError);
+        await expect(parseConfig(invalidToml)).rejects.toThrow(ConfigParseError);
 
         try {
-          parseConfig(invalidToml);
+          await parseConfig(invalidToml);
         } catch (error) {
           expect(error).toBeInstanceOf(ConfigParseError);
           expect((error as ConfigParseError).message).toContain('Invalid TOML syntax');
         }
       });
 
-      it('should return descriptive error for invalid key format', () => {
+      it('should return descriptive error for invalid key format', async () => {
         const invalidToml = `
 [models]
 = "no key"
 `;
-        expect(() => parseConfig(invalidToml)).toThrow(ConfigParseError);
+        await expect(parseConfig(invalidToml)).rejects.toThrow(ConfigParseError);
       });
 
-      it('should return descriptive error for unclosed string', () => {
+      it('should return descriptive error for unclosed string', async () => {
         const invalidToml = `
 [models]
 worker_model = "unclosed
 `;
-        expect(() => parseConfig(invalidToml)).toThrow(ConfigParseError);
+        await expect(parseConfig(invalidToml)).rejects.toThrow(ConfigParseError);
       });
     });
 
     describe('type validation errors', () => {
-      it('should error when string field receives number', () => {
+      it('should error when string field receives number', async () => {
         const toml = `
 [models]
 worker_model = 123
 `;
-        expect(() => parseConfig(toml)).toThrow(ConfigParseError);
+        await expect(parseConfig(toml)).rejects.toThrow(ConfigParseError);
 
         try {
-          parseConfig(toml);
+          await parseConfig(toml);
         } catch (error) {
           expect((error as ConfigParseError).message).toContain(
             "Invalid type for 'models.worker_model'"
@@ -221,15 +224,15 @@ worker_model = 123
         }
       });
 
-      it('should error when number field receives string', () => {
+      it('should error when number field receives string', async () => {
         const toml = `
 [thresholds]
 max_retry_attempts = "five"
 `;
-        expect(() => parseConfig(toml)).toThrow(ConfigParseError);
+        await expect(parseConfig(toml)).rejects.toThrow(ConfigParseError);
 
         try {
-          parseConfig(toml);
+          await parseConfig(toml);
         } catch (error) {
           expect((error as ConfigParseError).message).toContain(
             "Invalid type for 'thresholds.max_retry_attempts'"
@@ -238,15 +241,15 @@ max_retry_attempts = "five"
         }
       });
 
-      it('should error when boolean field receives string', () => {
+      it('should error when boolean field receives string', async () => {
         const toml = `
 [notifications]
 enabled = "true"
 `;
-        expect(() => parseConfig(toml)).toThrow(ConfigParseError);
+        await expect(parseConfig(toml)).rejects.toThrow(ConfigParseError);
 
         try {
-          parseConfig(toml);
+          await parseConfig(toml);
         } catch (error) {
           expect((error as ConfigParseError).message).toContain(
             "Invalid type for 'notifications.enabled'"
@@ -255,16 +258,16 @@ enabled = "true"
         }
       });
 
-      it('should error for invalid notification channel value', () => {
+      it('should error for invalid notification channel value', async () => {
         const toml = `
 [notifications]
 enabled = true
 channel = "telegram"
 `;
-        expect(() => parseConfig(toml)).toThrow(ConfigParseError);
+        await expect(parseConfig(toml)).rejects.toThrow(ConfigParseError);
 
         try {
-          parseConfig(toml);
+          await parseConfig(toml);
         } catch (error) {
           expect((error as ConfigParseError).message).toContain(
             "Invalid value for 'notifications.channel'"
@@ -276,16 +279,16 @@ channel = "telegram"
   });
 
   describe('getDefaultConfig', () => {
-    it('should return a copy of default config', () => {
-      const config1 = getDefaultConfig();
-      const config2 = getDefaultConfig();
+    it('should return a copy of default config', async () => {
+      const config1 = await getDefaultConfig();
+      const config2 = await getDefaultConfig();
 
       expect(config1).toEqual(config2);
-      expect(config1).not.toBe(config2); // Different object instances
+      expect(config1).not.toBe(config2);
     });
 
-    it('should have all expected default model assignments', () => {
-      const config = getDefaultConfig();
+    it('should have all expected default model assignments', async () => {
+      const config = await getDefaultConfig();
 
       expect(config.models.architect_model).toBe('claude-opus-4.5');
       expect(config.models.auditor_model).toBe('kimi-k2');
@@ -294,8 +297,8 @@ channel = "telegram"
       expect(config.models.fallback_model).toBe('claude-sonnet-4.5');
     });
 
-    it('should have all expected default paths', () => {
-      const config = getDefaultConfig();
+    it('should have all expected default paths', async () => {
+      const config = await getDefaultConfig();
 
       expect(config.paths.specs).toBe('.criticality/specs');
       expect(config.paths.archive).toBe('.criticality/archive');
@@ -304,8 +307,8 @@ channel = "telegram"
       expect(config.paths.ledger).toBe('.criticality/ledger');
     });
 
-    it('should have all expected default thresholds', () => {
-      const config = getDefaultConfig();
+    it('should have all expected default thresholds', async () => {
+      const config = await getDefaultConfig();
 
       expect(config.thresholds.context_token_upgrade).toBe(12000);
       expect(config.thresholds.signature_complexity_upgrade).toBe(5);
@@ -314,8 +317,8 @@ channel = "telegram"
       expect(config.thresholds.performance_variance_threshold).toBe(0.2);
     });
 
-    it('should have notifications disabled by default', () => {
-      const config = getDefaultConfig();
+    it('should have notifications disabled by default', async () => {
+      const config = await getDefaultConfig();
 
       expect(config.notifications.enabled).toBe(false);
       expect(config.notifications.channel).toBeUndefined();
@@ -345,8 +348,8 @@ channel = "telegram"
   describe('property-based tests', () => {
     it('should always return valid config for empty input', () => {
       fc.assert(
-        fc.property(fc.constant(''), (input) => {
-          const config = parseConfig(input);
+        fc.asyncProperty(fc.constant(''), async (input) => {
+          const config = await parseConfig(input);
           return (
             typeof config.models.architect_model === 'string' &&
             typeof config.paths.specs === 'string' &&
@@ -359,7 +362,6 @@ channel = "telegram"
     });
 
     it('should preserve string values when provided', () => {
-      // Filter out TOML special characters that would cause parse errors
       const isValidTomlString = (s: string): boolean =>
         s.length > 0 &&
         !s.includes('"') &&
@@ -369,12 +371,12 @@ channel = "telegram"
         !s.includes('\t');
 
       fc.assert(
-        fc.property(fc.string().filter(isValidTomlString), (modelName) => {
+        fc.asyncProperty(fc.string().filter(isValidTomlString), async (modelName) => {
           const toml = `
 [models]
 worker_model = "${modelName}"
 `;
-          const config = parseConfig(toml);
+          const config = await parseConfig(toml);
           return config.models.worker_model === modelName;
         }),
         { numRuns: 50 }
@@ -383,12 +385,12 @@ worker_model = "${modelName}"
 
     it('should preserve positive integer thresholds', () => {
       fc.assert(
-        fc.property(fc.integer({ min: 1, max: 100000 }), (retryAttempts) => {
+        fc.asyncProperty(fc.integer({ min: 1, max: 100000 }), async (retryAttempts) => {
           const toml = `
 [thresholds]
 max_retry_attempts = ${String(retryAttempts)}
 `;
-          const config = parseConfig(toml);
+          const config = await parseConfig(toml);
           return config.thresholds.max_retry_attempts === retryAttempts;
         }),
         { numRuns: 50 }
@@ -397,13 +399,12 @@ max_retry_attempts = ${String(retryAttempts)}
 
     it('should preserve float thresholds', () => {
       fc.assert(
-        fc.property(fc.double({ min: 0.01, max: 1.0, noNaN: true }), (threshold) => {
+        fc.asyncProperty(fc.double({ min: 0.01, max: 1.0, noNaN: true }), async (threshold) => {
           const toml = `
 [thresholds]
 performance_variance_threshold = ${String(threshold)}
 `;
-          const config = parseConfig(toml);
-          // Use approximate comparison for floating point
+          const config = await parseConfig(toml);
           return Math.abs(config.thresholds.performance_variance_threshold - threshold) < 0.0001;
         }),
         { numRuns: 50 }

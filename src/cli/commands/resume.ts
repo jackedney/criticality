@@ -38,13 +38,15 @@ interface ResumeDisplayOptions {
  *
  * @returns The loaded configuration or defaults.
  */
-function loadCliConfig(): ReturnType<(typeof import('../../config/index.js'))['parseConfig']> {
+async function loadCliConfig(): ReturnType<
+  (typeof import('../../config/index.js'))['parseConfig']
+> {
   const configFilePath = 'criticality.toml';
 
   if (existsSync(configFilePath)) {
     try {
       const tomlContent = readFileSync(configFilePath, 'utf-8');
-      return parseConfig(tomlContent);
+      return await parseConfig(tomlContent);
     } catch (error) {
       console.warn(
         `Warning: Failed to load config from ${configFilePath}: ${error instanceof Error ? error.message : String(error)}`
@@ -53,7 +55,7 @@ function loadCliConfig(): ReturnType<(typeof import('../../config/index.js'))['p
     }
   }
 
-  return parseConfig('');
+  return await parseConfig('');
 }
 
 /**
@@ -260,7 +262,7 @@ export async function handleResumeCommand(context: CliContext): Promise<CliComma
 
     await displayResumeSummary(snapshot, statePath, options);
 
-    const config = loadCliConfig();
+    const config = await loadCliConfig();
 
     telemetryCollector = new TelemetryCollector();
     const operations = await createCliOperations({

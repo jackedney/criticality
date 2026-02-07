@@ -5,6 +5,7 @@
  */
 
 import * as TOML from '@iarna/toml';
+import { execa } from 'execa';
 import {
   DEFAULT_CLI_CONFIG,
   DEFAULT_CONFIG,
@@ -22,6 +23,8 @@ import type {
   MassDefectTargetsConfig,
   ModelAssignments,
   NotificationConfig,
+  NotificationHook,
+  NotificationHooks,
   PathConfig,
   ThresholdConfig,
 } from './types.js';
@@ -209,12 +212,126 @@ function parseThresholds(raw: Record<string, unknown> | undefined): ThresholdCon
 }
 
 /**
+ * Parses a notification hook from raw TOML data.
+ *
+ * @param raw - Raw TOML object for a single hook.
+ * @param hookName - Name of the hook for error messages.
+ * @returns Validated notification hook.
+ */
+function parseNotificationHook(raw: unknown, hookName: string): NotificationHook | undefined {
+  if (raw === undefined || typeof raw !== 'object' || raw === null) {
+    return undefined;
+  }
+
+  const hookRaw = raw as Record<string, unknown>;
+  const hook: Partial<NotificationHook> = {};
+
+  if ('command' in hookRaw) {
+    hook.command = validateString(hookRaw.command, `notifications.hooks.${hookName}.command`);
+  }
+
+  if ('enabled' in hookRaw) {
+    hook.enabled = validateBoolean(hookRaw.enabled, `notifications.hooks.${hookName}.enabled`);
+  }
+
+  if (hook.command === undefined || hook.enabled === undefined) {
+    return undefined;
+  }
+
+  return {
+    command: hook.command,
+    enabled: hook.enabled,
+  };
+}
+
+/**
+ * Validates that a shell command exists and is executable.
+ *
+ * @param command - The shell command to validate.
+ * @param hookName - Name of the hook for warning messages.
+ * @returns Whether the command exists.
+ */
+async function validateCommandExists(command: string, hookName: string): Promise<boolean> {
+  const commandName = command.split(' ')[0];
+  if (commandName === undefined) {
+    console.warn(`Warning: Invalid command for hook '${hookName}'. The hook will not execute.`);
+    return false;
+  }
+
+  try {
+    await execa('which', [commandName], {
+      reject: true,
+      timeout: 1000,
+    });
+    return true;
+  } catch {
+    console.warn(
+      `Warning: Command '${commandName}' not found for hook '${hookName}'. ` +
+        `The hook will not execute. Please ensure the command is available in PATH.`
+    );
+    return false;
+  }
+}
+
+/**
+ * Parses notification hooks from raw TOML data.
+ *
+ * @param raw - Raw TOML object for notifications.hooks section.
+ * @returns Validated notification hooks.
+ */
+async function parseNotificationHooks(
+  raw: Record<string, unknown> | undefined
+): Promise<NotificationHooks> {
+  if (raw === undefined) {
+    return {};
+  }
+
+  const hooks: NotificationHooks = {};
+
+  if ('on_block' in raw) {
+    const hook = parseNotificationHook(raw.on_block, 'on_block');
+    if (hook !== undefined) {
+      await validateCommandExists(hook.command, 'on_block');
+      hooks.on_block = hook;
+    }
+  }
+
+  if ('on_complete' in raw) {
+    const hook = parseNotificationHook(raw.on_complete, 'on_complete');
+    if (hook !== undefined) {
+      await validateCommandExists(hook.command, 'on_complete');
+      hooks.on_complete = hook;
+    }
+  }
+
+  if ('on_error' in raw) {
+    const hook = parseNotificationHook(raw.on_error, 'on_error');
+    if (hook !== undefined) {
+      await validateCommandExists(hook.command, 'on_error');
+      hooks.on_error = hook;
+    }
+  }
+
+  if ('on_phase_change' in raw) {
+    const hook = parseNotificationHook(raw.on_phase_change, 'on_phase_change');
+    if (hook !== undefined) {
+      await validateCommandExists(hook.command, 'on_phase_change');
+      hooks.on_phase_change = hook;
+    }
+  }
+
+  return hooks;
+}
+
+/**
  * Parses notification configuration from raw TOML data.
  *
  * @param raw - Raw TOML object for notifications section.
  * @returns Validated notification configuration merged with defaults.
  */
-function parseNotifications(raw: Record<string, unknown> | undefined): NotificationConfig {
+async function parseNotifications(
+  raw: Record<string, unknown> | undefined
+): Promise<NotificationConfig> {
   if (raw === undefined) {
     return { ...DEFAULT_NOTIFICATIONS };
   }
@@ -237,6 +354,10 @@ function parseNotifications(raw: Record<string, unknown> | undefined): Notificat
 
   if ('endpoint' in raw) {
     result.endpoint = validateString(raw.endpoint, 'notifications.endpoint');
+  }
+
+  if ('hooks' in raw) {
+    result.hooks = await parseNotificationHooks(raw.hooks as Record<string, unknown> | undefined);
   }
 
   return result;
@@ -361,7 +482,7 @@ function parseCliSettings(raw: Record<string, unknown> | undefined): CliSettings
  * console.log(config.thresholds.max_retry_attempts); // 5
  * ```
  */
-export function parseConfig(tomlContent: string): Config {
+export async function parseConfig(tomlContent: string): Promise<Config> {
   let parsed: Record<string, unknown>;
 
   try {
@@ -375,7 +496,9 @@ export function parseConfig(tomlContent: string): Config {
     models: parseModelAssignments(parsed.models as Record<string, unknown> | undefined),
     paths: parsePaths(parsed.paths as Record<string, unknown> | undefined),
     thresholds: parseThresholds(parsed.thresholds as Record<string, unknown> | undefined),
-    notifications: parseNotifications(parsed.notifications as Record<string, unknown> | undefined),
+    notifications: await parseNotifications(
+      parsed.notifications as Record<string, unknown> | undefined
+    ),
     mass_defect: parseMassDefect(parsed.mass_defect as Record<string, unknown> | undefined),
     cli: parseCliSettings(parsed.cli as Record<string, unknown> | undefined),
   };
@@ -394,6 +517,6 @@ export function parseConfig(tomlContent: string): Config {
  * console.log(config.models.architect_model); // "claude-opus-4.5"
  * ```
  */
-export function getDefaultConfig(): Config {
+export async function getDefaultConfig(): Promise<Config> {
   return { ...DEFAULT_CONFIG };
 }

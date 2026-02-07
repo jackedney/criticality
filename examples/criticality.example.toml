@@ -88,6 +88,22 @@ enabled = false
 # Webhook URL, email address, or Slack webhook URL
 # endpoint = "https://hooks.slack.com/services/xxx/yyy/zzz"
 
+# Notification hooks - shell commands executed on specific events
+# Hooks support template variables: {phase}, {error}, {timestamp}
+
+[notifications.hooks]
+# Hook triggered when protocol enters blocking state
+# notifications.hooks.on_block = { command = 'notify-send "Protocol blocked: {error}"', enabled = true }
+
+# Hook triggered when protocol completes successfully
+# notifications.hooks.on_complete = { command = 'notify-send "Protocol completed in phase {phase}"', enabled = false }
+
+# Hook triggered when an error occurs
+# notifications.hooks.on_error = { command = 'notify-send "Protocol error: {error}"', enabled = true }
+
+# Hook triggered when phase changes
+# notifications.hooks.on_phase_change = { command = 'notify-send "Phase changed to {phase}"', enabled = false }
+
 # =============================================================================
 # CLI CONFIGURATION
 # =============================================================================

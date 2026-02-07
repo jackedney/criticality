@@ -16,6 +16,7 @@ import { execa } from 'execa';
 import { copyFile, mkdir } from 'node:fs/promises';
 import path from 'node:path';
 import { TelemetryCollector } from './telemetry.js';
+import { createHooksExecutor } from './hooks.js';
 
 /**
  * Telemetry data collected from operations.
@@ -89,6 +90,7 @@ export class CliOperations implements ExternalOperations {
   private readonly collectTelemetry: boolean;
   private readonly onTelemetryUpdate: (telemetry: OperationTelemetry) => void;
   private readonly telemetryCollector: TelemetryCollector;
+  private readonly hooksExecutor: ReturnType<typeof createHooksExecutor>;
   private modelClient: ClaudeCodeClient | null = null;
   private telemetry: OperationTelemetry;
   private currentPhase: ProtocolPhase;
@@ -105,6 +107,7 @@ export class CliOperations implements ExternalOperations {
     this.collectTelemetry = options.collectTelemetry ?? true;
     this.onTelemetryUpdate = options.onTelemetryUpdate;
     this.telemetryCollector = options.telemetryCollector ?? new TelemetryCollector();
+    this.hooksExecutor = createHooksExecutor(this.config.notifications.hooks ?? {}, this.cwd);
     this.telemetry = {
       modelCalls: 0,
       promptTokens: 0,
@@ -407,7 +410,6 @@ export class CliOperations implements ExternalOperations {
    * Send blocking notification.
    *
    * Triggers notification hooks configured in criticality.toml.
-   * Currently prepares for US-026 (full notification system).
    *
    * @param query - The blocking query.
    */
@@ -442,6 +444,8 @@ export class CliOperations implements ExternalOperations {
           }
         );
       }
+
+      await this.hooksExecutor.onBlock(query);
     } catch {
       // Ignore notification errors to avoid blocking protocol execution
     }
