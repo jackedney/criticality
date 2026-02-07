@@ -1201,6 +1201,30 @@ phase = "design"
 dependencies = ["block_004"]
 
 # =============================================================================
+# NOTIFICATION SYSTEM DECISIONS
+# =============================================================================
+
+[[decisions]]
+id = "notify_001"
+timestamp = "2026-02-07T23:30:00Z"
+category = "notifications"
+constraint = "Notification system uses webhook-first approach; Slack and email integrations deferred to future phase"
+rationale = """
+Webhooks provide maximum flexibility for integration by allowing users to connect
+to any system that accepts HTTP POST requests. This universal endpoint approach
+eliminates the need to build and maintain platform-specific integrations (Slack
+API, SMTP, etc.), reducing scope and complexity for Phase 4.2. Users can easily
+integrate with Slack, email, PagerDuty, or custom systems by using webhook
+receivers. The webhook payload includes full BlockingRecord structure for
+programmatic consumption, while user-facing messages follow block_005's minimal
+format: 'Criticality blocked. Run criticality status for details.'
+"""
+source = "design"
+confidence = "canonical"
+phase = "design"
+dependencies = ["block_005"]
+
+# =============================================================================
 # CLI DECISIONS
 # =============================================================================
 
