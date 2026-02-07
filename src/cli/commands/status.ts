@@ -20,6 +20,8 @@ const DEFAULT_LEDGER_PATH = '.criticality/ledger';
 interface StatusDisplayOptions {
   colors: boolean;
   unicode: boolean;
+  watch?: boolean;
+  interval?: number;
 }
 
 /**
@@ -290,6 +292,19 @@ function formatPendingQueries(
 }
 
 /**
+ * Formats timestamp as HH:MM:SS.
+ *
+ * @param date - The date to format.
+ * @returns The formatted timestamp string.
+ */
+function formatTimestamp(date: Date): string {
+  const hours = String(date.getHours()).padStart(2, '0');
+  const minutes = String(date.getMinutes()).padStart(2, '0');
+  const seconds = String(date.getSeconds()).padStart(2, '0');
+  return `${hours}:${minutes}:${seconds}`;
+}
+
+/**
  * Renders status display to console.
  *
  * @param snapshot - The protocol state snapshot.
@@ -363,24 +378,143 @@ async function renderStatus(
 }
 
 /**
+ * Renders status display with footer for watch mode.
+ *
+ * @param snapshot - The protocol state snapshot.
+ * @param options - Display options.
+ */
+async function renderStatusWithFooter(
+  snapshot: ProtocolStateSnapshot,
+  options: StatusDisplayOptions
+): Promise<void> {
+  await renderStatus(snapshot, options);
+
+  const dimCode = options.colors ? '\x1b[2m' : '';
+  const resetCode = options.colors ? '\x1b[0m' : '';
+  const timestamp = formatTimestamp(new Date());
+
+  console.log();
+  console.log(`${dimCode}Last updated: ${timestamp} | Press Ctrl+C to exit${resetCode}`);
+}
+
+/**
+ * Parses command-line arguments for status command.
+ *
+ * @param args - Command-line arguments.
+ * @returns Parsed options including watch mode settings.
+ */
+function parseStatusArgs(args: string[]): { watch: boolean; interval: number } {
+  let watch = false;
+  let interval = 2000;
+
+  for (let i = 0; i < args.length; i++) {
+    const arg = args[i];
+    if (arg === '--watch' || arg === '-w') {
+      watch = true;
+    } else if (arg === '--interval' && i + 1 < args.length) {
+      const nextArg = args[i + 1];
+      if (nextArg !== undefined) {
+        const parsedInterval = Number.parseInt(nextArg, 10);
+        if (!Number.isNaN(parsedInterval)) {
+          if (parsedInterval < 500) {
+            console.warn(
+              'Warning: Interval below 500ms may cause performance issues. Using minimum of 500ms.'
+            );
+            interval = 500;
+          } else {
+            interval = parsedInterval;
+          }
+        }
+      }
+    }
+  }
+
+  return { watch, interval };
+}
+
+/**
  * Handles the status command.
  *
  * @param context - The CLI context.
  * @returns A promise resolving to the command result.
  */
 export async function handleStatusCommand(context: CliContext): Promise<CliCommandResult> {
+  const { watch, interval } = parseStatusArgs(context.args);
+
   const options: StatusDisplayOptions = {
     colors: context.config.colors ?? true,
     unicode: context.config.unicode ?? true,
+    watch,
+    interval,
   };
 
   const statePath = getStatePath();
 
   try {
     const snapshot = await loadState(statePath);
-    await renderStatus(snapshot, options);
 
-    return { exitCode: 0 };
+    if (!watch) {
+      await renderStatus(snapshot, options);
+      return { exitCode: 0 };
+    }
+
+    // eslint-disable-next-line @typescript-eslint/return-await
+    return new Promise<CliCommandResult>((resolve) => {
+      let running = true;
+
+      const updateStatus = async (): Promise<void> => {
+        if (!running) {
+          return;
+        }
+
+        try {
+          const currentSnapshot = await loadState(statePath);
+          console.clear();
+          await renderStatusWithFooter(currentSnapshot, options);
+        } catch (error) {
+          if (error instanceof StatePersistenceError) {
+            if (error.errorType === 'file_error' && error.details?.includes('does not exist')) {
+              const message = 'No protocol state found. Run criticality init to start.';
+              console.clear();
+              console.log(message);
+            } else {
+              console.clear();
+              console.error(`Error loading state: ${error.message}`);
+            }
+          } else {
+            console.clear();
+            console.error(
+              `Unexpected error: ${error instanceof Error ? error.message : String(error)}`
+            );
+          }
+        }
+      };
+
+      const gracefulShutdown = (): void => {
+        running = false;
+        console.log('\nWatch mode stopped.');
+        resolve({ exitCode: 0 });
+      };
+
+      process.on('SIGINT', gracefulShutdown);
+
+      void updateStatus().then(() => {
+        const intervalId = setInterval(() => {
+          if (running) {
+            void updateStatus().catch(() => {
+              // Silently handle errors during watch updates
+            });
+          } else {
+            clearInterval(intervalId);
+          }
+        }, interval);
+
+        // Clean up interval on resolve
+        process.on('beforeExit', () => {
+          clearInterval(intervalId);
+        });
+      });
+    });
   } catch (error) {
     if (error instanceof StatePersistenceError) {
       if (error.errorType === 'file_error' && error.details?.includes('does not exist')) {

@@ -94,11 +94,26 @@ async function main(): Promise<void> {
       break;
 
     case 'status':
-      await handleStatusCommandWithContext();
+      if (commandArgs.includes('--help') || commandArgs.includes('-h')) {
+        showHelpForCommand('status');
+        process.exit(0);
+      }
+      await handleStatusCommandWithContext(commandArgs);
       break;
 
     case 'resume':
+      if (commandArgs.includes('--help') || commandArgs.includes('-h')) {
+        showHelpForCommand('resume');
+        process.exit(0);
+      }
+      handleCommand(command);
+      break;
+
     case 'resolve':
+      if (commandArgs.includes('--help') || commandArgs.includes('-h')) {
+        showHelpForCommand('resolve');
+        process.exit(0);
+      }
       handleCommand(command);
       break;
 
@@ -163,9 +178,10 @@ EXAMPLES:
 /**
  * Handles status command with CLI context.
  */
-async function handleStatusCommandWithContext(): Promise<void> {
+async function handleStatusCommandWithContext(statusArgs: string[]): Promise<void> {
   try {
     const context = createCliApp();
+    context.args = statusArgs;
     const result = await handleStatusCommand(context);
     process.exit(result.exitCode);
   } catch (error) {
