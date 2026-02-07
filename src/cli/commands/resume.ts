@@ -7,7 +7,7 @@
 
 import type { CliContext, CliCommandResult } from '../types.js';
 import { StatePersistenceError } from '../../protocol/persistence.js';
-import { loadCliState, getDefaultStatePath, type CliStateSnapshot } from '../state.js';
+import { loadCliStateWithRecovery, getDefaultStatePath, type CliStateSnapshot } from '../state.js';
 import { loadLedger } from '../../ledger/persistence.js';
 import type { Decision } from '../../ledger/types.js';
 
@@ -233,7 +233,7 @@ export async function handleResumeCommand(context: CliContext): Promise<CliComma
   const statePath = getStatePath();
 
   try {
-    const snapshot = await loadCliState(statePath);
+    const snapshot = await loadCliStateWithRecovery(statePath);
 
     if (snapshot.resolvedQueries.length === 0) {
       console.error('Error: No blocked state to resume');

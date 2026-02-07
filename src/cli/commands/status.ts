@@ -6,13 +6,14 @@
  */
 
 import type { CliContext, CliCommandResult } from '../types.js';
-import { loadState, StatePersistenceError } from '../../protocol/persistence.js';
+import { StatePersistenceError } from '../../protocol/persistence.js';
 import type { ProtocolStateSnapshot } from '../../protocol/persistence.js';
 import type { ProtocolSubstate, BlockingSubstate } from '../../protocol/types.js';
 import { isActiveSubstate, isBlockingSubstate, isFailedSubstate } from '../../protocol/types.js';
 import type { BlockingRecord } from '../../protocol/blocking.js';
 import { loadLedger } from '../../ledger/persistence.js';
 import type { Decision, ConfidenceLevel } from '../../ledger/types.js';
+import { loadStateWithRecovery } from '../state.js';
 
 const DEFAULT_STATE_PATH = '.criticality-state.json';
 const DEFAULT_LEDGER_PATH = '.criticality/ledger';
@@ -451,7 +452,7 @@ export async function handleStatusCommand(context: CliContext): Promise<CliComma
   const statePath = getStatePath();
 
   try {
-    const snapshot = await loadState(statePath);
+    const snapshot = await loadStateWithRecovery(statePath);
 
     if (!watch) {
       await renderStatus(snapshot, options);
@@ -468,7 +469,7 @@ export async function handleStatusCommand(context: CliContext): Promise<CliComma
         }
 
         try {
-          const currentSnapshot = await loadState(statePath);
+          const currentSnapshot = await loadStateWithRecovery(statePath);
           console.clear();
           await renderStatusWithFooter(currentSnapshot, options);
         } catch (error) {

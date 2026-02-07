@@ -13,6 +13,8 @@ import {
   type ProtocolStateSnapshot,
 } from '../protocol/persistence.js';
 import type { BlockingRecord } from '../protocol/blocking.js';
+import { renameSync } from 'node:fs';
+import { stat } from 'node:fs/promises';
 
 /**
  * Extended protocol state snapshot with CLI-specific metadata.
@@ -244,4 +246,223 @@ function upgradeToCliState(snapshot: ProtocolStateSnapshot): CliStateSnapshot {
     lastActivity: now,
     resolvedQueries: [],
   };
+}
+
+/**
+ * Loads CLI state with corruption detection and recovery.
+ *
+ * Attempts to load CLI state and provides user-friendly error handling
+ * for corrupted state files, including offering recovery options.
+ *
+ * @param filePath - Path to the state JSON file.
+ * @param options - Options for recovery behavior.
+ * @returns The loaded CLI state snapshot.
+ * @throws StatePersistenceError if file cannot be read or corruption is unrecoverable.
+ */
+export async function loadCliStateWithRecovery(
+  filePath: string,
+  options?: {
+    /** Callback for prompting user input. Defaults to console-based prompting. */
+    promptUser?: (prompt: string) => Promise<string>;
+    /** Callback for displaying messages. Defaults to console.log. */
+    displayMessage?: (message: string) => void;
+    /** Callback for displaying errors. Defaults to console.error. */
+    displayError?: (message: string) => void;
+  }
+): Promise<CliStateSnapshot> {
+  const promptUser = options?.promptUser ?? defaultPromptUser;
+  const displayMessage = options?.displayMessage ?? console.log;
+  const displayError = options?.displayError ?? console.error;
+
+  try {
+    return await loadCliState(filePath);
+  } catch (error) {
+    if (!(error instanceof StatePersistenceError)) {
+      throw error;
+    }
+
+    const errorType = error.errorType;
+    const isCorruptableError =
+      errorType === 'parse_error' ||
+      errorType === 'schema_error' ||
+      errorType === 'validation_error' ||
+      errorType === 'corruption_error';
+
+    if (!isCorruptableError) {
+      throw error;
+    }
+
+    displayMessage('');
+    displayMessage(`State file corrupted: ${error.message}`);
+    displayMessage('');
+
+    try {
+      const fileStats = await stat(filePath);
+      const lastModified = new Date(fileStats.mtime).toLocaleString();
+      displayMessage(`File: ${filePath}`);
+      displayMessage(`Last modified: ${lastModified}`);
+    } catch {
+      displayMessage(`File: ${filePath}`);
+    }
+
+    displayMessage('');
+    displayError('The state file appears to be corrupted and cannot be loaded.');
+    displayMessage('');
+    const response = await promptUser(
+      'Reset state to initial? This will lose current progress. (y/n): '
+    );
+    const normalizedResponse = response.trim().toLowerCase();
+
+    if (normalizedResponse === 'y' || normalizedResponse === 'yes') {
+      try {
+        const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+        const backupPath = `${filePath}.backup-${timestamp}`;
+
+        renameSync(filePath, backupPath);
+        displayMessage(`Backup saved to: ${backupPath}`);
+        displayMessage('');
+      } catch (renameError) {
+        displayError(
+          `Warning: Could not backup corrupted file: ${renameError instanceof Error ? renameError.message : String(renameError)}`
+        );
+        displayMessage('Proceeding with reset anyway...');
+        displayMessage('');
+      }
+
+      const initialState = createInitialCliState();
+      await saveCliState(initialState, filePath);
+
+      displayMessage('State has been reset to initial values.');
+      return initialState;
+    }
+
+    displayMessage('State not modified. Please fix manually or backup and retry.');
+    throw new StatePersistenceError(
+      `State file corruption recovery declined by user: ${error.message}`,
+      errorType,
+      { cause: error.cause, details: error.details }
+    );
+  }
+}
+
+/**
+ * Default user prompt handler using console readline.
+ *
+ * @param prompt - The prompt text to display.
+ * @returns A promise resolving to the user's input.
+ */
+async function defaultPromptUser(prompt: string): Promise<string> {
+  const readline = await import('node:readline');
+  const rl = readline.createInterface({
+    input: process.stdin,
+    output: process.stdout,
+  });
+
+  return new Promise((resolve) => {
+    rl.question(prompt, (answer) => {
+      rl.close();
+      resolve(answer);
+    });
+  });
+}
+
+/**
+ * Loads protocol state with corruption detection and recovery.
+ *
+ * Attempts to load protocol state and provides user-friendly error handling
+ * for corrupted state files, including offering recovery options.
+ *
+ * @param filePath - Path to the state JSON file.
+ * @param options - Options for recovery behavior.
+ * @returns The loaded protocol state snapshot.
+ * @throws StatePersistenceError if file cannot be read or corruption is unrecoverable.
+ */
+export async function loadStateWithRecovery(
+  filePath: string,
+  options?: {
+    /** Callback for prompting user input. Defaults to console-based prompting. */
+    promptUser?: (prompt: string) => Promise<string>;
+    /** Callback for displaying messages. Defaults to console.log. */
+    displayMessage?: (message: string) => void;
+    /** Callback for displaying errors. Defaults to console.error. */
+    displayError?: (message: string) => void;
+  }
+): Promise<ProtocolStateSnapshot> {
+  const promptUser = options?.promptUser ?? defaultPromptUser;
+  const displayMessage = options?.displayMessage ?? console.log;
+  const displayError = options?.displayError ?? console.error;
+
+  try {
+    return await loadState(filePath);
+  } catch (error) {
+    if (!(error instanceof StatePersistenceError)) {
+      throw error;
+    }
+
+    const errorType = error.errorType;
+    const isCorruptableError =
+      errorType === 'parse_error' ||
+      errorType === 'schema_error' ||
+      errorType === 'validation_error' ||
+      errorType === 'corruption_error';
+
+    if (!isCorruptableError) {
+      throw error;
+    }
+
+    displayMessage('');
+    displayMessage(`State file corrupted: ${error.message}`);
+    displayMessage('');
+
+    try {
+      const fileStats = await stat(filePath);
+      const lastModified = new Date(fileStats.mtime).toLocaleString();
+      displayMessage(`File: ${filePath}`);
+      displayMessage(`Last modified: ${lastModified}`);
+    } catch {
+      displayMessage(`File: ${filePath}`);
+    }
+
+    displayMessage('');
+    displayError('The state file appears to be corrupted and cannot be loaded.');
+    displayMessage('');
+    const response = await promptUser(
+      'Reset state to initial? This will lose current progress. (y/n): '
+    );
+    const normalizedResponse = response.trim().toLowerCase();
+
+    if (normalizedResponse === 'y' || normalizedResponse === 'yes') {
+      try {
+        const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+        const backupPath = `${filePath}.backup-${timestamp}`;
+
+        renameSync(filePath, backupPath);
+        displayMessage(`Backup saved to: ${backupPath}`);
+        displayMessage('');
+      } catch (renameError) {
+        displayError(
+          `Warning: Could not backup corrupted file: ${renameError instanceof Error ? renameError.message : String(renameError)}`
+        );
+        displayMessage('Proceeding with reset anyway...');
+        displayMessage('');
+      }
+
+      const initialState = createInitialCliState();
+      await saveCliState(initialState, filePath);
+
+      displayMessage('State has been reset to initial values.');
+      return {
+        state: initialState.state,
+        artifacts: initialState.artifacts,
+        blockingQueries: initialState.blockingQueries,
+      };
+    }
+
+    displayMessage('State not modified. Please fix manually or backup and retry.');
+    throw new StatePersistenceError(
+      `State file corruption recovery declined by user: ${error.message}`,
+      errorType,
+      { cause: error.cause, details: error.details }
+    );
+  }
 }

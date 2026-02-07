@@ -11,7 +11,7 @@ import type { BlockingRecord } from '../../protocol/blocking.js';
 import { resolveBlocking } from '../../protocol/blocking.js';
 import { Ledger } from '../../ledger/index.js';
 import {
-  loadCliState,
+  loadCliStateWithRecovery,
   saveCliState,
   updateStateAfterResolution,
   getDefaultStatePath,
@@ -646,7 +646,7 @@ export async function handleResolveCommand(context: CliContext): Promise<CliComm
   const statePath = getStatePath();
 
   try {
-    const snapshot = await loadCliState(statePath);
+    const snapshot = await loadCliStateWithRecovery(statePath);
     const pendingQueries = snapshot.blockingQueries.filter((q) => !q.resolved);
 
     if (pendingQueries.length === 0) {
