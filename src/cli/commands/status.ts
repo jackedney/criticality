@@ -9,7 +9,12 @@ import type { CliContext, CliCommandResult } from '../types.js';
 import { StatePersistenceError } from '../../protocol/persistence.js';
 import type { ProtocolStateSnapshot } from '../../protocol/persistence.js';
 import type { ProtocolSubstate, BlockingSubstate } from '../../protocol/types.js';
-import { isActiveSubstate, isBlockingSubstate, isFailedSubstate } from '../../protocol/types.js';
+import {
+  isActiveSubstate,
+  isBlockingSubstate,
+  isFailedSubstate,
+  PROTOCOL_PHASES,
+} from '../../protocol/types.js';
 import type { BlockingRecord } from '../../protocol/blocking.js';
 import { loadLedger } from '../../ledger/persistence.js';
 import type { Decision } from '../../ledger/types.js';
@@ -238,17 +243,14 @@ async function renderStatus(
     statusText = 'Protocol Complete';
     additionalInfo = `Artifacts: ${snapshot.artifacts.join(', ') || 'None'}`;
   } else if (isActiveSubstate(snapshot.state.substate)) {
-    const phaseIndex = [
-      'Ignition',
-      'Lattice',
-      'CompositionAudit',
-      'Injection',
-      'Mesoscopic',
-      'MassDefect',
-    ].indexOf(snapshot.state.phase);
-    const totalPhases = 6;
-    const progress = ((phaseIndex + 1) / totalPhases) * 100;
-    additionalInfo = `Progress: ${String(Math.round(progress))}% (${String(phaseIndex + 1)}/${String(totalPhases)})`;
+    const phaseIndex = PROTOCOL_PHASES.indexOf(snapshot.state.phase);
+    if (phaseIndex >= 0) {
+      const totalPhases = PROTOCOL_PHASES.length - 1;
+      const progress = ((phaseIndex + 1) / totalPhases) * 100;
+      additionalInfo = `Progress: ${String(Math.round(progress))}% (${String(phaseIndex + 1)}/${String(totalPhases)})`;
+    } else {
+      additionalInfo = 'Unknown phase';
+    }
   } else if (isBlockingSubstate(snapshot.state.substate)) {
     additionalInfo = `Blocking Query: ${snapshot.state.substate.query}`;
   } else if (isFailedSubstate(snapshot.state.substate)) {
