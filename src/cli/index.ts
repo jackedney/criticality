@@ -9,6 +9,7 @@
 /* eslint-disable no-console */
 import { createCliApp } from './app.js';
 import { handleStatusCommand } from './commands/status.js';
+import { handleResolveCommand } from './commands/resolve.js';
 
 /**
  * Displays usage information.
@@ -114,7 +115,7 @@ async function main(): Promise<void> {
         showHelpForCommand('resolve');
         process.exit(0);
       }
-      handleCommand(command);
+      await handleResolveCommandWithContext(commandArgs);
       break;
 
     default:
@@ -183,6 +184,24 @@ async function handleStatusCommandWithContext(statusArgs: string[]): Promise<voi
     const context = createCliApp();
     context.args = statusArgs;
     const result = await handleStatusCommand(context);
+    process.exit(result.exitCode);
+  } catch (error) {
+    if (error instanceof Error) {
+      console.error(`Error: ${error.message}`);
+      process.exit(1);
+    }
+    process.exit(1);
+  }
+}
+
+/**
+ * Handles resolve command with CLI context.
+ */
+async function handleResolveCommandWithContext(resolveArgs: string[]): Promise<void> {
+  try {
+    const context = createCliApp();
+    context.args = resolveArgs;
+    const result = await handleResolveCommand(context);
     process.exit(result.exitCode);
   } catch (error) {
     if (error instanceof Error) {
