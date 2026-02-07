@@ -7,7 +7,7 @@
  * @packageDocumentation
  */
 
-import { SourceFile, SyntaxKind } from 'ts-morph';
+import { Project, SourceFile, SyntaxKind } from 'ts-morph';
 import type { ModelRouter } from '../router/types.js';
 import type {
   TransformationCatalog,
@@ -402,11 +402,11 @@ async function attemptTransformation(
     return false;
   }
 
-  await updateSourceFile(state, transformationResult.transformedCode);
+  updateSourceFile(state, transformationResult.transformedCode);
 
   const func = state.sourceFile.getFunctions().find((f) => f.getName() === state.functionName);
   if (!func) {
-    await revertSourceFile(state, beforeCode);
+    revertSourceFile(state, beforeCode);
     state.attempts.push(attempt);
     return false;
   }
@@ -429,7 +429,7 @@ async function attemptTransformation(
   attempt.verification = verificationResult;
 
   if (!verificationResult.passed) {
-    await revertSourceFile(state, beforeCode);
+    revertSourceFile(state, beforeCode);
     state.attempts.push(attempt);
     return false;
   }
@@ -444,7 +444,7 @@ async function attemptTransformation(
 /**
  * Updates the source file with transformed code.
  */
-async function updateSourceFile(state: FunctionIterationState, newCode: string): Promise<void> {
+function updateSourceFile(state: FunctionIterationState, newCode: string): void {
   const func = state.sourceFile.getFunctions().find((f) => f.getName() === state.functionName);
 
   if (!func) {
@@ -456,7 +456,6 @@ async function updateSourceFile(state: FunctionIterationState, newCode: string):
     return;
   }
 
-  const { Project } = await import('ts-morph');
   const project = new Project({ useInMemoryFileSystem: true });
   const tempSourceFile = project.createSourceFile('temp.ts', newCode);
   const tempFunc = tempSourceFile.getFunctions()[0];
@@ -470,10 +469,7 @@ async function updateSourceFile(state: FunctionIterationState, newCode: string):
 /**
  * Reverts the source file to original code.
  */
-async function revertSourceFile(
-  state: FunctionIterationState,
-  originalCode: string
-): Promise<void> {
+function revertSourceFile(state: FunctionIterationState, originalCode: string): void {
   const func = state.sourceFile.getFunctions().find((f) => f.getName() === state.functionName);
 
   if (!func) {
@@ -485,7 +481,6 @@ async function revertSourceFile(
     return;
   }
 
-  const { Project } = await import('ts-morph');
   const project = new Project({ useInMemoryFileSystem: true });
   const tempSourceFile = project.createSourceFile('temp.ts', originalCode);
   const tempFunc = tempSourceFile.getFunctions()[0];

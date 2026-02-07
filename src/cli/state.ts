@@ -16,6 +16,7 @@ import type { BlockingRecord } from '../protocol/blocking.js';
 import { renameSync } from 'node:fs';
 import { stat, writeFile, rename, unlink } from 'node:fs/promises';
 import path from 'node:path';
+import readline from 'node:readline';
 
 /**
  * Extended protocol state snapshot with CLI-specific metadata.
@@ -400,7 +401,6 @@ export async function withRecovery<T>(
  * @returns A promise resolving to the user's input.
  */
 async function defaultPromptUser(prompt: string): Promise<string> {
-  const readline = await import('node:readline');
   const rl = readline.createInterface({
     input: process.stdin,
     output: process.stdout,

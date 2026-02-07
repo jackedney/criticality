@@ -18,6 +18,7 @@ import {
   type CliStateSnapshot,
 } from '../state.js';
 import { wrapInBox } from '../utils/displayUtils.js';
+import readline from 'node:readline';
 
 interface ResolveDisplayOptions {
   colors: boolean;
@@ -42,12 +43,9 @@ interface InputReader {
 /**
  * Creates a readline-based input reader.
  *
- * @returns A Promise resolving to an InputReader using Node's readline.
+ * @returns An InputReader using Node's readline.
  */
-async function createInputReader(): Promise<InputReader> {
-  // Use dynamic import to avoid issues in test environments
-  const readline = await import('node:readline');
-
+function createInputReader(): InputReader {
   const rl = readline.createInterface({
     input: process.stdin,
     output: process.stdout,
@@ -356,7 +354,7 @@ async function promptForSelectionWithArrows(
   const dimCode = displayOptions.colors ? '\x1b[2m' : '';
   const resetCode = displayOptions.colors ? '\x1b[0m' : '';
 
-  const reader = await createInputReader();
+  const reader = createInputReader();
 
   try {
     for (;;) {
@@ -389,7 +387,7 @@ async function promptForSelectionWithArrows(
                 `You selected: ${yellowCode}${selectedOption}${confirmReset}. Confirm? (y/n)`
               );
 
-              const confirmReader = await createInputReader();
+              const confirmReader = createInputReader();
               try {
                 const confirmation = await confirmReader.readLine('> ');
                 const confirmationLower = confirmation.trim().toLowerCase();
@@ -437,7 +435,7 @@ async function promptForSelectionWithArrows(
               `You selected: ${yellowCode}${selectedOption}${confirmReset}. Confirm? (y/n)`
             );
 
-            const confirmReader = await createInputReader();
+            const confirmReader = createInputReader();
             try {
               const confirmation = await confirmReader.readLine('> ');
               const confirmationLower = confirmation.trim().toLowerCase();
@@ -550,7 +548,7 @@ async function promptForClarification(
     }
 
     console.log(`You entered: ${clarification}`);
-    const confirmReader = await createInputReader();
+    const confirmReader = createInputReader();
     try {
       const confirmation = await confirmReader.readLine('Confirm this explanation? (y/n) > ');
       const confirmationLower = confirmation.trim().toLowerCase();
@@ -597,7 +595,7 @@ export async function handleResolveCommand(context: CliContext): Promise<CliComm
 
     renderQueries(snapshot, options);
 
-    const reader = await createInputReader();
+    const reader = createInputReader();
 
     try {
       for (const query of pendingQueries) {

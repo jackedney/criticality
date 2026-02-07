@@ -28,6 +28,7 @@ import {
   interviewStateExists,
   InterviewPersistenceError,
 } from './persistence.js';
+import readline from 'node:readline';
 import {
   REQUIRED_PHASES,
   DELEGABLE_PHASES,
@@ -1309,12 +1310,9 @@ export class InterviewCli {
 /**
  * Creates a readline-based input reader.
  *
- * @returns A Promise resolving to an InputReader using Node's readline.
+ * @returns An InputReader using Node's readline.
  */
-export async function createReadlineReader(): Promise<InputReader> {
-  // Use dynamic import to avoid issues in test environments
-  const readline = await import('node:readline');
-
+export function createReadlineReader(): InputReader {
   const rl = readline.createInterface({
     input: process.stdin,
     output: process.stdout,
