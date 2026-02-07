@@ -16,14 +16,15 @@ import {
 import { loadLedger } from '../../ledger/persistence.js';
 import type { Decision } from '../../ledger/types.js';
 import { formatRelativeTime, formatConfidence, wrapInBox } from '../utils/displayUtils.js';
-import type { ProtocolPhase } from '../../protocol/types.js';
 import {
   createOrchestrator,
-  type ExternalOperations,
   type TickResult,
   type TickStopReason,
 } from '../../protocol/orchestrator.js';
 import { Spinner } from '../components/Spinner.js';
+import { createCliOperations, type OperationTelemetry } from '../operations.js';
+import { existsSync, readFileSync } from 'node:fs';
+import { parseConfig } from '../../config/index.js';
 
 interface ResumeDisplayOptions {
   colors: boolean;
@@ -31,25 +32,36 @@ interface ResumeDisplayOptions {
 }
 
 /**
- * Mock ExternalOperations implementation for CLI context.
- * TODO: Replace with real implementation in US-023.
+ * Loads configuration from criticality.toml.
+ *
+ * @returns The loaded configuration or defaults.
  */
-const mockOperations: ExternalOperations = {
-  executeModelCall(_phase: ProtocolPhase) {
-    return Promise.resolve({ success: true });
-  },
-  runCompilation() {
-    return Promise.resolve({ success: true });
-  },
-  runTests() {
-    return Promise.resolve({ success: true });
-  },
-  archivePhaseArtifacts(_phase: ProtocolPhase) {
-    return Promise.resolve({ success: true });
-  },
-  sendBlockingNotification(_query: string) {
-    return Promise.resolve();
-  },
+function loadCliConfig(): ReturnType<(typeof import('../../config/index.js'))['parseConfig']> {
+  const configFilePath = 'criticality.toml';
+
+  if (existsSync(configFilePath)) {
+    try {
+      const tomlContent = readFileSync(configFilePath, 'utf-8');
+      return parseConfig(tomlContent);
+    } catch (error) {
+      console.warn(
+        `Warning: Failed to load config from ${configFilePath}: ${error instanceof Error ? error.message : String(error)}`
+      );
+      console.warn('Using default CLI settings.');
+    }
+  }
+
+  return parseConfig('');
+}
+
+/**
+ * Telemetry state for tracking operations.
+ */
+let telemetry: OperationTelemetry = {
+  modelCalls: 0,
+  promptTokens: 0,
+  completionTokens: 0,
+  executionTimeMs: 0,
 };
 
 /**
@@ -180,6 +192,14 @@ function displayExecutionSummary(
   console.log(`  Ticks executed: ${String(tickCount)}`);
   console.log(`  Time elapsed: ${elapsedSec}s`);
   console.log(`  Current phase: ${snapshot.state.phase}`);
+  if (telemetry.modelCalls > 0) {
+    console.log();
+    console.log(`${boldCode}Telemetry${resetCode}`);
+    console.log(`  Model calls: ${String(telemetry.modelCalls)}`);
+    console.log(`  Prompt tokens: ${String(telemetry.promptTokens)}`);
+    console.log(`  Completion tokens: ${String(telemetry.completionTokens)}`);
+    console.log(`  Total tokens: ${String(telemetry.promptTokens + telemetry.completionTokens)}`);
+  }
 
   const { substate } = snapshot.state;
   if (substate.kind === 'Blocking') {
@@ -233,10 +253,19 @@ export async function handleResumeCommand(context: CliContext): Promise<CliComma
 
     await displayResumeSummary(snapshot, statePath, options);
 
-    // Create orchestrator with mock operations
+    const config = loadCliConfig();
+
+    const operations = await createCliOperations({
+      config,
+      statePath,
+      onTelemetryUpdate: (newTelemetry) => {
+        telemetry = newTelemetry;
+      },
+    });
+
     const orchestrator = await createOrchestrator({
       statePath,
-      operations: mockOperations,
+      operations,
     });
 
     // Create and start spinner
