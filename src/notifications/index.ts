@@ -19,3 +19,5 @@ export type {
 } from './types.js';
 
 export { NOTIFICATION_EVENTS } from './types.js';
+
+export { parseCronExpression, isValidCronExpression, getNextOccurrence } from './cron.js';
