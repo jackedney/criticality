@@ -26,6 +26,10 @@ interface ResolveDisplayOptions {
 interface InputReader {
   /** Read a line of input. */
   readLine(prompt: string): Promise<string>;
+  /** Read a single key press for interactive selection. */
+  readKey(): Promise<string>;
+  /** Set raw mode for key-by-key input. */
+  setRawMode(enable: boolean): void;
   /** Close the reader. */
   close(): void;
 }
@@ -51,6 +55,33 @@ async function createInputReader(): Promise<InputReader> {
           resolve(answer);
         });
       });
+    },
+    readKey(): Promise<string> {
+      return new Promise((resolve) => {
+        process.stdin.resume();
+        process.stdin.setRawMode(true);
+
+        const onData = (buffer: Buffer): void => {
+          process.stdin.setRawMode(false);
+          process.stdin.pause();
+          process.stdin.off('data', onData);
+
+          const key = buffer.toString('utf-8');
+          resolve(key);
+        };
+
+        process.stdin.on('data', onData);
+      });
+    },
+    setRawMode(enable: boolean): void {
+      if (process.stdin.isRaw !== enable) {
+        process.stdin.setRawMode(enable);
+        if (enable) {
+          process.stdin.resume();
+        } else {
+          process.stdin.pause();
+        }
+      }
     },
     close(): void {
       rl.close();
@@ -201,76 +232,234 @@ function renderQueries(snapshot: ProtocolStateSnapshot, options: ResolveDisplayO
     }
 
     console.log();
-    console.log(`${dimCode}Use arrow keys or type option number to select${resetCode}`);
+    console.log(
+      `${dimCode}Use arrow keys to navigate, Enter to select, or type a number${resetCode}`
+    );
   }
 }
 
 /**
- * Prompts user to select an option for a blocking query.
+ * Formats options with highlighted selection.
+ *
+ * @param options - The options to format.
+ * @param selectedIndex - The index of currently selected option.
+ * @param colors - Whether to use colors.
+ * @returns The formatted options text.
+ */
+function formatOptionsWithSelection(
+  options: readonly string[],
+  selectedIndex: number,
+  colors: boolean
+): string[] {
+  const result: string[] = [];
+  const inverseCode = colors ? '\x1b[7m' : '';
+  const resetCode = colors ? '\x1b[0m' : '';
+  const yellowCode = colors ? '\x1b[33m' : '';
+
+  for (let i = 0; i < options.length; i++) {
+    const option = options[i];
+    if (option === undefined) {
+      continue;
+    }
+
+    const number = String(i + 1);
+    const letter = String.fromCharCode(97 + i);
+    const isSelected = i === selectedIndex;
+
+    if (isSelected) {
+      result.push(
+        `${inverseCode}> ${yellowCode}${number}.${resetCode} ${inverseCode}${letter}) ${option}${resetCode}`
+      );
+    } else {
+      result.push(`  ${yellowCode}${number}.${resetCode} ${letter}) ${option}`);
+    }
+  }
+
+  return result;
+}
+
+/**
+ * Clears current line and moves cursor up.
+ *
+ * @param lines - Number of lines to clear.
+ */
+function clearLines(lines: number): void {
+  for (let i = 0; i < lines; i++) {
+    process.stdout.write('\x1b[1A\x1b[2K');
+  }
+}
+
+/**
+ * Prompts user to select an option using interactive arrow-key navigation.
  *
  * @param query - The blocking query to select an option for.
- * @param reader - Input reader for getting user input.
- * @param options - Display options.
+ * @param displayOptions - Display options.
  * @returns The selected option, or undefined if user cancelled.
  */
-async function promptForSelection(
+async function promptForSelectionWithArrows(
   query: BlockingRecord,
-  reader: InputReader,
-  options: ResolveDisplayOptions
+  displayOptions: ResolveDisplayOptions
 ): Promise<string | undefined> {
-  const yellowCode = options.colors ? '\x1b[33m' : '';
-  const resetCode = options.colors ? '\x1b[0m' : '';
-
   if (!query.options || query.options.length === 0) {
     console.error('No options available for this query.');
     return undefined;
   }
 
-  const optionCount = query.options.length;
+  const optionList = query.options as string[];
+  let selectedIndex = 0;
+  let numericInput = '';
+  let lastRenderedOptions = formatOptionsWithSelection(
+    optionList,
+    selectedIndex,
+    displayOptions.colors
+  );
+  let renderedLineCount = lastRenderedOptions.length;
 
-  for (;;) {
-    const input = await reader.readLine(`Select option (1-${String(optionCount)}): `);
-    const trimmedInput = input.trim();
+  const dimCode = displayOptions.colors ? '\x1b[2m' : '';
+  const resetCode = displayOptions.colors ? '\x1b[0m' : '';
 
-    if (trimmedInput === '') {
-      console.log('Please enter an option number.');
-      continue;
+  const reader = await createInputReader();
+
+  try {
+    for (;;) {
+      if (numericInput === '') {
+        process.stdout.write('\n');
+        for (const line of lastRenderedOptions) {
+          process.stdout.write(line + '\n');
+        }
+        process.stdout.write(
+          `\n${dimCode}> Selected: ${optionList[selectedIndex] ?? ''}${resetCode}\n`
+        );
+        process.stdout.write(
+          `${dimCode}Use arrow keys to navigate, Enter to select, or type a number${resetCode}\n`
+        );
+
+        renderedLineCount = lastRenderedOptions.length + 3;
+      }
+
+      const key = await reader.readKey();
+
+      if (key === '\x0d' || key === '\n') {
+        if (numericInput !== '') {
+          const selection = parseInt(numericInput, 10);
+          if (!isNaN(selection) && selection >= 1 && selection <= optionList.length) {
+            const selectedOption = optionList[selection - 1];
+            if (selectedOption !== undefined) {
+              const yellowCode = displayOptions.colors ? '\x1b[33m' : '';
+              const confirmReset = displayOptions.colors ? '\x1b[0m' : '';
+              console.log(
+                `You selected: ${yellowCode}${selectedOption}${confirmReset}. Confirm? (y/n)`
+              );
+
+              const confirmReader = await createInputReader();
+              try {
+                const confirmation = await confirmReader.readLine('> ');
+                const confirmationLower = confirmation.trim().toLowerCase();
+
+                if (confirmationLower === 'y' || confirmationLower === 'yes') {
+                  confirmReader.close();
+                  return selectedOption;
+                } else if (confirmationLower === 'n' || confirmationLower === 'no') {
+                  console.log('Selection cancelled.');
+                  numericInput = '';
+                  clearLines(renderedLineCount);
+                  continue;
+                } else {
+                  console.log('Please enter y or n.');
+                  numericInput = '';
+                  clearLines(renderedLineCount);
+                  continue;
+                }
+              } finally {
+                confirmReader.close();
+              }
+            }
+          } else {
+            console.log(`Invalid option. Please enter 1-${String(optionList.length)}.`);
+            numericInput = '';
+            clearLines(renderedLineCount);
+            continue;
+          }
+        } else {
+          const selectedOption = optionList[selectedIndex];
+          if (selectedOption !== undefined) {
+            const yellowCode = displayOptions.colors ? '\x1b[33m' : '';
+            const confirmReset = displayOptions.colors ? '\x1b[0m' : '';
+            console.log(
+              `You selected: ${yellowCode}${selectedOption}${confirmReset}. Confirm? (y/n)`
+            );
+
+            const confirmReader = await createInputReader();
+            try {
+              const confirmation = await confirmReader.readLine('> ');
+              const confirmationLower = confirmation.trim().toLowerCase();
+
+              if (confirmationLower === 'y' || confirmationLower === 'yes') {
+                confirmReader.close();
+                return selectedOption;
+              } else if (confirmationLower === 'n' || confirmationLower === 'no') {
+                console.log('Selection cancelled.');
+                clearLines(renderedLineCount);
+                continue;
+              } else {
+                console.log('Please enter y or n.');
+                clearLines(renderedLineCount);
+                continue;
+              }
+            } finally {
+              confirmReader.close();
+            }
+          } else {
+            console.log('Please select an option using arrow keys or type a number.');
+            continue;
+          }
+        }
+      } else if (key === '\x1b[A' || key === '\x1b[B' || key === 'k' || key === 'j') {
+        if (key === '\x1b[A' || key === 'k') {
+          selectedIndex = selectedIndex > 0 ? selectedIndex - 1 : optionList.length - 1;
+        } else {
+          selectedIndex = selectedIndex < optionList.length - 1 ? selectedIndex + 1 : 0;
+        }
+
+        clearLines(renderedLineCount);
+        lastRenderedOptions = formatOptionsWithSelection(
+          optionList,
+          selectedIndex,
+          displayOptions.colors
+        );
+        renderedLineCount = lastRenderedOptions.length + 3;
+      } else if (key === '\x03') {
+        console.log('\nSelection cancelled.');
+        return undefined;
+      } else if (/^[1-9]$/.test(key)) {
+        if (numericInput.length < 3) {
+          numericInput += key;
+
+          const displayValue = numericInput;
+          clearLines(renderedLineCount);
+          process.stdout.write(`\nSelection: ${displayValue}\n`);
+          process.stdout.write(
+            `${dimCode}Press Enter to confirm ${displayValue}, Esc to cancel${resetCode}\n`
+          );
+        }
+      } else if (key === '\x1b' || key === '\x1b\x1b') {
+        if (numericInput !== '') {
+          numericInput = '';
+          clearLines(renderedLineCount);
+        }
+      } else if (key === '\x7f' || key === '\x08') {
+        if (numericInput.length > 0) {
+          numericInput = numericInput.slice(0, -1);
+          clearLines(renderedLineCount);
+          process.stdout.write(`\nSelection: ${numericInput || '_'}\n`);
+          process.stdout.write(
+            `${dimCode}Press Enter to confirm ${numericInput || 'selection'}, Esc to cancel${resetCode}\n`
+          );
+        }
+      }
     }
-
-    const selection = parseInt(trimmedInput, 10);
-
-    if (isNaN(selection)) {
-      console.log('Please enter a valid number.');
-      continue;
-    }
-
-    if (selection < 1 || selection > optionCount) {
-      console.log(`Invalid option. Please enter 1-${String(optionCount)}.`);
-      continue;
-    }
-
-    const selectedIndex = selection - 1;
-    const selectedOption = query.options[selectedIndex];
-
-    if (selectedOption === undefined) {
-      console.log(`Invalid option. Please enter 1-${String(optionCount)}.`);
-      continue;
-    }
-
-    console.log(`You selected: ${yellowCode}${selectedOption}${resetCode}. Confirm? (y/n)`);
-
-    const confirmationInput = await reader.readLine('> ');
-    const confirmation = confirmationInput.trim().toLowerCase();
-
-    if (confirmation === 'y' || confirmation === 'yes') {
-      return selectedOption;
-    } else if (confirmation === 'n' || confirmation === 'no') {
-      console.log('Selection cancelled. Please try again.');
-      continue;
-    } else {
-      console.log('Please enter y or n.');
-      continue;
-    }
+  } finally {
+    reader.close();
   }
 }
 
@@ -303,7 +492,7 @@ export async function handleResolveCommand(context: CliContext): Promise<CliComm
 
     try {
       for (const query of pendingQueries) {
-        const selectedOption = await promptForSelection(query, reader, options);
+        const selectedOption = await promptForSelectionWithArrows(query, options);
 
         if (selectedOption === undefined) {
           console.log('Selection cancelled.');
