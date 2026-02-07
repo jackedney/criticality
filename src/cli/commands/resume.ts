@@ -6,7 +6,7 @@
  */
 
 import type { CliContext, CliCommandResult } from '../types.js';
-import { StatePersistenceError } from '../../protocol/persistence.js';
+import { StatePersistenceError, type ProtocolStateSnapshot } from '../../protocol/persistence.js';
 import {
   loadCliStateWithRecovery,
   getDefaultStatePath,
@@ -16,11 +16,41 @@ import {
 import { loadLedger } from '../../ledger/persistence.js';
 import type { Decision } from '../../ledger/types.js';
 import { formatRelativeTime, formatConfidence, wrapInBox } from '../utils/displayUtils.js';
+import type { ProtocolPhase } from '../../protocol/types.js';
+import {
+  createOrchestrator,
+  type ExternalOperations,
+  type TickResult,
+  type TickStopReason,
+} from '../../protocol/orchestrator.js';
+import { Spinner } from '../components/Spinner.js';
 
 interface ResumeDisplayOptions {
   colors: boolean;
   unicode: boolean;
 }
+
+/**
+ * Mock ExternalOperations implementation for CLI context.
+ * TODO: Replace with real implementation in US-023.
+ */
+const mockOperations: ExternalOperations = {
+  executeModelCall(_phase: ProtocolPhase) {
+    return Promise.resolve({ success: true });
+  },
+  runCompilation() {
+    return Promise.resolve({ success: true });
+  },
+  runTests() {
+    return Promise.resolve({ success: true });
+  },
+  archivePhaseArtifacts(_phase: ProtocolPhase) {
+    return Promise.resolve({ success: true });
+  },
+  sendBlockingNotification(_query: string) {
+    return Promise.resolve();
+  },
+};
 
 /**
  * Gets the state file path.
@@ -122,13 +152,66 @@ async function displayResumeSummary(
 }
 
 /**
- * Handles the resume command.
+ * Displays execution summary after tick loop completion.
+ *
+ * @param tickCount - Number of ticks executed.
+ * @param stopReason - Reason for stopping.
+ * @param snapshot - Final state snapshot.
+ * @param startTime - When execution started.
+ * @param options - Display options.
+ */
+function displayExecutionSummary(
+  tickCount: number,
+  stopReason: TickStopReason,
+  snapshot: ProtocolStateSnapshot,
+  startTime: number,
+  options: ResumeDisplayOptions
+): void {
+  const elapsed = Date.now() - startTime;
+  const elapsedSec = (elapsed / 1000).toFixed(1);
+  const boldCode = options.colors ? '\x1b[1m' : '';
+  const resetCode = options.colors ? '\x1b[0m' : '';
+  const yellowCode = options.colors ? '\x1b[33m' : '';
+  const greenCode = options.colors ? '\x1b[32m' : '';
+  const redCode = options.colors ? '\x1b[31m' : '';
+
+  console.log();
+  console.log(`${boldCode}Execution Summary${resetCode}`);
+  console.log(`  Ticks executed: ${String(tickCount)}`);
+  console.log(`  Time elapsed: ${elapsedSec}s`);
+  console.log(`  Current phase: ${snapshot.state.phase}`);
+
+  const { substate } = snapshot.state;
+  if (substate.kind === 'Blocking') {
+    console.log(`  ${yellowCode}Status: Blocked${resetCode}`);
+    console.log(
+      `  Query: ${substate.query.substring(0, 60)}${substate.query.length > 60 ? '...' : ''}`
+    );
+    console.log();
+    console.log(`Run ${greenCode}crit resolve${resetCode} to continue.`);
+  } else if (substate.kind === 'Failed') {
+    console.log(`  ${redCode}Status: Failed${resetCode}`);
+    console.log(`  Error: ${substate.error}`);
+    if (substate.recoverable) {
+      console.log();
+      console.log(`${yellowCode}This error is recoverable.${resetCode}`);
+    }
+  } else if (stopReason === 'COMPLETE') {
+    console.log(`  ${greenCode}Status: Complete${resetCode}`);
+    console.log(`  Protocol execution finished successfully.`);
+  } else {
+    console.log(`  Status: ${stopReason}`);
+  }
+}
+
+/**
+ * Handles resume command.
  *
  * Checks for blocked state with resolved queries, displays decision summary,
  * and triggers protocol orchestrator to continue execution.
  *
  * @param context - The CLI context.
- * @returns A promise resolving to the command result.
+ * @returns A promise resolving to command result.
  */
 export async function handleResumeCommand(context: CliContext): Promise<CliCommandResult> {
   const options: ResumeDisplayOptions = {
@@ -137,6 +220,8 @@ export async function handleResumeCommand(context: CliContext): Promise<CliComma
   };
 
   const statePath = getStatePath();
+  const startTime = Date.now();
+  let gracefulShutdown = false;
 
   try {
     const snapshot = await loadCliStateWithRecovery(statePath);
@@ -148,17 +233,105 @@ export async function handleResumeCommand(context: CliContext): Promise<CliComma
 
     await displayResumeSummary(snapshot, statePath, options);
 
-    const { state } = snapshot;
+    // Create orchestrator with mock operations
+    const orchestrator = await createOrchestrator({
+      statePath,
+      operations: mockOperations,
+    });
 
-    const boldCode = options.colors ? '\x1b[1m' : '';
-    const resetCode = options.colors ? '\x1b[0m' : '';
-    const dimCode = options.colors ? '\x1b[2m' : '';
+    // Create and start spinner
+    const spinner = new Spinner({
+      colors: options.colors,
+      unicode: options.unicode,
+      interval: 100,
+    });
 
-    console.log();
-    console.log(
-      `${dimCode}Note: Protocol execution will continue from the ${boldCode}${state.phase}${resetCode} phase.${resetCode}`
+    spinner.update(
+      orchestrator.state.snapshot.state.phase,
+      orchestrator.state.snapshot.state.substate
     );
-    console.log(`${dimCode}Use 'crit status' to monitor progress.${resetCode}`);
+    spinner.start();
+
+    // Set up SIGINT handler for graceful shutdown
+    const sigintHandler = (): void => {
+      if (gracefulShutdown) {
+        // Second Ctrl+C: force exit
+        console.log('\nForce quitting...');
+        process.exit(1);
+      }
+
+      gracefulShutdown = true;
+      spinner.stop('Stopping after current operation...');
+      console.log('Stopping... (Ctrl+C again to force quit)');
+    };
+
+    process.on('SIGINT', sigintHandler);
+
+    // Execute tick loop
+    let result: TickResult = await orchestrator.tick();
+    let tickCount = 0;
+    let shouldContinueLoop = true;
+
+    do {
+      tickCount++;
+
+      // Update spinner with new phase/substate
+      spinner.update(result.snapshot.state.phase, result.snapshot.state.substate);
+
+      // Check for graceful shutdown after processing tick
+      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition
+      if (gracefulShutdown) {
+        // Stop after current tick
+        shouldContinueLoop = false;
+        spinner.stop('Interrupted by user');
+        console.log();
+        displayExecutionSummary(
+          tickCount,
+          'EXTERNAL_ERROR',
+          orchestrator.state.snapshot,
+          startTime,
+          options
+        );
+        console.log();
+        console.log('State saved successfully.');
+        return { exitCode: 0 };
+      }
+
+      // Stop if tick loop should not continue
+
+      if (!result.shouldContinue) {
+        shouldContinueLoop = false;
+      }
+
+      if (shouldContinueLoop) {
+        result = await orchestrator.tick();
+      }
+    } while (shouldContinueLoop);
+
+    // Clean up
+    process.removeListener('SIGINT', sigintHandler);
+    spinner.stop();
+
+    // Display execution summary
+    displayExecutionSummary(
+      tickCount,
+      result.stopReason ?? 'EXTERNAL_ERROR',
+      result.snapshot,
+      startTime,
+      options
+    );
+
+    // Handle error states
+    if (result.stopReason === 'FAILED' && result.error !== undefined) {
+      const yellowCode = options.colors ? '\x1b[33m' : '';
+      const resetCode = options.colors ? '\x1b[0m' : '';
+      console.log();
+      console.log(`${yellowCode}Suggestions:${resetCode}`);
+      console.log('  1. Check the error details above');
+      console.log('  2. Review recent changes that may have caused the issue');
+      console.log('  3. Run "crit status" for more information');
+      return { exitCode: 1, message: result.error };
+    }
 
     return { exitCode: 0 };
   } catch (error) {

@@ -107,8 +107,9 @@ export class Spinner {
       const query = substate.query;
       return `blocked: ${query.substring(0, 30)}${query.length > 30 ? '...' : ''}`;
     }
-    const error = substate.error;
+    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition
     if (kind === 'Failed') {
+      const error = substate.error;
       return `failed: ${error.substring(0, 30)}${error.length > 30 ? '...' : ''}`;
     }
     return kind;
