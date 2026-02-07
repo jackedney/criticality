@@ -409,12 +409,13 @@ async function attemptTransformation(
     return false;
   }
 
-  const func = state.sourceFile.getFunctions().find((f) => f.getName() === state.functionName);
+  const func = state.sourceFile
+    .getFunctions()
+    .find((f) => f.getStartLineNumber() === state.functionStartLine);
   if (!func) {
-    const revertSuccess = revertSourceFile(state, beforeCode);
-    if (!revertSuccess) {
-      attempt.error = 'Failed to revert source file after function not found';
-    }
+    attempt.success = false;
+    attempt.error = `Function '${state.functionName}' not found after transformation`;
+    revertSourceFile(state, beforeCode);
     state.attempts.push(attempt);
     return false;
   }
@@ -455,10 +456,14 @@ async function attemptTransformation(
 /**
  * Updates the source file with transformed code.
  *
+ * Uses start line number to disambiguate functions with the same name.
+ *
  * @returns True if the update succeeded, false otherwise.
  */
 function updateSourceFile(state: FunctionIterationState, newCode: string): boolean {
-  const func = state.sourceFile.getFunctions().find((f) => f.getName() === state.functionName);
+  const func = state.sourceFile
+    .getFunctions()
+    .find((f) => f.getStartLineNumber() === state.functionStartLine);
 
   if (!func) {
     return false;
@@ -485,10 +490,14 @@ function updateSourceFile(state: FunctionIterationState, newCode: string): boole
 /**
  * Reverts the source file to original code.
  *
+ * Uses start line number to disambiguate functions with the same name.
+ *
  * @returns True if the revert succeeded, false otherwise.
  */
 function revertSourceFile(state: FunctionIterationState, originalCode: string): boolean {
-  const func = state.sourceFile.getFunctions().find((f) => f.getName() === state.functionName);
+  const func = state.sourceFile
+    .getFunctions()
+    .find((f) => f.getStartLineNumber() === state.functionStartLine);
 
   if (!func) {
     return false;
