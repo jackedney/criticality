@@ -445,7 +445,6 @@ async function promptForSelectionWithArrows(
                 const confirmationLower = confirmation.trim().toLowerCase();
 
                 if (confirmationLower === 'y' || confirmationLower === 'yes') {
-                  confirmReader.close();
                   const needsClarification = isClarificationOption(selectedOption);
                   if (needsClarification) {
                     const rationale = await promptForClarification(displayOptions);
@@ -494,7 +493,6 @@ async function promptForSelectionWithArrows(
               const confirmationLower = confirmation.trim().toLowerCase();
 
               if (confirmationLower === 'y' || confirmationLower === 'yes') {
-                confirmReader.close();
                 const needsClarification = isClarificationOption(selectedOption);
                 if (needsClarification) {
                   const rationale = await promptForClarification(displayOptions);
