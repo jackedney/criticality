@@ -34,13 +34,22 @@ interface ResumeDisplayOptions {
   unicode: boolean;
 }
 
+interface ExecutionSummaryData {
+  tickCount: number;
+  elapsedSec: string;
+  currentPhase: string;
+  phasesCompleted: readonly string[];
+  decisionsMade: number;
+  stopReason: TickStopReason;
+}
+
 /**
  * Loads configuration from criticality.toml.
  *
  * @returns The loaded configuration or defaults.
  */
-async function loadCliConfig(): ReturnType<
-  (typeof import('../../config/index.js'))['parseConfig']
+async function loadCliConfig(): Promise<
+  Awaited<ReturnType<(typeof import('../../config/index.js'))['parseConfig']>>
 > {
   const configFilePath = 'criticality.toml';
 
@@ -174,21 +183,111 @@ async function displayResumeSummary(
 }
 
 /**
+ * Formats phases completed for display.
+ *
+ * @param artifacts - Available artifacts.
+ * @returns Array of completed phase names.
+ */
+function getPhasesCompleted(artifacts: readonly string[]): readonly string[] {
+  const phaseArtifactMap: Record<string, readonly string[]> = {
+    Ignition: ['spec'],
+    Lattice: ['lattice'],
+    CompositionAudit: [],
+    Injection: ['types', 'implementation'],
+    Mesoscopic: ['tests'],
+    MassDefect: [],
+  };
+
+  const completed: string[] = [];
+  for (const [phase, requiredArtifacts] of Object.entries(phaseArtifactMap)) {
+    if (requiredArtifacts.length === 0) {
+      continue;
+    }
+    const allArtifactsPresent = requiredArtifacts.every((artifact) => artifacts.includes(artifact));
+    if (allArtifactsPresent) {
+      completed.push(phase);
+    }
+  }
+  return completed;
+}
+
+/**
+ * Formats compact summary line.
+ *
+ * @param data - Summary data.
+ * @param options - Display options.
+ * @param blockingQueryId - Optional blocking query ID.
+ * @returns Formatted summary line.
+ */
+function formatCompactSummary(
+  data: ExecutionSummaryData,
+  options: ResumeDisplayOptions,
+  blockingQueryId?: string
+): string {
+  const boldCode = options.colors ? '\x1b[1m' : '';
+  const resetCode = options.colors ? '\x1b[0m' : '';
+  const greenCode = options.colors ? '\x1b[32m' : '';
+  const yellowCode = options.colors ? '\x1b[33m' : '';
+
+  const parts: string[] = [];
+
+  parts.push(`Executed ${String(data.tickCount)} ticks in ${data.elapsedSec}s`);
+
+  if (data.phasesCompleted.length > 0) {
+    const firstPhase = data.phasesCompleted[0];
+    if (firstPhase === undefined) {
+      return boldCode + parts.join(' | ') + resetCode;
+    }
+    let phaseStr = firstPhase;
+    if (data.phasesCompleted.length > 1) {
+      const lastPhase = data.phasesCompleted[data.phasesCompleted.length - 1];
+      if (lastPhase !== undefined) {
+        phaseStr = `${phaseStr} → ${lastPhase}`;
+      }
+    }
+    const completedStr = greenCode + 'Completed: ' + phaseStr + resetCode;
+    parts.push(completedStr);
+  }
+
+  if (data.decisionsMade > 0) {
+    parts.push(`${String(data.decisionsMade)} decision${data.decisionsMade === 1 ? '' : 's'} made`);
+  }
+
+  if (data.stopReason === 'BLOCKED') {
+    const idStr = blockingQueryId ?? 'unknown';
+    const blockedStr = yellowCode + 'Blocked: ' + idStr + resetCode;
+    parts.push(blockedStr);
+  } else if (data.stopReason === 'COMPLETE') {
+    const finishedStr = greenCode + 'Finished' + resetCode;
+    parts.push(finishedStr);
+  } else if (data.stopReason === 'FAILED') {
+    parts.push('Failed');
+  } else if (data.stopReason === 'EXTERNAL_ERROR') {
+    parts.push('Interrupted');
+  }
+
+  const summaryLine = boldCode + parts.join(' | ') + resetCode;
+  return summaryLine;
+}
+
+/**
  * Displays execution summary after tick loop completion.
  *
  * @param tickCount - Number of ticks executed.
  * @param stopReason - Reason for stopping.
  * @param snapshot - Final state snapshot.
  * @param startTime - When execution started.
+ * @param initialSnapshot - Initial state snapshot before execution.
  * @param options - Display options.
  */
-function displayExecutionSummary(
+async function displayExecutionSummary(
   tickCount: number,
   stopReason: TickStopReason,
   snapshot: ProtocolStateSnapshot,
   startTime: number,
+  initialSnapshot: CliStateSnapshot,
   options: ResumeDisplayOptions
-): void {
+): Promise<void> {
   const elapsed = Date.now() - startTime;
   const elapsedSec = (elapsed / 1000).toFixed(1);
   const boldCode = options.colors ? '\x1b[1m' : '';
@@ -197,40 +296,97 @@ function displayExecutionSummary(
   const greenCode = options.colors ? '\x1b[32m' : '';
   const redCode = options.colors ? '\x1b[31m' : '';
 
+  const phasesCompleted = getPhasesCompleted(snapshot.artifacts);
+  const { substate } = snapshot.state;
+
+  let decisionsMade = 0;
+  if (initialSnapshot.resolvedQueries.length > 0) {
+    const latestBlockTime =
+      initialSnapshot.resolvedQueries[initialSnapshot.resolvedQueries.length - 1]?.record.blockedAt;
+    if (latestBlockTime !== undefined) {
+      try {
+        const ledgerPath = getDefaultLedgerPath(getStatePath());
+        const ledger = await loadLedger(ledgerPath);
+        const allDecisions = ledger.getDecisions();
+        const blockTimestamp = new Date(latestBlockTime).getTime();
+
+        decisionsMade = allDecisions.filter((d) => {
+          const decisionTimestamp = new Date(d.timestamp).getTime();
+          return decisionTimestamp >= blockTimestamp;
+        }).length;
+      } catch {
+        decisionsMade = 0;
+      }
+    }
+  }
+
+  const blockingQueryId = snapshot.blockingQueries.find((q) => !q.resolved)?.id;
+
+  const summaryData: ExecutionSummaryData = {
+    tickCount,
+    elapsedSec,
+    currentPhase: snapshot.state.phase,
+    phasesCompleted,
+    decisionsMade,
+    stopReason,
+  };
+
   console.log();
-  console.log(`${boldCode}Execution Summary${resetCode}`);
-  console.log(`  Ticks executed: ${String(tickCount)}`);
-  console.log(`  Time elapsed: ${elapsedSec}s`);
-  console.log(`  Current phase: ${snapshot.state.phase}`);
-  if (telemetry.modelCalls > 0) {
+
+  if (tickCount === 0 && stopReason === 'BLOCKED') {
+    console.log(`${yellowCode}Already blocked, no ticks executed${resetCode}`);
     console.log();
+    console.log(
+      `${boldCode}Blocking Query:${resetCode} ${substate.kind === 'Blocking' ? substate.query : 'Unknown'}`
+    );
+    console.log();
+    console.log(`Run ${greenCode}crit resolve${resetCode} to continue.`);
+    return;
+  }
+
+  console.log(formatCompactSummary(summaryData, options, blockingQueryId));
+  console.log();
+
+  if (telemetry.modelCalls > 0) {
     console.log(`${boldCode}Telemetry${resetCode}`);
     console.log(`  Model calls: ${String(telemetry.modelCalls)}`);
     console.log(`  Prompt tokens: ${String(telemetry.promptTokens)}`);
     console.log(`  Completion tokens: ${String(telemetry.completionTokens)}`);
     console.log(`  Total tokens: ${String(telemetry.promptTokens + telemetry.completionTokens)}`);
+    console.log();
   }
 
-  const { substate } = snapshot.state;
   if (substate.kind === 'Blocking') {
-    console.log(`  ${yellowCode}Status: Blocked${resetCode}`);
+    console.log(`${yellowCode}Status: Blocked${resetCode}`);
     console.log(
-      `  Query: ${substate.query.substring(0, 60)}${substate.query.length > 60 ? '...' : ''}`
+      `  Query: ${substate.query.substring(0, 80)}${substate.query.length > 80 ? '...' : ''}`
     );
     console.log();
     console.log(`Run ${greenCode}crit resolve${resetCode} to continue.`);
   } else if (substate.kind === 'Failed') {
-    console.log(`  ${redCode}Status: Failed${resetCode}`);
+    console.log(`${redCode}Status: Failed${resetCode}`);
     console.log(`  Error: ${substate.error}`);
     if (substate.recoverable) {
       console.log();
       console.log(`${yellowCode}This error is recoverable.${resetCode}`);
     }
   } else if (stopReason === 'COMPLETE') {
-    console.log(`  ${greenCode}Status: Complete${resetCode}`);
+    console.log(`${greenCode}Status: Complete${resetCode}`);
     console.log(`  Protocol execution finished successfully.`);
+
+    if (snapshot.artifacts.length > 0) {
+      console.log();
+      console.log(`${boldCode}Artifacts:${resetCode}`);
+      for (const artifact of snapshot.artifacts) {
+        console.log(`  - ${artifact}`);
+      }
+    }
+  } else if (stopReason === 'EXTERNAL_ERROR') {
+    console.log(`${yellowCode}Status: Interrupted${resetCode}`);
+    console.log(`  Execution stopped by user (Ctrl+C).`);
+    console.log(`  State saved at current position.`);
   } else {
-    console.log(`  Status: ${stopReason}`);
+    console.log(`Status: ${stopReason}`);
   }
 }
 
@@ -336,11 +492,12 @@ export async function handleResumeCommand(context: CliContext): Promise<CliComma
         console.log('Interrupted by user');
         console.log();
 
-        displayExecutionSummary(
+        await displayExecutionSummary(
           tickCount,
           'EXTERNAL_ERROR',
           orchestrator.state.snapshot,
           startTime,
+          snapshot,
           options
         );
         console.log();
@@ -398,11 +555,12 @@ export async function handleResumeCommand(context: CliContext): Promise<CliComma
     }
 
     // Display execution summary
-    displayExecutionSummary(
+    await displayExecutionSummary(
       tickCount,
       result.stopReason ?? 'EXTERNAL_ERROR',
       result.snapshot,
       startTime,
+      snapshot,
       options
     );
 
