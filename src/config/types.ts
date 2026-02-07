@@ -78,6 +78,18 @@ export interface MassDefectConfig {
 }
 
 /**
+ * CLI configuration for terminal behavior.
+ */
+export interface CliSettingsConfig {
+  /** Whether to use ANSI colors in output. */
+  colors: boolean;
+  /** Watch mode refresh interval in milliseconds. */
+  watch_interval: number;
+  /** Whether to use Unicode box-drawing characters. */
+  unicode: boolean;
+}
+
+/**
  * Notification configuration for blocking states.
  */
 export interface NotificationConfig {
@@ -103,6 +115,8 @@ export interface Config {
   notifications: NotificationConfig;
   /** Mass Defect phase configuration. */
   mass_defect: MassDefectConfig;
+  /** CLI settings for terminal behavior. */
+  cli: CliSettingsConfig;
 }
 
 /**
@@ -118,4 +132,5 @@ export interface PartialConfig {
     targets?: Partial<MassDefectTargetsConfig>;
     catalog_path?: string;
   };
+  cli?: Partial<CliSettingsConfig>;
 }

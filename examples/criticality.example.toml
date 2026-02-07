@@ -87,3 +87,18 @@ enabled = false
 
 # Webhook URL, email address, or Slack webhook URL
 # endpoint = "https://hooks.slack.com/services/xxx/yyy/zzz"
+
+# =============================================================================
+# CLI CONFIGURATION
+# =============================================================================
+# Settings for CLI terminal behavior.
+
+[cli]
+# Whether to use ANSI colors in output
+colors = true
+
+# Watch mode refresh interval in milliseconds
+watch_interval = 2000
+
+# Whether to use Unicode box-drawing characters
+unicode = true

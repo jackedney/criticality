@@ -7,7 +7,7 @@
  * @packageDocumentation
  */
 
-import { SourceFile, SyntaxKind } from 'ts-morph';
+import { Project, SourceFile, SyntaxKind } from 'ts-morph';
 import type { ModelRouter } from '../router/types.js';
 import type {
   TransformationCatalog,
@@ -402,11 +402,21 @@ async function attemptTransformation(
     return false;
   }
 
-  await updateSourceFile(state, transformationResult.transformedCode);
+  const updateSuccess = updateSourceFile(state, transformationResult.transformedCode);
+  if (!updateSuccess) {
+    attempt.success = false;
+    attempt.error = 'Failed to update source file with transformed code';
+    state.attempts.push(attempt);
+    return false;
+  }
 
-  const func = state.sourceFile.getFunctions().find((f) => f.getName() === state.functionName);
+  const func = state.sourceFile
+    .getFunctions()
+    .find((f) => f.getStartLineNumber() === state.functionStartLine);
   if (!func) {
-    await revertSourceFile(state, beforeCode);
+    attempt.success = false;
+    attempt.error = `Function '${state.functionName}' not found after transformation`;
+    revertSourceFile(state, beforeCode);
     state.attempts.push(attempt);
     return false;
   }
@@ -429,7 +439,11 @@ async function attemptTransformation(
   attempt.verification = verificationResult;
 
   if (!verificationResult.passed) {
-    await revertSourceFile(state, beforeCode);
+    attempt.success = false;
+    const revertSuccess = revertSourceFile(state, beforeCode);
+    if (!revertSuccess) {
+      attempt.error = 'Failed to revert source file after verification failure';
+    }
     state.attempts.push(attempt);
     return false;
   }
@@ -443,57 +457,102 @@ async function attemptTransformation(
 
 /**
  * Updates the source file with transformed code.
+ *
+ * Uses start line number to disambiguate functions with the same name.
+ * Locates the temp function by name to handle cases where transformed code
+ * contains multiple functions (e.g., after extract-helper transforms).
+ * Replaces the entire function text to preserve signature-level changes.
+ *
+ * Rejects transformations that produce additional top-level helpers or
+ * multiple functions, as these cannot be safely applied by replacing
+ * only the target function text.
+ *
+ * @returns True if the update succeeded, false otherwise.
  */
-async function updateSourceFile(state: FunctionIterationState, newCode: string): Promise<void> {
-  const func = state.sourceFile.getFunctions().find((f) => f.getName() === state.functionName);
+function updateSourceFile(state: FunctionIterationState, newCode: string): boolean {
+  const func = state.sourceFile
+    .getFunctions()
+    .find((f) => f.getStartLineNumber() === state.functionStartLine);
 
   if (!func) {
-    return;
+    return false;
   }
 
-  const body = func.getBody();
-  if (!body) {
-    return;
-  }
-
-  const { Project } = await import('ts-morph');
   const project = new Project({ useInMemoryFileSystem: true });
   const tempSourceFile = project.createSourceFile('temp.ts', newCode);
-  const tempFunc = tempSourceFile.getFunctions()[0];
-  const tempBody = tempFunc?.getBody();
+  const tempFunctions = tempSourceFile.getFunctions();
 
-  if (tempBody) {
-    body.replaceWithText(tempBody.getFullText());
+  // Reject if transformed code contains multiple functions (e.g., extracted helpers)
+  // These cannot be safely applied by replacing only the target function
+  if (tempFunctions.length > 1) {
+    return false;
   }
+
+  // Check for additional top-level statements beyond the target function
+  // (e.g., type aliases, const declarations, class definitions)
+  const topLevelStatements = tempSourceFile.getStatements();
+  const nonFunctionStatements = topLevelStatements.filter(
+    (stmt) => stmt.getKind() !== SyntaxKind.FunctionDeclaration
+  );
+  if (nonFunctionStatements.length > 0) {
+    return false;
+  }
+
+  // Locate temp function by name (matching original target function name)
+  let tempFunc = tempFunctions.find((f) => f.getName() === state.functionName);
+
+  // Fallback: if not found by name and only one function exists, use it
+  if (!tempFunc && tempFunctions.length === 1) {
+    tempFunc = tempFunctions[0];
+  }
+
+  if (!tempFunc) {
+    return false;
+  }
+
+  // Replace entire function text to preserve signature-level changes
+  func.replaceWithText(tempFunc.getFullText());
+  return true;
 }
 
 /**
  * Reverts the source file to original code.
+ *
+ * Uses start line number to disambiguate functions with the same name.
+ * Locates the temp function by name to handle cases where transformed code
+ * contains multiple functions (e.g., after extract-helper transforms).
+ * Replaces the entire function text to preserve signature-level changes.
+ *
+ * @returns True if the revert succeeded, false otherwise.
  */
-async function revertSourceFile(
-  state: FunctionIterationState,
-  originalCode: string
-): Promise<void> {
-  const func = state.sourceFile.getFunctions().find((f) => f.getName() === state.functionName);
+function revertSourceFile(state: FunctionIterationState, originalCode: string): boolean {
+  const func = state.sourceFile
+    .getFunctions()
+    .find((f) => f.getStartLineNumber() === state.functionStartLine);
 
   if (!func) {
-    return;
+    return false;
   }
 
-  const body = func.getBody();
-  if (!body) {
-    return;
-  }
-
-  const { Project } = await import('ts-morph');
   const project = new Project({ useInMemoryFileSystem: true });
   const tempSourceFile = project.createSourceFile('temp.ts', originalCode);
-  const tempFunc = tempSourceFile.getFunctions()[0];
-  const tempBody = tempFunc?.getBody();
+  const tempFunctions = tempSourceFile.getFunctions();
 
-  if (tempBody) {
-    body.replaceWithText(tempBody.getFullText());
+  // Locate temp function by name (matching original target function name)
+  let tempFunc = tempFunctions.find((f) => f.getName() === state.functionName);
+
+  // Fallback: if not found by name and only one function exists, use it
+  if (!tempFunc && tempFunctions.length === 1) {
+    tempFunc = tempFunctions[0];
   }
+
+  if (!tempFunc) {
+    return false;
+  }
+
+  // Replace entire function text to preserve signature-level changes
+  func.replaceWithText(tempFunc.getFullText());
+  return true;
 }
 
 /**

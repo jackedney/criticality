@@ -6,6 +6,7 @@
 
 import * as TOML from '@iarna/toml';
 import {
+  DEFAULT_CLI_CONFIG,
   DEFAULT_CONFIG,
   DEFAULT_MASS_DEFECT,
   DEFAULT_MASS_DEFECT_TARGETS,
@@ -15,6 +16,7 @@ import {
   DEFAULT_THRESHOLDS,
 } from './defaults.js';
 import type {
+  CliSettingsConfig,
   Config,
   MassDefectConfig,
   MassDefectTargetsConfig,
@@ -305,6 +307,37 @@ function parseMassDefect(raw: Record<string, unknown> | undefined): MassDefectCo
 }
 
 /**
+ * Parses CLI configuration from raw TOML data.
+ *
+ * @param raw - Raw TOML object for cli section.
+ * @returns Validated CLI configuration merged with defaults.
+ */
+function parseCliSettings(raw: Record<string, unknown> | undefined): CliSettingsConfig {
+  if (raw === undefined) {
+    return { ...DEFAULT_CLI_CONFIG };
+  }
+
+  const result: CliSettingsConfig = { ...DEFAULT_CLI_CONFIG };
+
+  if ('colors' in raw) {
+    result.colors = validateBoolean(raw.colors, 'cli.colors');
+  }
+  if ('watch_interval' in raw) {
+    result.watch_interval = validateNumber(raw.watch_interval, 'cli.watch_interval');
+    if (!Number.isFinite(result.watch_interval) || result.watch_interval <= 0) {
+      throw new ConfigParseError(
+        `Invalid value for 'cli.watch_interval': must be a finite positive number, got ${String(result.watch_interval)}`
+      );
+    }
+  }
+  if ('unicode' in raw) {
+    result.unicode = validateBoolean(raw.unicode, 'cli.unicode');
+  }
+
+  return result;
+}
+
+/**
  * Parses a TOML string into a validated Config object.
  *
  * @param tomlContent - Raw TOML content as a string.
@@ -344,6 +377,7 @@ export function parseConfig(tomlContent: string): Config {
     thresholds: parseThresholds(parsed.thresholds as Record<string, unknown> | undefined),
     notifications: parseNotifications(parsed.notifications as Record<string, unknown> | undefined),
     mass_defect: parseMassDefect(parsed.mass_defect as Record<string, unknown> | undefined),
+    cli: parseCliSettings(parsed.cli as Record<string, unknown> | undefined),
   };
 }
 

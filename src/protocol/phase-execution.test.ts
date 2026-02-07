@@ -92,6 +92,11 @@ describe('Phase Execution', () => {
               },
               catalog_path: './non-existent-catalog',
             },
+            cli: {
+              colors: true,
+              watch_interval: 2000,
+              unicode: true,
+            },
           },
           projectRoot: '/tmp/test',
           router: mockRouter,
