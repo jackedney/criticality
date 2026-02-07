@@ -5,6 +5,7 @@
  */
 
 import type {
+  CliSettingsConfig,
   Config,
   MassDefectConfig,
   MassDefectTargetsConfig,
@@ -75,6 +76,15 @@ export const DEFAULT_MASS_DEFECT: MassDefectConfig = {
 };
 
 /**
+ * Default CLI configuration.
+ */
+export const DEFAULT_CLI_CONFIG: CliSettingsConfig = {
+  colors: true,
+  watch_interval: 2000,
+  unicode: true,
+};
+
+/**
  * Complete default configuration.
  */
 export const DEFAULT_CONFIG: Config = {
@@ -83,4 +93,5 @@ export const DEFAULT_CONFIG: Config = {
   thresholds: DEFAULT_THRESHOLDS,
   notifications: DEFAULT_NOTIFICATIONS,
   mass_defect: DEFAULT_MASS_DEFECT,
+  cli: DEFAULT_CLI_CONFIG,
 };

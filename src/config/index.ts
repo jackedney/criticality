@@ -11,6 +11,7 @@
 
 export { ConfigParseError, getDefaultConfig, parseConfig } from './parser.js';
 export type {
+  CliSettingsConfig,
   Config,
   MassDefectConfig,
   MassDefectTargetsConfig,
@@ -21,6 +22,7 @@ export type {
   ThresholdConfig,
 } from './types.js';
 export {
+  DEFAULT_CLI_CONFIG,
   DEFAULT_CONFIG,
   DEFAULT_MASS_DEFECT,
   DEFAULT_MASS_DEFECT_TARGETS,

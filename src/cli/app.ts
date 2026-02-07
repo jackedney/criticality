@@ -1,26 +1,45 @@
 /**
- * OpenTUI application wrapper for the Criticality Protocol CLI.
+ * OpenTUI application wrapper for Criticality Protocol CLI.
  */
 
+import { existsSync, readFileSync } from 'node:fs';
+import { ConfigParseError, parseConfig } from '../config/index.js';
 import type { CliConfig, CliContext } from './types.js';
 
 /**
- * Creates and initializes the CLI application context.
+ * Creates and initializes CLI application context.
  *
- * @param config - CLI configuration options.
- * @returns A promise resolving to the CLI context.
+ * @param config - CLI configuration options (overrides config file values).
+ * @returns A promise resolving to CLI context.
  */
 export function createCliApp(config: CliConfig = {}): CliContext {
   const context: CliContext = {
     renderer: {},
     args: process.argv.slice(2),
     config: {
-      colors: config.colors ?? true,
-      unicode: config.unicode ?? true,
-      watchInterval: config.watchInterval ?? 2000,
+      colors: true,
+      unicode: true,
+      watchInterval: 2000,
       ...config,
     },
   };
+
+  const configFilePath = 'criticality.toml';
+
+  if (existsSync(configFilePath)) {
+    try {
+      const tomlContent = readFileSync(configFilePath, 'utf-8');
+      const parsedConfig = parseConfig(tomlContent);
+
+      context.config.colors = config.colors ?? parsedConfig.cli.colors;
+      context.config.unicode = config.unicode ?? parsedConfig.cli.unicode;
+      context.config.watchInterval = config.watchInterval ?? parsedConfig.cli.watch_interval;
+    } catch (error) {
+      const errorMessage = error instanceof ConfigParseError ? error.message : String(error);
+      console.warn(`Warning: Failed to load config from ${configFilePath}: ${errorMessage}`);
+      console.warn('Using default CLI settings.');
+    }
+  }
 
   return context;
 }

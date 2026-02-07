@@ -62,6 +62,11 @@ function createTestConfig(): Config {
       },
       catalog_path: './mass-defect-catalog',
     },
+    cli: {
+      colors: true,
+      watch_interval: 2000,
+      unicode: true,
+    },
   };
 }
 
