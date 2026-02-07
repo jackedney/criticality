@@ -3024,7 +3024,38 @@ async function resume(projectPath: string): Promise<Orchestrator> {
 |---------|-------------|
 | `criticality status` | Show current protocol state without running |
 | `criticality resume` | Resume from last checkpoint |
-| `criticality resolve <query-id> <option>` | Resolve a blocking query |
+| `criticality resolve` | Resolve a blocking query with interactive selection |
+
+#### Interactive Resolve Mode
+
+The `criticality resolve` command launches an interactive selection interface for resolving blocking queries. The system displays the blocking query and all available resolution options, allowing the user to select one interactively.
+
+**Primary Mode: Arrow-Key Selection**
+1. Running `crit resolve` displays the blocking query with numbered options
+2. Users navigate using arrow keys (↑/↓) to highlight their choice
+3. Press Enter to confirm the selected option
+4. The selection is recorded and the protocol resumes
+
+**Alternative: Numbered Input**
+Users may also type the option number directly as a shortcut (e.g., type `1` to select option 1 and press Enter).
+
+**Example Interactive Flow**
+```
+$ crit resolve
+
+Blocking Query: conflict_003
+How should this contradiction be resolved?
+
+  ┌─────────────────────────────────────────┐
+  │ ○ Option 1: Keep spec, modify lattice  │
+  │ ○ Option 2: Keep lattice, modify spec   │
+  │ ○ Option 3: Provide custom resolution   │
+  └─────────────────────────────────────────┘
+
+Use ↑/↓ to navigate, Enter to select, or type option number
+```
+
+The interactive approach ensures users see the full context and implications of each resolution option before making a decision, which is particularly important for blocking queries that may have far-reaching effects on the protocol state.
 
 ### 8.7 Invariants
 
