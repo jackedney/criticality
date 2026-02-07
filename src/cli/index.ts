@@ -212,7 +212,10 @@ function handleResumeCommandWithContext(resumeArgs: string[]): void {
 
 try {
   main();
-} catch {
-  console.error('Unexpected error: An unknown error occurred');
+} catch (error) {
+  console.error('Unexpected error:', error instanceof Error ? error.message : String(error));
+  if (error instanceof Error && error.stack) {
+    console.error(error.stack);
+  }
   process.exit(1);
 }
