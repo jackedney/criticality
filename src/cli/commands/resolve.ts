@@ -637,7 +637,7 @@ export async function handleResolveCommand(context: CliContext): Promise<CliComm
   const statePath = getStatePath();
 
   try {
-    const snapshot = await loadCliStateWithRecovery(statePath);
+    let snapshot = await loadCliStateWithRecovery(statePath);
     const pendingQueries = snapshot.blockingQueries.filter((q) => !q.resolved);
 
     if (pendingQueries.length === 0) {
@@ -690,6 +690,8 @@ export async function handleResolveCommand(context: CliContext): Promise<CliComm
         );
 
         await saveCliState(updatedSnapshot, statePath);
+
+        snapshot = updatedSnapshot;
 
         console.log(`Query "${query.id}" resolved successfully.`);
 
