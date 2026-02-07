@@ -451,14 +451,35 @@ export async function handleResumeCommand(context: CliContext): Promise<CliComma
     // Set up SIGINT handler for graceful shutdown
     const sigintHandler = (): void => {
       if (gracefulShutdown) {
-        // Second Ctrl+C: force exit
-        console.log('\nForce quitting...');
-        process.exit(1);
+        // Second Ctrl+C: force exit with state save attempt
+        console.log('\nForce quitting after current operation...');
+        liveDisplay.stop();
+
+        void (async (): Promise<void> => {
+          try {
+            const currentState = await loadCliStateWithRecovery(statePath);
+            const telemetryData =
+              telemetryCollector !== null ? telemetryCollector.getTelemetryData() : undefined;
+            const updatedState: CliStateSnapshot =
+              telemetryData !== undefined
+                ? { ...currentState, telemetry: telemetryData }
+                : currentState;
+            await saveCliState(updatedState, statePath);
+            console.log('State saved before force quit.');
+          } catch (error) {
+            console.warn(
+              `Warning: State save interrupted. State may be inconsistent: ${error instanceof Error ? error.message : String(error)}`
+            );
+          } finally {
+            process.exit(1);
+          }
+        })();
+        return;
       }
 
       gracefulShutdown = true;
       liveDisplay.stop();
-      console.log('Stopping... (Ctrl+C again to force quit)');
+      console.log('Stopping after current operation... (Ctrl+C again to force quit)');
     };
 
     process.on('SIGINT', sigintHandler);

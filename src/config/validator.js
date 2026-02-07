@@ -1,0 +1,401 @@
+"use strict";
+/**
+ * Semantic validation for configuration values.
+ *
+ * Validates that configuration values are semantically correct beyond just type checking:
+ * - Model names are recognized identifiers
+ * - Paths can be validated via a custom function
+ * - Thresholds are within valid ranges
+ *
+ * @packageDocumentation
+ */
+var __extends = (this && this.__extends) || (function () {
+    var extendStatics = function (d, b) {
+        extendStatics = Object.setPrototypeOf ||
+            ({ __proto__: [] } instanceof Array && function (d, b) { d.__proto__ = b; }) ||
+            function (d, b) { for (var p in b) if (Object.prototype.hasOwnProperty.call(b, p)) d[p] = b[p]; };
+        return extendStatics(d, b);
+    };
+    return function (d, b) {
+        if (typeof b !== "function" && b !== null)
+            throw new TypeError("Class extends value " + String(b) + " is not a constructor or null");
+        extendStatics(d, b);
+        function __() { this.constructor = d; }
+        d.prototype = b === null ? Object.create(b) : (__.prototype = b.prototype, new __());
+    };
+})();
+var __spreadArray = (this && this.__spreadArray) || function (to, from, pack) {
+    if (pack || arguments.length === 2) for (var i = 0, l = from.length, ar; i < l; i++) {
+        if (ar || !(i in from)) {
+            if (!ar) ar = Array.prototype.slice.call(from, 0, i);
+            ar[i] = from[i];
+        }
+    }
+    return to.concat(ar || Array.prototype.slice.call(from));
+};
+Object.defineProperty(exports, "__esModule", { value: true });
+exports.RECOGNIZED_MODELS = exports.ConfigValidationError = void 0;
+exports.validateConfig = validateConfig;
+exports.assertConfigValid = assertConfigValid;
+exports.isRecognizedModel = isRecognizedModel;
+/**
+ * Error class for semantic validation errors.
+ */
+var ConfigValidationError = /** @class */ (function (_super) {
+    __extends(ConfigValidationError, _super);
+    /**
+     * Creates a new ConfigValidationError.
+     *
+     * @param message - Summary error message.
+     * @param errors - Array of specific validation errors.
+     */
+    function ConfigValidationError(message, errors) {
+        var _this = _super.call(this, message) || this;
+        _this.name = 'ConfigValidationError';
+        _this.errors = errors;
+        return _this;
+    }
+    return ConfigValidationError;
+}(Error));
+exports.ConfigValidationError = ConfigValidationError;
+/**
+ * Recognized model identifiers.
+ * These are the models that the Criticality Protocol supports.
+ */
+exports.RECOGNIZED_MODELS = new Set([
+    // Claude models
+    'claude-opus-4.5',
+    'claude-sonnet-4.5',
+    'claude-sonnet-4',
+    'claude-3-opus',
+    'claude-3-sonnet',
+    'claude-3-haiku',
+    'claude-3.5-sonnet',
+    'claude-3.5-haiku',
+    // Kimi models
+    'kimi-k2',
+    'kimi-k1.5',
+    // MiniMax models
+    'minimax-m2',
+    'minimax-m1',
+    // OpenAI models (for reference/testing)
+    'gpt-4o',
+    'gpt-4-turbo',
+    'gpt-4',
+    'gpt-3.5-turbo',
+]);
+/**
+ * Validates that a model name is a recognized identifier.
+ *
+ * @param modelName - The model name to validate.
+ * @param fieldPath - The field path for error reporting.
+ * @param errors - Array to accumulate errors into.
+ * @param allowUnrecognized - Whether to allow unrecognized models.
+ */
+function validateModelName(modelName, fieldPath, errors, allowUnrecognized) {
+    if (!allowUnrecognized && !exports.RECOGNIZED_MODELS.has(modelName)) {
+        errors.push({
+            field: fieldPath,
+            value: modelName,
+            message: "Unknown model name '".concat(modelName, "'. Recognized models: ").concat(__spreadArray([], exports.RECOGNIZED_MODELS, true).join(', ')),
+        });
+    }
+}
+/**
+ * Validates that a path exists using the provided checker.
+ *
+ * @param pathValue - The path to validate.
+ * @param fieldPath - The field path for error reporting.
+ * @param pathChecker - Function to check path existence.
+ * @param errors - Array to accumulate errors into.
+ * @param isDirectory - Whether the path should be a directory.
+ */
+function validatePathExists(pathValue, fieldPath, pathChecker, errors, isDirectory) {
+    var _a;
+    var result = pathChecker(pathValue, isDirectory);
+    if (!result.exists) {
+        errors.push({
+            field: fieldPath,
+            value: pathValue,
+            message: (_a = result.errorMessage) !== null && _a !== void 0 ? _a : "Path does not exist: '".concat(pathValue, "'"),
+        });
+        return;
+    }
+    if (isDirectory && result.isDirectory === false) {
+        errors.push({
+            field: fieldPath,
+            value: pathValue,
+            message: "Path exists but is not a directory: '".concat(pathValue, "'"),
+        });
+    }
+}
+/**
+ * Validates a threshold value is within a valid range.
+ *
+ * @param value - The threshold value to validate.
+ * @param fieldPath - The field path for error reporting.
+ * @param min - Minimum allowed value (inclusive).
+ * @param max - Maximum allowed value (inclusive).
+ * @param errors - Array to accumulate errors into.
+ */
+function validateThresholdRange(value, fieldPath, min, max, errors) {
+    if (value < min || value > max) {
+        errors.push({
+            field: fieldPath,
+            value: value,
+            message: "Threshold '".concat(fieldPath, "' must be between ").concat(String(min), " and ").concat(String(max), ", got ").concat(String(value)),
+        });
+    }
+}
+/**
+ * Validates that a threshold value is a positive integer.
+ *
+ * @param value - The threshold value to validate.
+ * @param fieldPath - The field path for error reporting.
+ * @param errors - Array to accumulate errors into.
+ */
+function validatePositiveInteger(value, fieldPath, errors) {
+    if (!Number.isInteger(value) || value < 1) {
+        errors.push({
+            field: fieldPath,
+            value: value,
+            message: "'".concat(fieldPath, "' must be a positive integer, got ").concat(String(value)),
+        });
+    }
+}
+/**
+ * Validates all model assignments in the configuration.
+ *
+ * @param config - The configuration to validate.
+ * @param errors - Array to accumulate errors into.
+ * @param allowUnrecognized - Whether to allow unrecognized models.
+ */
+function validateModels(config, errors, allowUnrecognized) {
+    var modelFields = [
+        'architect_model',
+        'auditor_model',
+        'structurer_model',
+        'worker_model',
+        'fallback_model',
+    ];
+    for (var _i = 0, modelFields_1 = modelFields; _i < modelFields_1.length; _i++) {
+        var field = modelFields_1[_i];
+        // eslint-disable-next-line security/detect-object-injection -- safe: field is keyof Config['models'] with known literal keys
+        validateModelName(config.models[field], "models.".concat(field), errors, allowUnrecognized);
+    }
+}
+/**
+ * Validates all paths in the configuration.
+ *
+ * @param config - The configuration to validate.
+ * @param errors - Array to accumulate errors into.
+ * @param pathChecker - Function to check path existence.
+ */
+function validatePaths(config, errors, pathChecker) {
+    // Directory paths
+    var directoryFields = ['specs', 'archive', 'logs', 'ledger'];
+    for (var _i = 0, directoryFields_1 = directoryFields; _i < directoryFields_1.length; _i++) {
+        var field = directoryFields_1[_i];
+        // eslint-disable-next-line security/detect-object-injection -- safe: field is keyof Config['paths'] with known literal keys
+        validatePathExists(config.paths[field], "paths.".concat(field), pathChecker, errors, true);
+    }
+    // State file - check as file (parent directory existence)
+    validatePathExists(config.paths.state, 'paths.state', pathChecker, errors, false);
+}
+/**
+ * Validates all threshold values in the configuration.
+ *
+ * @param thresholds - The threshold configuration to validate.
+ * @param errors - Array to accumulate errors into.
+ */
+function validateThresholds(thresholds, errors) {
+    // context_token_upgrade: positive integer, reasonable maximum
+    validatePositiveInteger(thresholds.context_token_upgrade, 'thresholds.context_token_upgrade', errors);
+    if (thresholds.context_token_upgrade > 1000000) {
+        errors.push({
+            field: 'thresholds.context_token_upgrade',
+            value: thresholds.context_token_upgrade,
+            message: "'thresholds.context_token_upgrade' exceeds reasonable maximum of 1000000",
+        });
+    }
+    // signature_complexity_upgrade: positive integer, reasonable range
+    validatePositiveInteger(thresholds.signature_complexity_upgrade, 'thresholds.signature_complexity_upgrade', errors);
+    if (thresholds.signature_complexity_upgrade > 100) {
+        errors.push({
+            field: 'thresholds.signature_complexity_upgrade',
+            value: thresholds.signature_complexity_upgrade,
+            message: "'thresholds.signature_complexity_upgrade' exceeds reasonable maximum of 100",
+        });
+    }
+    // max_retry_attempts: positive integer, reasonable maximum
+    validatePositiveInteger(thresholds.max_retry_attempts, 'thresholds.max_retry_attempts', errors);
+    if (thresholds.max_retry_attempts > 100) {
+        errors.push({
+            field: 'thresholds.max_retry_attempts',
+            value: thresholds.max_retry_attempts,
+            message: "'thresholds.max_retry_attempts' exceeds reasonable maximum of 100",
+        });
+    }
+    // retry_base_delay_ms: positive integer, reasonable range (1ms to 1 hour)
+    validatePositiveInteger(thresholds.retry_base_delay_ms, 'thresholds.retry_base_delay_ms', errors);
+    if (thresholds.retry_base_delay_ms > 3600000) {
+        errors.push({
+            field: 'thresholds.retry_base_delay_ms',
+            value: thresholds.retry_base_delay_ms,
+            message: "'thresholds.retry_base_delay_ms' exceeds reasonable maximum of 3600000 (1 hour)",
+        });
+    }
+    // performance_variance_threshold: must be between 0 and 1 (exclusive 0, inclusive 1)
+    validateThresholdRange(thresholds.performance_variance_threshold, 'thresholds.performance_variance_threshold', 0, 1, errors);
+    if (thresholds.performance_variance_threshold <= 0) {
+        errors.push({
+            field: 'thresholds.performance_variance_threshold',
+            value: thresholds.performance_variance_threshold,
+            message: "'thresholds.performance_variance_threshold' must be greater than 0",
+        });
+    }
+}
+/**
+ * Validates Mass Defect configuration.
+ *
+ * @param massDefect - The Mass Defect configuration to validate.
+ * @param errors - Array to accumulate errors into.
+ */
+function validateMassDefect(massDefect, errors) {
+    var targets = massDefect.targets;
+    // max_cyclomatic_complexity: positive integer, reasonable range
+    validatePositiveInteger(targets.max_cyclomatic_complexity, 'mass_defect.targets.max_cyclomatic_complexity', errors);
+    if (targets.max_cyclomatic_complexity > 1000) {
+        errors.push({
+            field: 'mass_defect.targets.max_cyclomatic_complexity',
+            value: targets.max_cyclomatic_complexity,
+            message: "'mass_defect.targets.max_cyclomatic_complexity' exceeds reasonable maximum of 1000",
+        });
+    }
+    // max_function_length_lines: positive integer, reasonable range
+    validatePositiveInteger(targets.max_function_length_lines, 'mass_defect.targets.max_function_length_lines', errors);
+    if (targets.max_function_length_lines > 10000) {
+        errors.push({
+            field: 'mass_defect.targets.max_function_length_lines',
+            value: targets.max_function_length_lines,
+            message: "'mass_defect.targets.max_function_length_lines' exceeds reasonable maximum of 10000",
+        });
+    }
+    // max_nesting_depth: positive integer, reasonable range
+    validatePositiveInteger(targets.max_nesting_depth, 'mass_defect.targets.max_nesting_depth', errors);
+    if (targets.max_nesting_depth > 20) {
+        errors.push({
+            field: 'mass_defect.targets.max_nesting_depth',
+            value: targets.max_nesting_depth,
+            message: "'mass_defect.targets.max_nesting_depth' exceeds reasonable maximum of 20",
+        });
+    }
+    // min_test_coverage: must be between 0 and 1 (exclusive 0, inclusive 1)
+    validateThresholdRange(targets.min_test_coverage, 'mass_defect.targets.min_test_coverage', 0, 1, errors);
+    if (targets.min_test_coverage <= 0) {
+        errors.push({
+            field: 'mass_defect.targets.min_test_coverage',
+            value: targets.min_test_coverage,
+            message: "'mass_defect.targets.min_test_coverage' must be greater than 0",
+        });
+    }
+}
+/**
+ * Validates configuration semantically.
+ *
+ * Performs semantic validation beyond type checking:
+ * - Validates model names are recognized identifiers
+ * - Optionally validates paths exist using a provided checker function
+ * - Validates thresholds are within valid ranges
+ * - Validates Mass Defect configuration
+ *
+ * @param config - The parsed configuration to validate.
+ * @param options - Validation options.
+ * @returns Validation result with any errors.
+ *
+ * @example
+ * ```typescript
+ * import { parseConfig } from './parser.js';
+ * import { validateConfig } from './validator.js';
+ *
+ * const config = parseConfig(tomlContent);
+ * const result = validateConfig(config);
+ *
+ * if (!result.valid) {
+ *   for (const error of result.errors) {
+ *     console.error(`${error.field}: ${error.message}`);
+ *   }
+ * }
+ * ```
+ */
+function validateConfig(config, options) {
+    if (options === void 0) { options = {}; }
+    var pathChecker = options.pathChecker, _a = options.allowUnrecognizedModels, allowUnrecognizedModels = _a === void 0 ? false : _a;
+    var errors = [];
+    // Validate model names
+    validateModels(config, errors, allowUnrecognizedModels);
+    // Validate paths if checker is provided
+    if (pathChecker !== undefined) {
+        validatePaths(config, errors, pathChecker);
+        validatePathExists(config.mass_defect.catalog_path, 'mass_defect.catalog_path', pathChecker, errors, true);
+    }
+    // Validate thresholds
+    validateThresholds(config.thresholds, errors);
+    // Validate Mass Defect configuration
+    validateMassDefect(config.mass_defect, errors);
+    return {
+        valid: errors.length === 0,
+        errors: errors,
+    };
+}
+/**
+ * Validates configuration and throws if invalid.
+ *
+ * Convenience function that throws a ConfigValidationError if validation fails.
+ *
+ * @param config - The parsed configuration to validate.
+ * @param options - Validation options.
+ * @throws ConfigValidationError if validation fails.
+ *
+ * @example
+ * ```typescript
+ * import { parseConfig } from './parser.js';
+ * import { assertConfigValid } from './validator.js';
+ *
+ * const config = parseConfig(tomlContent);
+ *
+ * try {
+ *   assertConfigValid(config);
+ *   // config is valid
+ * } catch (error) {
+ *   if (error instanceof ConfigValidationError) {
+ *     console.error('Validation errors:', error.errors);
+ *   }
+ * }
+ * ```
+ */
+function assertConfigValid(config, options) {
+    if (options === void 0) { options = {}; }
+    var result = validateConfig(config, options);
+    if (!result.valid) {
+        var errorMessages = result.errors.map(function (e) { return "  - ".concat(e.field, ": ").concat(e.message); }).join('\n');
+        throw new ConfigValidationError("Configuration validation failed with ".concat(String(result.errors.length), " error(s):\n").concat(errorMessages), result.errors);
+    }
+}
+/**
+ * Checks if a model name is recognized.
+ *
+ * @param modelName - The model name to check.
+ * @returns True if the model is recognized.
+ *
+ * @example
+ * ```typescript
+ * import { isRecognizedModel } from './validator.js';
+ *
+ * isRecognizedModel('claude-3-opus'); // true
+ * isRecognizedModel('gpt-99'); // false
+ * ```
+ */
+function isRecognizedModel(modelName) {
+    return exports.RECOGNIZED_MODELS.has(modelName);
+}
