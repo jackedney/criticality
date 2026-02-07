@@ -12,8 +12,9 @@ import type { ProtocolSubstate, BlockingSubstate } from '../../protocol/types.js
 import { isActiveSubstate, isBlockingSubstate, isFailedSubstate } from '../../protocol/types.js';
 import type { BlockingRecord } from '../../protocol/blocking.js';
 import { loadLedger } from '../../ledger/persistence.js';
-import type { Decision, ConfidenceLevel } from '../../ledger/types.js';
+import type { Decision } from '../../ledger/types.js';
 import { loadStateWithRecovery } from '../state.js';
+import { formatRelativeTime, formatConfidence, wrapInBox } from '../utils/displayUtils.js';
 
 const DEFAULT_STATE_PATH = '.criticality-state.json';
 const DEFAULT_LEDGER_PATH = '.criticality/ledger';
@@ -71,34 +72,6 @@ function formatPhase(phase: string, stateType: string, options: StatusDisplayOpt
 }
 
 /**
- * Formats a timestamp as relative time (e.g., "2h ago", "30m ago").
- *
- * @param timestamp - ISO 8601 timestamp string.
- * @returns Relative time string.
- */
-function formatRelativeTime(timestamp: string): string {
-  const now = new Date();
-  const then = new Date(timestamp);
-  const diffMs = now.getTime() - then.getTime();
-
-  const seconds = Math.floor(diffMs / 1000);
-  const minutes = Math.floor(seconds / 60);
-  const hours = Math.floor(minutes / 60);
-  const days = Math.floor(hours / 24);
-
-  if (days > 0) {
-    return `${String(days)}d ago`;
-  }
-  if (hours > 0) {
-    return `${String(hours)}h ago`;
-  }
-  if (minutes > 0) {
-    return `${String(minutes)}m ago`;
-  }
-  return 'just now';
-}
-
-/**
  * Gets the ledger file path from configuration or uses default.
  *
  * Uses the default CLI ledger path (.criticality/ledger).
@@ -107,27 +80,6 @@ function formatRelativeTime(timestamp: string): string {
  */
 function getLedgerPath(): string {
   return DEFAULT_LEDGER_PATH;
-}
-
-/**
- * Gets confidence styling for display.
- *
- * @param confidence - The confidence level.
- * @param options - Display options.
- * @returns Formatted confidence string with styling.
- */
-function formatConfidence(confidence: ConfidenceLevel, options: StatusDisplayOptions): string {
-  const boldCode = options.colors ? '\x1b[1m' : '';
-  const dimCode = options.colors ? '\x1b[2m' : '';
-  const resetCode = options.colors ? '\x1b[0m' : '';
-
-  if (confidence === 'canonical') {
-    return `${boldCode}[canonical]${resetCode}`;
-  }
-  if (confidence === 'suspended' || confidence === 'blocking') {
-    return `${dimCode}[${confidence}]${resetCode}`;
-  }
-  return `[${confidence}]`;
 }
 
 /**
@@ -155,66 +107,6 @@ function formatRecentDecisions(
     const confidence = formatConfidence(decision.confidence, options);
     result += `${decision.id} (${timeAgo}) ${confidence} ${decision.constraint}\n`;
   }
-
-  return result;
-}
-
-/**
- * Creates a box-drawing border using ASCII or Unicode characters.
- *
- * @param options - Display options.
- * @returns Border characters object.
- */
-function getBorderChars(options: StatusDisplayOptions): Record<string, string> {
-  if (options.unicode) {
-    return {
-      topLeft: '┌',
-      topRight: '┐',
-      bottomLeft: '└',
-      bottomRight: '┘',
-      horizontal: '─',
-      vertical: '│',
-      topDivider: '┬',
-      bottomDivider: '┴',
-      leftDivider: '├',
-      rightDivider: '┤',
-      cross: '┼',
-    };
-  }
-  return {
-    topLeft: '+',
-    topRight: '+',
-    bottomLeft: '+',
-    bottomRight: '+',
-    horizontal: '-',
-    vertical: '|',
-    topDivider: '+',
-    bottomDivider: '+',
-    leftDivider: '+',
-    rightDivider: '+',
-    cross: '+',
-  };
-}
-
-/**
- * Wraps text in a box-drawing border.
- *
- * @param text - The text to wrap.
- * @param options - Display options.
- * @returns The boxed text.
- */
-function wrapInBox(text: string, options: StatusDisplayOptions): string {
-  const border = getBorderChars(options);
-  const lines = text.split('\n');
-  const maxLength = Math.max(...lines.map((line) => line.length));
-  const horizontalBorder = (border.horizontal ?? '-').repeat(maxLength + 2);
-
-  let result = (border.topLeft ?? '+') + horizontalBorder + (border.topRight ?? '+') + '\n';
-  for (const line of lines) {
-    const paddedLine = line.padEnd(maxLength);
-    result += (border.vertical ?? '|') + ' ' + paddedLine + ' ' + (border.vertical ?? '|') + '\n';
-  }
-  result += (border.bottomLeft ?? '+') + horizontalBorder + (border.bottomRight ?? '+');
 
   return result;
 }

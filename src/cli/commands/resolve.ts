@@ -17,6 +17,7 @@ import {
   getDefaultStatePath,
   type CliStateSnapshot,
 } from '../state.js';
+import { wrapInBox } from '../utils/displayUtils.js';
 
 interface ResolveDisplayOptions {
   colors: boolean;
@@ -100,57 +101,6 @@ async function createInputReader(): Promise<InputReader> {
  */
 function getStatePath(): string {
   return getDefaultStatePath();
-}
-
-/**
- * Creates a box-drawing border using ASCII or Unicode characters.
- *
- * @param options - Display options.
- * @returns Border characters object.
- */
-function getBorderChars(options: ResolveDisplayOptions): Record<string, string> {
-  if (options.unicode) {
-    return {
-      topLeft: '┌',
-      topRight: '┐',
-      bottomLeft: '└',
-      bottomRight: '┘',
-      horizontal: '─',
-      vertical: '│',
-    };
-  }
-  return {
-    topLeft: '+',
-    topRight: '+',
-    bottomLeft: '+',
-    bottomRight: '+',
-    horizontal: '-',
-    vertical: '|',
-  };
-}
-
-/**
- * Wraps text in a box-drawing border.
- *
- * @param text - The text to wrap.
- * @param options - Display options.
- * @returns The boxed text.
- */
-function wrapInBox(text: string, options: ResolveDisplayOptions): string {
-  const border = getBorderChars(options);
-  const lines = text.split('\n');
-  const maxLength = Math.max(...lines.map((line) => line.length));
-  const horizontalChar = border.horizontal ?? '-';
-  const horizontalBorder = horizontalChar.repeat(maxLength + 2);
-
-  let result = (border.topLeft ?? '+') + horizontalBorder + (border.topRight ?? '+') + '\n';
-  for (const line of lines) {
-    const paddedLine = line.padEnd(maxLength);
-    result += (border.vertical ?? '|') + ' ' + paddedLine + ' ' + (border.vertical ?? '|') + '\n';
-  }
-  result += (border.bottomLeft ?? '+') + horizontalBorder + (border.bottomRight ?? '+');
-
-  return result;
 }
 
 /**
