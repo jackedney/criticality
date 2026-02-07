@@ -11,6 +11,7 @@ import { createCliApp } from './app.js';
 import { handleStatusCommand } from './commands/status.js';
 import { handleResumeCommand } from './commands/resume.js';
 import { handleResolveCommand } from './commands/resolve.js';
+import { handleVersionCommand } from './commands/version.js';
 
 /**
  * Displays usage information.
@@ -46,11 +47,19 @@ For more information, visit: https://github.com/anomalyco/criticality
 }
 
 /**
- * Displays version information.
+ * Handles version command with CLI context.
  */
-function showVersion(): void {
-  const version = process.env.npm_package_version ?? '0.1.0';
-  console.log(`criticality v${version}`);
+function handleVersionCommandWithContext(): void {
+  try {
+    const result = handleVersionCommand();
+    process.exit(result.exitCode);
+  } catch (error) {
+    if (error instanceof Error) {
+      console.error(`Error: ${error.message}`);
+      process.exit(1);
+    }
+    process.exit(1);
+  }
 }
 
 /**
@@ -91,8 +100,7 @@ async function main(): Promise<void> {
     case 'version':
     case '--version':
     case '-v':
-      showVersion();
-      process.exit(0);
+      handleVersionCommandWithContext();
       break;
 
     case 'status':
