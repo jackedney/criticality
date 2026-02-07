@@ -91,13 +91,24 @@ function formatDecisionsSummary(
 
   const boldCode = options.colors ? '\x1b[1m' : '';
   const resetCode = options.colors ? '\x1b[0m' : '';
+  const dimCode = options.colors ? '\x1b[2m' : '';
+  const yellowCode = options.colors ? '\x1b[33m' : '';
 
   let result = `${boldCode}${String(decisions.length)} decision${decisions.length === 1 ? '' : 's'} made since block:${resetCode}\n`;
 
   for (const decision of decisions) {
     const timeAgo = formatRelativeTime(decision.timestamp);
     const confidence = formatConfidence(decision.confidence, options);
-    result += `${decision.id} (${timeAgo}) ${confidence} ${decision.constraint}\n`;
+
+    // Highlight superseded or invalidated decisions
+    let statusPrefix = '';
+    if (decision.status === 'superseded') {
+      statusPrefix = `${yellowCode}[superseded]${resetCode} `;
+    } else if (decision.status === 'invalidated') {
+      statusPrefix = `${dimCode}[invalidated]${resetCode} `;
+    }
+
+    result += `${statusPrefix}${decision.id} (${timeAgo}) ${confidence} ${decision.constraint}\n`;
   }
 
   return result;
@@ -173,11 +184,25 @@ async function displayResumeSummary(
     const ledger = await loadLedger(ledgerPath);
     decisions = ledger.getDecisions();
 
-    const resolvedQueryIds = new Set(snapshot.resolvedQueries.map((r) => r.record.id));
+    // Get the earliest block timestamp from resolved queries
+    const blockTimestamps = snapshot.resolvedQueries.map((r) => r.record.blockedAt);
+    const earliestBlockTime =
+      blockTimestamps.length > 0
+        ? new Date(Math.min(...blockTimestamps.map((t) => new Date(t).getTime())))
+        : new Date();
 
-    decisions = decisions.filter(
-      (d) => d.human_query_id !== undefined && resolvedQueryIds.has(d.human_query_id)
-    );
+    // Filter decisions made since the block started
+    decisions = decisions.filter((d) => {
+      const decisionTime = new Date(d.timestamp).getTime();
+      return decisionTime >= earliestBlockTime.getTime();
+    });
+
+    // Sort decisions chronologically
+    decisions = decisions.slice().sort((a, b) => {
+      const timeA = new Date(a.timestamp).getTime();
+      const timeB = new Date(b.timestamp).getTime();
+      return timeA - timeB;
+    });
   } catch {
     decisions = [];
   }
