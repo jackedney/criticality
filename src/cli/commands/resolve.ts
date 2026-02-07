@@ -290,16 +290,107 @@ function clearLines(lines: number): void {
 }
 
 /**
+ * Checks if an option indicates a clarification request.
+ *
+ * @param optionText - The option text to check.
+ * @returns True if the option is a clarification request.
+ */
+function isClarificationOption(optionText: string): boolean {
+  const clarifyPatterns = [
+    'i need to explain more',
+    'explain more',
+    'i need to clarify',
+    'clarify',
+    'provide more detail',
+    'need to provide more information',
+    'need to explain further',
+    'i want to add more context',
+  ];
+
+  const lowerText = optionText.toLowerCase().trim();
+  return clarifyPatterns.some((pattern) => lowerText === pattern || lowerText.includes(pattern));
+}
+
+/**
+ * Reads multi-line input from the user.
+ *
+ * @param prompt - The prompt to display.
+ * @param hint - Hint text for completing input.
+ * @returns A promise resolving to the multi-line text, or undefined if cancelled.
+ */
+function readMultiLineInput(prompt: string, hint: string): Promise<string | undefined> {
+  return import('node:readline').then((readlineModule) => {
+    const readline = readlineModule.createInterface({
+      input: process.stdin,
+      output: process.stdout,
+    });
+
+    console.log(prompt);
+    console.log(hint);
+
+    const lines: string[] = [];
+
+    return new Promise<string | undefined>((resolve) => {
+      const lineReader = readlineModule.createInterface({
+        input: process.stdin,
+        output: process.stdout,
+      });
+
+      let lineCount = 0;
+
+      const onLine = (line: string): void => {
+        if (line === '<<<DONE') {
+          lineReader.close();
+          readline.close();
+          const fullText = lines.join('\n').trim();
+          if (fullText.length === 0) {
+            console.log();
+            resolve(undefined);
+          } else {
+            console.log();
+            resolve(fullText);
+          }
+        } else {
+          lines.push(line);
+          lineCount++;
+          const lineNum = String(lineCount + 1);
+          process.stdout.write(`${lineNum}> `);
+        }
+      };
+
+      const onSigint = (): void => {
+        lineReader.close();
+        readline.close();
+        console.log('\nInput cancelled.');
+        resolve(undefined);
+      };
+
+      const onReaderClose = (): void => {
+        if (lines.length === 0) {
+          resolve(undefined);
+        }
+      };
+
+      lineReader.on('line', onLine);
+      lineReader.on('SIGINT', onSigint);
+      lineReader.on('close', onReaderClose);
+
+      process.stdout.write('1> ');
+    });
+  });
+}
+
+/**
  * Prompts user to select an option using interactive arrow-key navigation.
  *
  * @param query - The blocking query to select an option for.
  * @param displayOptions - Display options.
- * @returns The selected option, or undefined if user cancelled.
+ * @returns The selected option and optional rationale, or undefined if user cancelled.
  */
 async function promptForSelectionWithArrows(
   query: BlockingRecord,
   displayOptions: ResolveDisplayOptions
-): Promise<string | undefined> {
+): Promise<{ option: string; rationale?: string } | undefined> {
   if (!query.options || query.options.length === 0) {
     console.error('No options available for this query.');
     return undefined;
@@ -358,7 +449,18 @@ async function promptForSelectionWithArrows(
 
                 if (confirmationLower === 'y' || confirmationLower === 'yes') {
                   confirmReader.close();
-                  return selectedOption;
+                  const needsClarification = isClarificationOption(selectedOption);
+                  if (needsClarification) {
+                    const rationale = await promptForClarification(displayOptions);
+                    if (rationale === undefined) {
+                      console.log('Selection cancelled.');
+                      numericInput = '';
+                      clearLines(renderedLineCount);
+                      continue;
+                    }
+                    return { option: selectedOption, rationale };
+                  }
+                  return { option: selectedOption };
                 } else if (confirmationLower === 'n' || confirmationLower === 'no') {
                   console.log('Selection cancelled.');
                   numericInput = '';
@@ -396,7 +498,17 @@ async function promptForSelectionWithArrows(
 
               if (confirmationLower === 'y' || confirmationLower === 'yes') {
                 confirmReader.close();
-                return selectedOption;
+                const needsClarification = isClarificationOption(selectedOption);
+                if (needsClarification) {
+                  const rationale = await promptForClarification(displayOptions);
+                  if (rationale === undefined) {
+                    console.log('Selection cancelled.');
+                    clearLines(renderedLineCount);
+                    continue;
+                  }
+                  return { option: selectedOption, rationale };
+                }
+                return { option: selectedOption };
               } else if (confirmationLower === 'n' || confirmationLower === 'no') {
                 console.log('Selection cancelled.');
                 clearLines(renderedLineCount);
@@ -464,6 +576,58 @@ async function promptForSelectionWithArrows(
 }
 
 /**
+ * Prompts user for clarification text.
+ *
+ * @param displayOptions - Display options.
+ * @returns The clarification text, or undefined if cancelled.
+ */
+async function promptForClarification(
+  displayOptions: ResolveDisplayOptions
+): Promise<string | undefined> {
+  const yellowCode = displayOptions.colors ? '\x1b[33m' : '';
+  const resetCode = displayOptions.colors ? '\x1b[0m' : '';
+  const boldCode = displayOptions.colors ? '\x1b[1m' : '';
+
+  for (;;) {
+    const clarification = await readMultiLineInput(
+      `${boldCode}Please provide your explanation:${resetCode}`,
+      `${yellowCode}Type your explanation, then enter <<<DONE on its own line to finish${resetCode}`
+    );
+
+    if (clarification === undefined) {
+      return undefined;
+    }
+
+    if (clarification.trim().length === 0) {
+      console.log('Please provide an explanation.');
+      console.log();
+      continue;
+    }
+
+    console.log(`You entered: ${clarification}`);
+    const confirmReader = await createInputReader();
+    try {
+      const confirmation = await confirmReader.readLine('Confirm this explanation? (y/n) > ');
+      const confirmationLower = confirmation.trim().toLowerCase();
+
+      if (confirmationLower === 'y' || confirmationLower === 'yes') {
+        return clarification;
+      } else if (confirmationLower === 'n' || confirmationLower === 'no') {
+        console.log('Explanation rejected. Please try again.');
+        console.log();
+        continue;
+      } else {
+        console.log('Please enter y or n.');
+        console.log();
+        continue;
+      }
+    } finally {
+      confirmReader.close();
+    }
+  }
+}
+
+/**
  * Handles the resolve command.
  *
  * @param context - The CLI context.
@@ -492,22 +656,29 @@ export async function handleResolveCommand(context: CliContext): Promise<CliComm
 
     try {
       for (const query of pendingQueries) {
-        const selectedOption = await promptForSelectionWithArrows(query, options);
+        const selection = await promptForSelectionWithArrows(query, options);
 
-        if (selectedOption === undefined) {
+        if (selection === undefined) {
           console.log('Selection cancelled.');
           return { exitCode: 0 };
         }
 
         const ledger = new Ledger({ project: 'cli-resolution' });
 
+        const resolveOptions = {
+          response: selection.option,
+          allowCustomResponse: false,
+        } as const;
+
+        const resolveOptionsWithRationale =
+          selection.rationale !== undefined
+            ? { ...resolveOptions, rationale: selection.rationale }
+            : resolveOptions;
+
         const resolveResult = resolveBlocking(
           snapshot.state,
           query,
-          {
-            response: selectedOption,
-            allowCustomResponse: false,
-          },
+          resolveOptionsWithRationale,
           ledger
         );
 
