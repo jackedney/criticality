@@ -6,13 +6,17 @@
  */
 
 import type { CliContext, CliCommandResult } from '../types.js';
-import { loadState, StatePersistenceError, saveState } from '../../protocol/persistence.js';
-import type { ProtocolStateSnapshot } from '../../protocol/persistence.js';
+import { StatePersistenceError } from '../../protocol/persistence.js';
 import type { BlockingRecord } from '../../protocol/blocking.js';
 import { resolveBlocking } from '../../protocol/blocking.js';
 import { Ledger } from '../../ledger/index.js';
-
-const DEFAULT_STATE_PATH = '.criticality-state.json';
+import {
+  loadCliState,
+  saveCliState,
+  updateStateAfterResolution,
+  getDefaultStatePath,
+  type CliStateSnapshot,
+} from '../state.js';
 
 interface ResolveDisplayOptions {
   colors: boolean;
@@ -95,7 +99,7 @@ async function createInputReader(): Promise<InputReader> {
  * @returns The state file path.
  */
 function getStatePath(): string {
-  return DEFAULT_STATE_PATH;
+  return getDefaultStatePath();
 }
 
 /**
@@ -190,10 +194,10 @@ function formatQueryWithOptions(query: BlockingRecord, options: ResolveDisplayOp
 /**
  * Renders blocking queries to console.
  *
- * @param snapshot - The protocol state snapshot.
+ * @param snapshot - The CLI state snapshot.
  * @param options - Display options.
  */
-function renderQueries(snapshot: ProtocolStateSnapshot, options: ResolveDisplayOptions): void {
+function renderQueries(snapshot: CliStateSnapshot, options: ResolveDisplayOptions): void {
   const pendingQueries = snapshot.blockingQueries.filter((q) => !q.resolved);
 
   if (pendingQueries.length === 0) {
@@ -642,7 +646,7 @@ export async function handleResolveCommand(context: CliContext): Promise<CliComm
   const statePath = getStatePath();
 
   try {
-    const snapshot = await loadState(statePath);
+    const snapshot = await loadCliState(statePath);
     const pendingQueries = snapshot.blockingQueries.filter((q) => !q.resolved);
 
     if (pendingQueries.length === 0) {
@@ -687,21 +691,18 @@ export async function handleResolveCommand(context: CliContext): Promise<CliComm
           return { exitCode: 1, message: resolveResult.error.message };
         }
 
-        const updatedQueries = snapshot.blockingQueries.map((q) =>
-          q.id === query.id ? resolveResult.record : q
+        const updatedSnapshot = updateStateAfterResolution(
+          snapshot,
+          query.id,
+          resolveResult.record,
+          resolveResult.state
         );
 
-        const updatedSnapshot: ProtocolStateSnapshot = {
-          state: resolveResult.state,
-          artifacts: snapshot.artifacts,
-          blockingQueries: updatedQueries,
-        };
-
-        await saveState(updatedSnapshot, statePath);
+        await saveCliState(updatedSnapshot, statePath);
 
         console.log(`Query "${query.id}" resolved successfully.`);
 
-        const remainingQueries = updatedQueries.filter((q) => !q.resolved);
+        const remainingQueries = updatedSnapshot.blockingQueries.filter((q) => !q.resolved);
         if (remainingQueries.length > 0) {
           console.log();
           console.log(
