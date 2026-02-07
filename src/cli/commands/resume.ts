@@ -7,7 +7,12 @@
 
 import type { CliContext, CliCommandResult } from '../types.js';
 import { StatePersistenceError } from '../../protocol/persistence.js';
-import { loadCliStateWithRecovery, getDefaultStatePath, type CliStateSnapshot } from '../state.js';
+import {
+  loadCliStateWithRecovery,
+  getDefaultStatePath,
+  getDefaultLedgerPath,
+  type CliStateSnapshot,
+} from '../state.js';
 import { loadLedger } from '../../ledger/persistence.js';
 import type { Decision } from '../../ledger/types.js';
 import { formatRelativeTime, formatConfidence, wrapInBox } from '../utils/displayUtils.js';
@@ -78,7 +83,7 @@ async function displayResumeSummary(
   statePath: string,
   options: ResumeDisplayOptions
 ): Promise<void> {
-  const ledgerPath = statePath.replace('.criticality-state.json', '.criticality/ledger');
+  const ledgerPath = getDefaultLedgerPath(statePath);
 
   let decisions: readonly Decision[] = [];
   try {

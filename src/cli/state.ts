@@ -15,6 +15,7 @@ import {
 import type { BlockingRecord } from '../protocol/blocking.js';
 import { renameSync } from 'node:fs';
 import { stat } from 'node:fs/promises';
+import path from 'node:path';
 
 /**
  * Extended protocol state snapshot with CLI-specific metadata.
@@ -60,6 +61,19 @@ const DEFAULT_STATE_PATH = '.criticality-state.json';
  */
 export function getDefaultStatePath(): string {
   return DEFAULT_STATE_PATH;
+}
+
+/**
+ * Gets the default ledger file path for a given state path.
+ *
+ * The ledger is stored in a .criticality subdirectory within the same
+ * directory as the state file.
+ *
+ * @param statePath - Path to the state file.
+ * @returns The ledger file path.
+ */
+export function getDefaultLedgerPath(statePath: string): string {
+  return path.join(path.dirname(statePath), '.criticality', 'ledger');
 }
 
 /**
