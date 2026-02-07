@@ -96,16 +96,28 @@ export function getBorderChars(options: DisplayOptions): BorderChars {
   };
 }
 
+/**
+ * Strips ANSI escape sequences from a string to get visible length.
+ *
+ * @param str - The string potentially containing ANSI codes.
+ * @returns The string with ANSI codes removed.
+ */
+function stripAnsi(str: string): string {
+  // eslint-disable-next-line no-control-regex
+  return str.replace(/\x1b\[[0-9;]*m/g, '');
+}
+
 export function wrapInBox(text: string, options: DisplayOptions): string {
   const border = getBorderChars(options);
   const lines = text.split('\n');
-  const maxLength = Math.max(...lines.map((line) => line.length));
+  const maxLength = Math.max(...lines.map((line) => stripAnsi(line).length));
   const horizontalBorder = border.horizontal.repeat(maxLength + 2);
 
   let result = border.topLeft + horizontalBorder + border.topRight + '\n';
   for (const line of lines) {
-    const paddedLine = line.padEnd(maxLength);
-    result += border.vertical + ' ' + paddedLine + ' ' + border.vertical + '\n';
+    const visibleLength = stripAnsi(line).length;
+    const padding = ' '.repeat(maxLength - visibleLength);
+    result += border.vertical + ' ' + line + padding + ' ' + border.vertical + '\n';
   }
   result += border.bottomLeft + horizontalBorder + border.bottomRight;
 

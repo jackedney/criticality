@@ -18,11 +18,8 @@ import {
 import type { BlockingRecord } from '../../protocol/blocking.js';
 import { loadLedger } from '../../ledger/persistence.js';
 import type { Decision } from '../../ledger/types.js';
-import { loadStateWithRecovery } from '../state.js';
+import { loadStateWithRecovery, getDefaultStatePath, getDefaultLedgerPath } from '../state.js';
 import { formatRelativeTime, formatConfidence, wrapInBox } from '../utils/displayUtils.js';
-
-const DEFAULT_STATE_PATH = '.criticality-state.json';
-const DEFAULT_LEDGER_PATH = '.criticality/ledger';
 
 interface StatusDisplayOptions {
   colors: boolean;
@@ -40,7 +37,7 @@ interface StatusDisplayOptions {
  * @returns The state file path.
  */
 function getStatePath(): string {
-  return DEFAULT_STATE_PATH;
+  return getDefaultStatePath();
 }
 
 /**
@@ -84,7 +81,7 @@ function formatPhase(phase: string, stateType: string, options: StatusDisplayOpt
  * @returns The ledger file path.
  */
 function getLedgerPath(): string {
-  return DEFAULT_LEDGER_PATH;
+  return getDefaultLedgerPath(getStatePath());
 }
 
 /**

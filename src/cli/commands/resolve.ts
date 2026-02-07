@@ -61,6 +61,14 @@ function createInputReader(): InputReader {
     },
     readKey(): Promise<string> {
       return new Promise((resolve) => {
+        if (!process.stdin.isTTY) {
+          // Non-TTY environment (piped/CI): fall back to readline
+          rl.question('', (answer) => {
+            resolve(answer.charAt(0) || '\n');
+          });
+          return;
+        }
+
         process.stdin.resume();
         process.stdin.setRawMode(true);
 
@@ -77,6 +85,10 @@ function createInputReader(): InputReader {
       });
     },
     setRawMode(enable: boolean): void {
+      if (!process.stdin.isTTY) {
+        // Non-TTY environment: setRawMode is not available
+        return;
+      }
       if (process.stdin.isRaw !== enable) {
         process.stdin.setRawMode(enable);
         if (enable) {

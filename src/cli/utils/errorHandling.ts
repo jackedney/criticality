@@ -25,7 +25,8 @@ export function withErrorHandling(fn: () => CliCommandResult | Promise<CliComman
     } catch (error) {
       if (error instanceof Error) {
         console.error(`Error: ${error.message}`);
-        process.exit(1);
+      } else {
+        console.error(`Error: ${String(error)}`);
       }
       process.exit(1);
     }

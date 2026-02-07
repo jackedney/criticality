@@ -402,11 +402,19 @@ async function attemptTransformation(
     return false;
   }
 
-  updateSourceFile(state, transformationResult.transformedCode);
+  const updateSuccess = updateSourceFile(state, transformationResult.transformedCode);
+  if (!updateSuccess) {
+    attempt.error = 'Failed to update source file with transformed code';
+    state.attempts.push(attempt);
+    return false;
+  }
 
   const func = state.sourceFile.getFunctions().find((f) => f.getName() === state.functionName);
   if (!func) {
-    revertSourceFile(state, beforeCode);
+    const revertSuccess = revertSourceFile(state, beforeCode);
+    if (!revertSuccess) {
+      attempt.error = 'Failed to revert source file after function not found';
+    }
     state.attempts.push(attempt);
     return false;
   }
@@ -429,7 +437,10 @@ async function attemptTransformation(
   attempt.verification = verificationResult;
 
   if (!verificationResult.passed) {
-    revertSourceFile(state, beforeCode);
+    const revertSuccess = revertSourceFile(state, beforeCode);
+    if (!revertSuccess) {
+      attempt.error = 'Failed to revert source file after verification failure';
+    }
     state.attempts.push(attempt);
     return false;
   }
@@ -443,17 +454,19 @@ async function attemptTransformation(
 
 /**
  * Updates the source file with transformed code.
+ *
+ * @returns True if the update succeeded, false otherwise.
  */
-function updateSourceFile(state: FunctionIterationState, newCode: string): void {
+function updateSourceFile(state: FunctionIterationState, newCode: string): boolean {
   const func = state.sourceFile.getFunctions().find((f) => f.getName() === state.functionName);
 
   if (!func) {
-    return;
+    return false;
   }
 
   const body = func.getBody();
   if (!body) {
-    return;
+    return false;
   }
 
   const project = new Project({ useInMemoryFileSystem: true });
@@ -463,22 +476,27 @@ function updateSourceFile(state: FunctionIterationState, newCode: string): void 
 
   if (tempBody) {
     body.replaceWithText(tempBody.getFullText());
+    return true;
   }
+
+  return false;
 }
 
 /**
  * Reverts the source file to original code.
+ *
+ * @returns True if the revert succeeded, false otherwise.
  */
-function revertSourceFile(state: FunctionIterationState, originalCode: string): void {
+function revertSourceFile(state: FunctionIterationState, originalCode: string): boolean {
   const func = state.sourceFile.getFunctions().find((f) => f.getName() === state.functionName);
 
   if (!func) {
-    return;
+    return false;
   }
 
   const body = func.getBody();
   if (!body) {
-    return;
+    return false;
   }
 
   const project = new Project({ useInMemoryFileSystem: true });
@@ -488,7 +506,10 @@ function revertSourceFile(state: FunctionIterationState, originalCode: string): 
 
   if (tempBody) {
     body.replaceWithText(tempBody.getFullText());
+    return true;
   }
+
+  return false;
 }
 
 /**

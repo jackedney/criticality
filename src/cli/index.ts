@@ -175,7 +175,7 @@ EXAMPLES:
   };
 
   const help = commandHelp[commandName];
-  if (help) {
+  if (help !== undefined) {
     console.log(help);
   } else {
     console.error(`Unknown command: ${commandName}`);
