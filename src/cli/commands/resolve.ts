@@ -324,11 +324,6 @@ function isClarificationOption(optionText: string): boolean {
  */
 function readMultiLineInput(prompt: string, hint: string): Promise<string | undefined> {
   return import('node:readline').then((readlineModule) => {
-    const readline = readlineModule.createInterface({
-      input: process.stdin,
-      output: process.stdout,
-    });
-
     console.log(prompt);
     console.log(hint);
 
@@ -345,7 +340,6 @@ function readMultiLineInput(prompt: string, hint: string): Promise<string | unde
       const onLine = (line: string): void => {
         if (line === '<<<DONE') {
           lineReader.close();
-          readline.close();
           const fullText = lines.join('\n').trim();
           if (fullText.length === 0) {
             console.log();
@@ -364,7 +358,6 @@ function readMultiLineInput(prompt: string, hint: string): Promise<string | unde
 
       const onSigint = (): void => {
         lineReader.close();
-        readline.close();
         console.log('\nInput cancelled.');
         resolve(undefined);
       };
