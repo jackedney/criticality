@@ -8,6 +8,7 @@
 
 /* eslint-disable no-console */
 import { createCliApp } from './app.js';
+import { handleStatusCommand } from './commands/status.js';
 
 /**
  * Displays usage information.
@@ -63,7 +64,7 @@ function showError(message: string): void {
 /**
  * Main CLI entry point.
  */
-function main(): void {
+async function main(): Promise<void> {
   const args = process.argv.slice(2);
 
   if (args.length === 0) {
@@ -93,6 +94,9 @@ function main(): void {
       break;
 
     case 'status':
+      await handleStatusCommandWithContext();
+      break;
+
     case 'resume':
     case 'resolve':
       handleCommand(command);
@@ -157,6 +161,23 @@ EXAMPLES:
 }
 
 /**
+ * Handles status command with CLI context.
+ */
+async function handleStatusCommandWithContext(): Promise<void> {
+  try {
+    const context = createCliApp();
+    const result = await handleStatusCommand(context);
+    process.exit(result.exitCode);
+  } catch (error) {
+    if (error instanceof Error) {
+      console.error(`Error: ${error.message}`);
+      process.exit(1);
+    }
+    process.exit(1);
+  }
+}
+
+/**
  * Handles CLI commands.
  *
  * @param command - The command to handle.
@@ -179,7 +200,7 @@ function handleCommand(command: string): void {
 }
 
 try {
-  main();
+  await main();
 } catch {
   console.error('Unexpected error: An unknown error occurred');
   process.exit(1);
