@@ -404,6 +404,7 @@ async function attemptTransformation(
 
   const updateSuccess = updateSourceFile(state, transformationResult.transformedCode);
   if (!updateSuccess) {
+    attempt.success = false;
     attempt.error = 'Failed to update source file with transformed code';
     state.attempts.push(attempt);
     return false;
