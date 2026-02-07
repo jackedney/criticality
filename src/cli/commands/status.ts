@@ -2,7 +2,7 @@
  * Status command handler for the Criticality Protocol CLI.
  *
  * Displays the current protocol state including phase, substate type,
- * and available artifacts using OpenTUI Box components.
+ * blocking queries, and available artifacts using OpenTUI Box components.
  */
 
 import type { CliContext, CliCommandResult } from '../types.js';
@@ -10,6 +10,7 @@ import { loadState, StatePersistenceError } from '../../protocol/persistence.js'
 import type { ProtocolStateSnapshot } from '../../protocol/persistence.js';
 import type { ProtocolSubstate, BlockingSubstate } from '../../protocol/types.js';
 import { isActiveSubstate, isBlockingSubstate, isFailedSubstate } from '../../protocol/types.js';
+import type { BlockingRecord } from '../../protocol/blocking.js';
 
 const DEFAULT_STATE_PATH = '.criticality-state.json';
 
@@ -155,7 +156,49 @@ function formatBlockingReason(substate: BlockingSubstate, options: StatusDisplay
 }
 
 /**
- * Renders the status display to console.
+ * Formats pending queries for display.
+ *
+ * @param blockingQueries - The blocking queries to format.
+ * @param options - Display options.
+ * @returns The formatted pending queries text.
+ */
+function formatPendingQueries(
+  blockingQueries: readonly BlockingRecord[],
+  options: StatusDisplayOptions
+): string {
+  const pendingQueries = blockingQueries.filter((q) => !q.resolved);
+
+  if (pendingQueries.length === 0) {
+    return 'No pending queries';
+  }
+
+  const boldCode = options.colors ? '\x1b[1m' : '';
+  const resetCode = options.colors ? '\x1b[0m' : '';
+  const redCode = options.colors ? '\x1b[31m' : '';
+
+  let result = `${boldCode}Pending Queries:${resetCode}\n`;
+
+  for (const query of pendingQueries) {
+    const optionsCount = query.options?.length ?? 0;
+    const severityDisplay = `${redCode}[BLOCKING]${resetCode}`;
+
+    let questionText = query.query;
+    if (questionText.length > 100) {
+      questionText = questionText.substring(0, 100) + '...';
+    }
+
+    const categoryDisplay = query.phase.toLowerCase();
+
+    result += `${query.id} ${severityDisplay} ${categoryDisplay} - "${questionText}" (${String(optionsCount)} option${
+      optionsCount !== 1 ? 's' : ''
+    })\n`;
+  }
+
+  return result;
+}
+
+/**
+ * Renders status display to console.
  *
  * @param snapshot - The protocol state snapshot.
  * @param options - Display options.
@@ -199,6 +242,10 @@ function renderStatus(snapshot: ProtocolStateSnapshot, options: StatusDisplayOpt
     console.log();
     console.log(wrapInBox(blockingReason, options));
   }
+
+  const pendingQueries = formatPendingQueries(snapshot.blockingQueries, options);
+  console.log();
+  console.log(wrapInBox(pendingQueries, options));
 }
 
 /**
