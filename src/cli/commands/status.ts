@@ -8,7 +8,7 @@
 import type { CliContext, CliCommandResult } from '../types.js';
 import { loadState, StatePersistenceError } from '../../protocol/persistence.js';
 import type { ProtocolStateSnapshot } from '../../protocol/persistence.js';
-import type { ProtocolSubstate } from '../../protocol/types.js';
+import type { ProtocolSubstate, BlockingSubstate } from '../../protocol/types.js';
 import { isActiveSubstate, isBlockingSubstate, isFailedSubstate } from '../../protocol/types.js';
 
 const DEFAULT_STATE_PATH = '.criticality-state.json';
@@ -124,6 +124,37 @@ function wrapInBox(text: string, options: StatusDisplayOptions): string {
 }
 
 /**
+ * Formats a blocking reason for display.
+ *
+ * @param substate - The blocking substate.
+ * @param options - Display options.
+ * @returns The formatted blocking reason text.
+ */
+function formatBlockingReason(substate: BlockingSubstate, options: StatusDisplayOptions): string {
+  const redCode = options.colors ? '\x1b[31m' : '';
+  const resetCode = options.colors ? '\x1b[0m' : '';
+  const boldCode = options.colors ? '\x1b[1m' : '';
+
+  let result = '';
+
+  result += `${boldCode}Blocking Reason:${resetCode}\n`;
+  result += `${redCode}Type: blocking_query${resetCode}\n`;
+  result += `Description: ${substate.query}\n`;
+
+  if (substate.options && substate.options.length > 0) {
+    result += `\n${boldCode}Suggested Resolutions:${resetCode}\n`;
+    for (let i = 0; i < substate.options.length; i++) {
+      const option = substate.options[i];
+      if (option !== undefined) {
+        result += `  ${String(i + 1)}. ${option}\n`;
+      }
+    }
+  }
+
+  return result;
+}
+
+/**
  * Renders the status display to console.
  *
  * @param snapshot - The protocol state snapshot.
@@ -160,8 +191,14 @@ function renderStatus(snapshot: ProtocolStateSnapshot, options: StatusDisplayOpt
     }
   }
 
-  const fullText = statusText + (additionalInfo ? '\n\n' + additionalInfo : '');
-  console.log(wrapInBox(fullText, options));
+  const mainStatus = statusText + (additionalInfo ? '\n\n' + additionalInfo : '');
+  console.log(wrapInBox(mainStatus, options));
+
+  if (isBlockingSubstate(snapshot.state.substate)) {
+    const blockingReason = formatBlockingReason(snapshot.state.substate, options);
+    console.log();
+    console.log(wrapInBox(blockingReason, options));
+  }
 }
 
 /**
