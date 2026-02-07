@@ -20,12 +20,14 @@ import { loadLedger } from '../../ledger/persistence.js';
 import type { Decision } from '../../ledger/types.js';
 import { loadStateWithRecovery, getDefaultStatePath, getDefaultLedgerPath } from '../state.js';
 import { formatRelativeTime, formatConfidence, wrapInBox } from '../utils/displayUtils.js';
+import { TelemetryCollector } from '../telemetry.js';
 
 interface StatusDisplayOptions {
   colors: boolean;
   unicode: boolean;
   watch?: boolean;
   interval?: number;
+  verbose?: boolean;
 }
 
 /**
@@ -221,6 +223,41 @@ function formatNotifications(options: StatusDisplayOptions): string {
 }
 
 /**
+ * Formats telemetry for display.
+ *
+ * @param telemetry - The telemetry data.
+ * @param options - Display options.
+ * @returns The formatted telemetry text.
+ */
+function formatTelemetry(
+  telemetry: Parameters<typeof TelemetryCollector.formatSummary>[0],
+  options: StatusDisplayOptions
+): string {
+  const telemetryText = TelemetryCollector.formatSummary(telemetry);
+
+  if (!options.verbose) {
+    return telemetryText;
+  }
+
+  const perPhase = TelemetryCollector.formatPerPhase(telemetry);
+  if (perPhase.length === 0) {
+    return telemetryText;
+  }
+
+  const boldCode = options.colors ? '\x1b[1m' : '';
+  const resetCode = options.colors ? '\x1b[0m' : '';
+  const dimCode = options.colors ? '\x1b[2m' : '';
+
+  let result = `${telemetryText}\n\n`;
+  result += `${boldCode}Per-Phase Breakdown:${resetCode}\n`;
+  for (const line of perPhase) {
+    result += `${dimCode}  ${resetCode}${line}\n`;
+  }
+
+  return result;
+}
+
+/**
  * Renders status display to console.
  *
  * @param snapshot - The protocol state snapshot.
@@ -269,6 +306,16 @@ async function renderStatus(
   const pendingQueries = formatPendingQueries(snapshot.blockingQueries, options);
   console.log();
   console.log(wrapInBox(pendingQueries, options));
+
+  const cliSnapshot = snapshot as unknown as { telemetry?: unknown };
+  if (cliSnapshot.telemetry !== undefined) {
+    const telemetryText = formatTelemetry(
+      cliSnapshot.telemetry as Parameters<typeof TelemetryCollector.formatSummary>[0],
+      options
+    );
+    console.log();
+    console.log(wrapInBox(telemetryText, options));
+  }
 
   // Display notifications status (Phase 4.2 integration point)
   const notificationsText = formatNotifications(options);
@@ -321,14 +368,17 @@ async function renderStatusWithFooter(
  * @param args - Command-line arguments.
  * @returns Parsed options including watch mode settings.
  */
-function parseStatusArgs(args: string[]): { watch: boolean; interval: number } {
+function parseStatusArgs(args: string[]): { watch: boolean; interval: number; verbose: boolean } {
   let watch = false;
   let interval = 2000;
+  let verbose = false;
 
   for (let i = 0; i < args.length; i++) {
     const arg = args[i];
     if (arg === '--watch' || arg === '-w') {
       watch = true;
+    } else if (arg === '--verbose' || arg === '-v') {
+      verbose = true;
     } else if (arg === '--interval' && i + 1 < args.length) {
       const nextArg = args[i + 1];
       if (nextArg !== undefined) {
@@ -347,7 +397,7 @@ function parseStatusArgs(args: string[]): { watch: boolean; interval: number } {
     }
   }
 
-  return { watch, interval };
+  return { watch, interval, verbose };
 }
 
 /**
@@ -357,13 +407,14 @@ function parseStatusArgs(args: string[]): { watch: boolean; interval: number } {
  * @returns A promise resolving to the command result.
  */
 export async function handleStatusCommand(context: CliContext): Promise<CliCommandResult> {
-  const { watch, interval } = parseStatusArgs(context.args);
+  const { watch, interval, verbose } = parseStatusArgs(context.args);
 
   const options: StatusDisplayOptions = {
     colors: context.config.colors,
     unicode: context.config.unicode,
     watch,
     interval,
+    verbose,
   };
 
   const statePath = getStatePath();

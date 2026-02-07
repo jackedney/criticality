@@ -15,6 +15,7 @@ import type { ModelAlias } from '../router/types.js';
 import { execa } from 'execa';
 import { copyFile, mkdir } from 'node:fs/promises';
 import path from 'node:path';
+import { TelemetryCollector } from './telemetry.js';
 
 /**
  * Telemetry data collected from operations.
@@ -70,6 +71,8 @@ export interface CliOperationsOptions {
   collectTelemetry?: boolean;
   /** Callback for telemetry updates. */
   onTelemetryUpdate: (telemetry: OperationTelemetry) => void;
+  /** Optional TelemetryCollector for per-phase tracking. */
+  telemetryCollector?: TelemetryCollector;
 }
 
 /**
@@ -85,8 +88,10 @@ export class CliOperations implements ExternalOperations {
   private readonly cwd: string;
   private readonly collectTelemetry: boolean;
   private readonly onTelemetryUpdate: (telemetry: OperationTelemetry) => void;
+  private readonly telemetryCollector: TelemetryCollector;
   private modelClient: ClaudeCodeClient | null = null;
   private telemetry: OperationTelemetry;
+  private currentPhase: ProtocolPhase;
 
   /**
    * Creates a new CliOperations instance.
@@ -99,12 +104,23 @@ export class CliOperations implements ExternalOperations {
     this.cwd = options.cwd ?? process.cwd();
     this.collectTelemetry = options.collectTelemetry ?? true;
     this.onTelemetryUpdate = options.onTelemetryUpdate;
+    this.telemetryCollector = options.telemetryCollector ?? new TelemetryCollector();
     this.telemetry = {
       modelCalls: 0,
       promptTokens: 0,
       completionTokens: 0,
       executionTimeMs: 0,
     };
+    this.currentPhase = 'Ignition';
+  }
+
+  /**
+   * Sets the current protocol phase for telemetry tracking.
+   *
+   * @param phase - The protocol phase.
+   */
+  setCurrentPhase(phase: ProtocolPhase): void {
+    this.currentPhase = phase;
   }
 
   /**
@@ -142,7 +158,7 @@ export class CliOperations implements ExternalOperations {
   /**
    * Updates telemetry and triggers callback if configured.
    */
-  private updateTelemetry(delta: Partial<OperationTelemetry>): void {
+  private updateTelemetry(delta: Partial<OperationTelemetry>, phase: ProtocolPhase): void {
     if (!this.collectTelemetry) {
       return;
     }
@@ -158,6 +174,17 @@ export class CliOperations implements ExternalOperations {
     }
     if (delta.executionTimeMs !== undefined) {
       this.telemetry.executionTimeMs += delta.executionTimeMs;
+    }
+
+    if (delta.modelCalls !== undefined && delta.modelCalls > 0) {
+      this.telemetryCollector.recordModelCall(
+        phase,
+        delta.promptTokens ?? 0,
+        delta.completionTokens ?? 0,
+        delta.executionTimeMs ?? 0
+      );
+    } else if (delta.executionTimeMs !== undefined) {
+      this.telemetryCollector.recordExecutionTime(phase, delta.executionTimeMs);
     }
 
     this.onTelemetryUpdate(this.telemetry);
@@ -216,12 +243,15 @@ export class CliOperations implements ExternalOperations {
 
       const elapsed = Date.now() - startTime;
 
-      this.updateTelemetry({
-        modelCalls: 1,
-        promptTokens: result.response.usage.promptTokens,
-        completionTokens: result.response.usage.completionTokens,
-        executionTimeMs: elapsed,
-      });
+      this.updateTelemetry(
+        {
+          modelCalls: 1,
+          promptTokens: result.response.usage.promptTokens,
+          completionTokens: result.response.usage.completionTokens,
+          executionTimeMs: elapsed,
+        },
+        phase
+      );
 
       return {
         success: true,
@@ -261,9 +291,12 @@ export class CliOperations implements ExternalOperations {
         };
       }
 
-      this.updateTelemetry({
-        executionTimeMs: elapsed,
-      });
+      this.updateTelemetry(
+        {
+          executionTimeMs: elapsed,
+        },
+        this.currentPhase
+      );
 
       return {
         success: true,
@@ -303,9 +336,12 @@ export class CliOperations implements ExternalOperations {
         };
       }
 
-      this.updateTelemetry({
-        executionTimeMs: elapsed,
-      });
+      this.updateTelemetry(
+        {
+          executionTimeMs: elapsed,
+        },
+        this.currentPhase
+      );
 
       return {
         success: true,
@@ -346,9 +382,12 @@ export class CliOperations implements ExternalOperations {
 
       const elapsed = Date.now() - startTime;
 
-      this.updateTelemetry({
-        executionTimeMs: elapsed,
-      });
+      this.updateTelemetry(
+        {
+          executionTimeMs: elapsed,
+        },
+        phase
+      );
 
       return {
         success: true,
@@ -418,6 +457,15 @@ export class CliOperations implements ExternalOperations {
   }
 
   /**
+   * Gets the per-phase telemetry data.
+   *
+   * @returns The collected telemetry data with per-phase breakdown.
+   */
+  getPerPhaseTelemetry() {
+    return this.telemetryCollector.getTelemetryData();
+  }
+
+  /**
    * Resets telemetry counters.
    */
   resetTelemetry(): void {
@@ -427,6 +475,7 @@ export class CliOperations implements ExternalOperations {
       completionTokens: 0,
       executionTimeMs: 0,
     };
+    this.telemetryCollector.reset();
     this.onTelemetryUpdate(this.telemetry);
   }
 }
@@ -438,7 +487,8 @@ export class CliOperations implements ExternalOperations {
  * @returns A configured CliOperations instance.
  */
 export async function createCliOperations(options: CliOperationsOptions): Promise<CliOperations> {
-  const operations = new CliOperations(options);
+  const telemetryCollector = options.telemetryCollector ?? new TelemetryCollector();
+  const operations = new CliOperations({ ...options, telemetryCollector });
   await operations.ensureModelClient();
   return operations;
 }

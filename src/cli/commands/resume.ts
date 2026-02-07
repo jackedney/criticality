@@ -11,6 +11,7 @@ import {
   loadCliStateWithRecovery,
   getDefaultStatePath,
   getDefaultLedgerPath,
+  saveCliState,
   type CliStateSnapshot,
 } from '../state.js';
 import { loadLedger } from '../../ledger/persistence.js';
@@ -23,6 +24,7 @@ import {
 } from '../../protocol/orchestrator.js';
 import { Spinner } from '../components/Spinner.js';
 import { createCliOperations, type OperationTelemetry } from '../operations.js';
+import { TelemetryCollector } from '../telemetry.js';
 import { existsSync, readFileSync } from 'node:fs';
 import { parseConfig } from '../../config/index.js';
 
@@ -63,6 +65,11 @@ let telemetry: OperationTelemetry = {
   completionTokens: 0,
   executionTimeMs: 0,
 };
+
+/**
+ * Telemetry collector for per-phase tracking.
+ */
+let telemetryCollector: TelemetryCollector | null = null;
 
 /**
  * Gets the state file path.
@@ -255,12 +262,14 @@ export async function handleResumeCommand(context: CliContext): Promise<CliComma
 
     const config = loadCliConfig();
 
+    telemetryCollector = new TelemetryCollector();
     const operations = await createCliOperations({
       config,
       statePath,
       onTelemetryUpdate: (newTelemetry) => {
         telemetry = newTelemetry;
       },
+      telemetryCollector,
     });
 
     const orchestrator = await createOrchestrator({
@@ -322,6 +331,23 @@ export async function handleResumeCommand(context: CliContext): Promise<CliComma
           options
         );
         console.log();
+
+        // Save telemetry to state file
+        if (telemetryCollector !== null) {
+          const telemetryData = telemetryCollector.getTelemetryData();
+          try {
+            const currentState = await loadCliStateWithRecovery(statePath);
+            const updatedState: CliStateSnapshot = {
+              ...currentState,
+              telemetry: telemetryData,
+            };
+            await saveCliState(updatedState, statePath);
+          } catch {
+            // If state save fails, telemetry update won't persist
+            // but this shouldn't block the interrupt
+          }
+        }
+
         console.log('State saved successfully.');
         return { exitCode: 0 };
       }
@@ -340,6 +366,21 @@ export async function handleResumeCommand(context: CliContext): Promise<CliComma
     // Clean up
     process.removeListener('SIGINT', sigintHandler);
     spinner.stop();
+
+    // Save telemetry to state file after normal completion
+    if (telemetryCollector !== null) {
+      const telemetryData = telemetryCollector.getTelemetryData();
+      try {
+        const currentState = await loadCliStateWithRecovery(statePath);
+        const updatedState: CliStateSnapshot = {
+          ...currentState,
+          telemetry: telemetryData,
+        };
+        await saveCliState(updatedState, statePath);
+      } catch {
+        // If state save fails, telemetry update won't persist
+      }
+    }
 
     // Display execution summary
     displayExecutionSummary(
