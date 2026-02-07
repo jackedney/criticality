@@ -253,12 +253,13 @@ function serializeCliState(snapshot: CliStateSnapshot, options?: SaveCliStateOpt
  */
 function upgradeToCliState(snapshot: ProtocolStateSnapshot): CliStateSnapshot {
   const now = new Date().toISOString();
+  const maybeCliSnapshot = snapshot as unknown as Partial<CliStateSnapshot>;
 
   return {
     ...snapshot,
-    createdAt: now,
-    lastActivity: now,
-    resolvedQueries: [],
+    createdAt: maybeCliSnapshot.createdAt ?? now,
+    lastActivity: maybeCliSnapshot.lastActivity ?? now,
+    resolvedQueries: maybeCliSnapshot.resolvedQueries ?? [],
   };
 }
 
