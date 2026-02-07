@@ -439,6 +439,7 @@ async function attemptTransformation(
   attempt.verification = verificationResult;
 
   if (!verificationResult.passed) {
+    attempt.success = false;
     const revertSuccess = revertSourceFile(state, beforeCode);
     if (!revertSuccess) {
       attempt.error = 'Failed to revert source file after verification failure';
