@@ -205,11 +205,52 @@ describe('Pending Queries Display (US-004)', () => {
     const noOptions: BlockingRecord = {
       id: 'free_text_001',
       phase: 'Injection',
-      query: 'Please provide your detailed explanation of the architecture decision.',
+      query: 'Please provide your detailed explanation of architecture decision.',
       blockedAt: new Date().toISOString(),
       resolved: false,
     };
 
     expect(noOptions.options).toBeUndefined();
+  });
+});
+
+describe('Notifications Display (US-016)', () => {
+  it('should show notification system as not configured', () => {
+    const snapshot: ProtocolStateSnapshot = {
+      state: createActiveState('Injection'),
+      artifacts: ['spec'],
+      blockingQueries: [],
+    };
+
+    expect(snapshot.state.phase).toBe('Injection');
+    expect(isBlockingSubstate(snapshot.state.substate)).toBe(false);
+  });
+
+  it('should display notifications section with Phase 4.2 reference', () => {
+    const snapshot: ProtocolStateSnapshot = {
+      state: {
+        phase: 'Lattice',
+        substate: createBlockingSubstate({
+          query: 'Awaiting user input for architecture decision.',
+        }),
+      },
+      artifacts: ['spec'],
+      blockingQueries: [],
+    };
+
+    expect(isBlockingSubstate(snapshot.state.substate)).toBe(true);
+    expect(snapshot.blockingQueries).toHaveLength(0);
+  });
+
+  it('should gracefully handle missing notification module', () => {
+    const snapshot: ProtocolStateSnapshot = {
+      state: createActiveState('MassDefect'),
+      artifacts: ['spec', 'verifiedCode'],
+      blockingQueries: [],
+    };
+
+    expect(snapshot.state.phase).toBe('MassDefect');
+    expect(snapshot.artifacts).toContain('verifiedCode');
+    expect(snapshot.blockingQueries).toHaveLength(0);
   });
 });

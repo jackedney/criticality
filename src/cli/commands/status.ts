@@ -306,6 +306,27 @@ function formatTimestamp(date: Date): string {
 }
 
 /**
+ * Formats notification status for display.
+ *
+ * This function is designed to be extended in Phase 4.2 when the
+ * notification system is implemented. For now, it shows that the
+ * notification system is not configured.
+ *
+ * @param options - Display options.
+ * @returns The formatted notification status text.
+ */
+function formatNotifications(options: StatusDisplayOptions): string {
+  const boldCode = options.colors ? '\x1b[1m' : '';
+  const resetCode = options.colors ? '\x1b[0m' : '';
+  const dimCode = options.colors ? '\x1b[2m' : '';
+
+  let result = `${boldCode}Notifications:${resetCode}\n`;
+  result += `${dimCode}Notification system: not configured (see Phase 4.2)${resetCode}`;
+
+  return result;
+}
+
+/**
  * Renders status display to console.
  *
  * @param snapshot - The protocol state snapshot.
@@ -357,6 +378,11 @@ async function renderStatus(
   const pendingQueries = formatPendingQueries(snapshot.blockingQueries, options);
   console.log();
   console.log(wrapInBox(pendingQueries, options));
+
+  // Display notifications status (Phase 4.2 integration point)
+  const notificationsText = formatNotifications(options);
+  console.log();
+  console.log(wrapInBox(notificationsText, options));
 
   // Display recent decisions from ledger
   const ledgerPath = getLedgerPath();
