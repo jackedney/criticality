@@ -27,6 +27,7 @@ import { createCliOperations, type OperationTelemetry } from '../operations.js';
 import { TelemetryCollector } from '../telemetry.js';
 import { existsSync, readFileSync } from 'node:fs';
 import { parseConfig } from '../../config/index.js';
+import { displayErrorWithSuggestions, inferErrorType } from '../errors.js';
 
 interface ResumeDisplayOptions {
   colors: boolean;
@@ -407,13 +408,18 @@ export async function handleResumeCommand(context: CliContext): Promise<CliComma
 
     // Handle error states
     if (result.stopReason === 'FAILED' && result.error !== undefined) {
-      const yellowCode = options.colors ? '\x1b[33m' : '';
-      const resetCode = options.colors ? '\x1b[0m' : '';
-      console.log();
-      console.log(`${yellowCode}Suggestions:${resetCode}`);
-      console.log('  1. Check the error details above');
-      console.log('  2. Review recent changes that may have caused the issue');
-      console.log('  3. Run "crit status" for more information');
+      const errorType = inferErrorType(result.error);
+      displayErrorWithSuggestions(
+        result.error,
+        {
+          errorType,
+          phase: snapshot.state.phase,
+          details: {
+            recoverable: true,
+          },
+        },
+        options
+      );
       return { exitCode: 1, message: result.error };
     }
 
