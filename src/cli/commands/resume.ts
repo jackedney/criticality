@@ -1,0 +1,246 @@
+/**
+ * Resume command handler for the Criticality Protocol CLI.
+ *
+ * Allows users to continue protocol execution from a blocked state
+ * after resolving blocking queries.
+ */
+
+import type { CliContext, CliCommandResult } from '../types.js';
+import { StatePersistenceError } from '../../protocol/persistence.js';
+import { loadCliState, getDefaultStatePath, type CliStateSnapshot } from '../state.js';
+import { loadLedger } from '../../ledger/persistence.js';
+import type { Decision } from '../../ledger/types.js';
+
+interface ResumeDisplayOptions {
+  colors: boolean;
+  unicode: boolean;
+}
+
+/**
+ * Gets the state file path.
+ *
+ * @returns The state file path.
+ */
+function getStatePath(): string {
+  return getDefaultStatePath();
+}
+
+/**
+ * Formats a timestamp as relative time (e.g., "2h ago", "30m ago").
+ *
+ * @param timestamp - ISO 8601 timestamp string.
+ * @returns Relative time string.
+ */
+function formatRelativeTime(timestamp: string): string {
+  const now = new Date();
+  const then = new Date(timestamp);
+  const diffMs = now.getTime() - then.getTime();
+
+  const seconds = Math.floor(diffMs / 1000);
+  const minutes = Math.floor(seconds / 60);
+  const hours = Math.floor(minutes / 60);
+  const days = Math.floor(hours / 24);
+
+  if (days > 0) {
+    return `${String(days)}d ago`;
+  }
+  if (hours > 0) {
+    return `${String(hours)}h ago`;
+  }
+  if (minutes > 0) {
+    return `${String(minutes)}m ago`;
+  }
+  return 'just now';
+}
+
+/**
+ * Gets confidence styling for display.
+ *
+ * @param confidence - The confidence level.
+ * @param options - Display options.
+ * @returns Formatted confidence string with styling.
+ */
+function formatConfidence(confidence: string, options: ResumeDisplayOptions): string {
+  const boldCode = options.colors ? '\x1b[1m' : '';
+  const dimCode = options.colors ? '\x1b[2m' : '';
+  const resetCode = options.colors ? '\x1b[0m' : '';
+
+  if (confidence === 'canonical') {
+    return `${boldCode}[canonical]${resetCode}`;
+  }
+  if (confidence === 'suspended' || confidence === 'blocking') {
+    return `${dimCode}[${confidence}]${resetCode}`;
+  }
+  return `[${confidence}]`;
+}
+
+/**
+ * Formats decisions summary for display.
+ *
+ * @param decisions - Array of decisions.
+ * @param options - Display options.
+ * @returns The formatted decisions text.
+ */
+function formatDecisionsSummary(
+  decisions: readonly Decision[],
+  options: ResumeDisplayOptions
+): string {
+  if (decisions.length === 0) {
+    return 'No new decisions since block';
+  }
+
+  const boldCode = options.colors ? '\x1b[1m' : '';
+  const resetCode = options.colors ? '\x1b[0m' : '';
+
+  let result = `${boldCode}${String(decisions.length)} decision${decisions.length === 1 ? '' : 's'} made since block:${resetCode}\n`;
+
+  for (const decision of decisions) {
+    const timeAgo = formatRelativeTime(decision.timestamp);
+    const confidence = formatConfidence(decision.confidence, options);
+    result += `${decision.id} (${timeAgo}) ${confidence} ${decision.constraint}\n`;
+  }
+
+  return result;
+}
+
+/**
+ * Creates a box-drawing border using ASCII or Unicode characters.
+ *
+ * @param options - Display options.
+ * @returns Border characters object.
+ */
+function getBorderChars(options: ResumeDisplayOptions): Record<string, string> {
+  if (options.unicode) {
+    return {
+      topLeft: '┌',
+      topRight: '┐',
+      bottomLeft: '└',
+      bottomRight: '┘',
+      horizontal: '─',
+      vertical: '│',
+    };
+  }
+  return {
+    topLeft: '+',
+    topRight: '+',
+    bottomLeft: '+',
+    bottomRight: '+',
+    horizontal: '-',
+    vertical: '|',
+  };
+}
+
+/**
+ * Wraps text in a box-drawing border.
+ *
+ * @param text - The text to wrap.
+ * @param options - Display options.
+ * @returns The boxed text.
+ */
+function wrapInBox(text: string, options: ResumeDisplayOptions): string {
+  const border = getBorderChars(options);
+  const lines = text.split('\n');
+  const maxLength = Math.max(...lines.map((line) => line.length));
+  const horizontalChar = border.horizontal ?? '-';
+  const horizontalBorder = horizontalChar.repeat(maxLength + 2);
+
+  let result = (border.topLeft ?? '+') + horizontalBorder + (border.topRight ?? '+') + '\n';
+  for (const line of lines) {
+    const paddedLine = line.padEnd(maxLength);
+    result += (border.vertical ?? '|') + ' ' + paddedLine + ' ' + (border.vertical ?? '|') + '\n';
+  }
+  result += (border.bottomLeft ?? '+') + horizontalBorder + (border.bottomRight ?? '+');
+
+  return result;
+}
+
+/**
+ * Displays the resume summary with decisions made since blocking.
+ *
+ * @param snapshot - The CLI state snapshot.
+ * @param statePath - Path to the ledger file.
+ * @param options - Display options.
+ */
+async function displayResumeSummary(
+  snapshot: CliStateSnapshot,
+  statePath: string,
+  options: ResumeDisplayOptions
+): Promise<void> {
+  const ledgerPath = statePath.replace('.criticality-state.json', '.criticality/ledger');
+
+  let decisions: readonly Decision[] = [];
+  try {
+    const ledger = await loadLedger(ledgerPath);
+    decisions = ledger.getDecisions();
+
+    const resolvedQueryIds = new Set(snapshot.resolvedQueries.map((r) => r.record.id));
+
+    decisions = decisions.filter(
+      (d) => d.human_query_id !== undefined && resolvedQueryIds.has(d.human_query_id)
+    );
+  } catch {
+    decisions = [];
+  }
+
+  const decisionsSummary = formatDecisionsSummary(decisions, options);
+
+  console.log(wrapInBox(decisionsSummary, options));
+
+  console.log();
+  console.log(`Resuming protocol from ${snapshot.state.phase}...`);
+}
+
+/**
+ * Handles the resume command.
+ *
+ * Checks for blocked state with resolved queries, displays decision summary,
+ * and triggers protocol orchestrator to continue execution.
+ *
+ * @param context - The CLI context.
+ * @returns A promise resolving to the command result.
+ */
+export async function handleResumeCommand(context: CliContext): Promise<CliCommandResult> {
+  const options: ResumeDisplayOptions = {
+    colors: context.config.colors ?? true,
+    unicode: context.config.unicode ?? true,
+  };
+
+  const statePath = getStatePath();
+
+  try {
+    const snapshot = await loadCliState(statePath);
+
+    if (snapshot.resolvedQueries.length === 0) {
+      console.error('Error: No blocked state to resume');
+      return { exitCode: 1, message: 'No resolved queries to resume from' };
+    }
+
+    await displayResumeSummary(snapshot, statePath, options);
+
+    const { state } = snapshot;
+
+    const boldCode = options.colors ? '\x1b[1m' : '';
+    const resetCode = options.colors ? '\x1b[0m' : '';
+    const dimCode = options.colors ? '\x1b[2m' : '';
+
+    console.log();
+    console.log(
+      `${dimCode}Note: Protocol execution will continue from the ${boldCode}${state.phase}${resetCode} phase.${resetCode}`
+    );
+    console.log(`${dimCode}Use 'crit status' to monitor progress.${resetCode}`);
+
+    return { exitCode: 0 };
+  } catch (error) {
+    if (error instanceof StatePersistenceError) {
+      if (error.errorType === 'file_error' && error.details?.includes('does not exist')) {
+        const message = 'No protocol state found. Run criticality init to start.';
+        console.log(message);
+        return { exitCode: 0 };
+      }
+      console.error(`Error loading state: ${error.message}`);
+      return { exitCode: 1, message: error.message };
+    }
+    console.error(`Unexpected error: ${error instanceof Error ? error.message : String(error)}`);
+    return { exitCode: 1 };
+  }
+}

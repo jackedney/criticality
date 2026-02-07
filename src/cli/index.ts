@@ -9,6 +9,7 @@
 /* eslint-disable no-console */
 import { createCliApp } from './app.js';
 import { handleStatusCommand } from './commands/status.js';
+import { handleResumeCommand } from './commands/resume.js';
 import { handleResolveCommand } from './commands/resolve.js';
 
 /**
@@ -107,7 +108,7 @@ async function main(): Promise<void> {
         showHelpForCommand('resume');
         process.exit(0);
       }
-      handleCommand(command);
+      await handleResumeCommandWithContext(commandArgs);
       break;
 
     case 'resolve':
@@ -213,18 +214,14 @@ async function handleResolveCommandWithContext(resolveArgs: string[]): Promise<v
 }
 
 /**
- * Handles CLI commands.
- *
- * @param command - The command to handle.
+ * Handles resume command with CLI context.
  */
-function handleCommand(command: string): void {
+async function handleResumeCommandWithContext(resumeArgs: string[]): Promise<void> {
   try {
-    createCliApp();
-
-    console.log(`The ${command} command is not yet implemented.`);
-    console.log('\nThis is a placeholder for future development.');
-    console.log('OpenTUI TUI support will be added in future iterations.');
-    process.exit(0);
+    const context = createCliApp();
+    context.args = resumeArgs;
+    const result = await handleResumeCommand(context);
+    process.exit(result.exitCode);
   } catch (error) {
     if (error instanceof Error) {
       console.error(`Error: ${error.message}`);
