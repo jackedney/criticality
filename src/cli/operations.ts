@@ -457,11 +457,11 @@ export class CliOperations implements ExternalOperations {
   }
 
   /**
-   * Gets the per-phase telemetry data.
+   * Gets per-phase telemetry data.
    *
    * @returns The collected telemetry data with per-phase breakdown.
    */
-  getPerPhaseTelemetry() {
+  getPerPhaseTelemetry(): ReturnType<typeof this.telemetryCollector.getTelemetryData> {
     return this.telemetryCollector.getTelemetryData();
   }
 

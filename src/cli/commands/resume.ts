@@ -333,6 +333,7 @@ export async function handleResumeCommand(context: CliContext): Promise<CliComma
         console.log();
 
         // Save telemetry to state file
+        // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition
         if (telemetryCollector !== null) {
           const telemetryData = telemetryCollector.getTelemetryData();
           try {
@@ -368,6 +369,7 @@ export async function handleResumeCommand(context: CliContext): Promise<CliComma
     spinner.stop();
 
     // Save telemetry to state file after normal completion
+    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition
     if (telemetryCollector !== null) {
       const telemetryData = telemetryCollector.getTelemetryData();
       try {

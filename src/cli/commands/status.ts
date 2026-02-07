@@ -43,36 +43,37 @@ function getStatePath(): string {
 }
 
 /**
- * Gets the protocol state type for display.
+ * Formats hierarchical state (Phase > Task > Operation).
  *
- * @param substate - The protocol substate.
- * @returns The state type string (active/blocked/completed/failed).
- */
-function getStateType(substate: ProtocolSubstate): string {
-  if (isFailedSubstate(substate)) {
-    return 'Failed';
-  }
-  if (isBlockingSubstate(substate)) {
-    return 'Blocked';
-  }
-  if (isActiveSubstate(substate)) {
-    return 'Active';
-  }
-  return 'Unknown';
-}
-
-/**
- * Formats a phase name with optional state type indicator.
+ * Shows available levels of hierarchy with > separator.
+ * If task/operation not available, shows only available levels.
  *
  * @param phase - The protocol phase.
- * @param stateType - The state type.
+ * @param substate - The protocol substate.
  * @param options - Display options.
- * @returns The formatted phase string.
+ * @returns The formatted hierarchical state string.
  */
-function formatPhase(phase: string, stateType: string, options: StatusDisplayOptions): string {
-  const colorCode = options.colors ? '\x1b[36m' : '';
+function formatHierarchicalState(
+  phase: string,
+  substate: ProtocolSubstate,
+  options: StatusDisplayOptions
+): string {
+  const dimCode = options.colors ? '\x1b[2m' : '';
   const resetCode = options.colors ? '\x1b[0m' : '';
-  return `${colorCode}${phase}${resetCode} (${stateType})`;
+  const greenCode = options.colors ? '\x1b[32m' : '';
+
+  const parts: string[] = [greenCode + phase + resetCode];
+
+  if (isActiveSubstate(substate)) {
+    if (substate.task !== undefined) {
+      parts.push(substate.task);
+    }
+    if (substate.operation !== undefined) {
+      parts.push(substate.operation);
+    }
+  }
+
+  return parts.join(` ${dimCode}>${resetCode} `);
 }
 
 /**
@@ -267,10 +268,13 @@ async function renderStatus(
   snapshot: ProtocolStateSnapshot,
   options: StatusDisplayOptions
 ): Promise<void> {
-  const stateType = getStateType(snapshot.state.substate);
-  const phaseDisplay = formatPhase(snapshot.state.phase, stateType, options);
+  const hierarchicalState = formatHierarchicalState(
+    snapshot.state.phase,
+    snapshot.state.substate,
+    options
+  );
 
-  let statusText = `Phase: ${phaseDisplay}`;
+  let statusText = `Current: ${hierarchicalState}`;
   let additionalInfo = '';
 
   if (snapshot.state.phase === 'Complete') {

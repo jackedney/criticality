@@ -6,6 +6,7 @@
  */
 
 import type { ProtocolPhase, ProtocolSubstate } from '../../protocol/types.js';
+import { isActiveSubstate } from '../../protocol/types.js';
 
 /**
  * Spinner frame characters for animation.
@@ -101,6 +102,19 @@ export class Spinner {
   private formatSubstate(substate: ProtocolSubstate): string {
     const kind = substate.kind;
     if (kind === 'Active') {
+      if (isActiveSubstate(substate)) {
+        const parts: string[] = [];
+        if (substate.task !== undefined) {
+          parts.push(substate.task);
+        }
+        if (substate.operation !== undefined) {
+          parts.push(substate.operation);
+        }
+        if (parts.length === 0) {
+          return 'active';
+        }
+        return parts.join(' > ');
+      }
       return 'active';
     }
     if (kind === 'Blocking') {
@@ -125,7 +139,7 @@ export class Spinner {
     const phase = this.state.phase;
     const substateText = this.formatSubstate(this.state.substate);
 
-    const text = `${frame} ${phase} (${substateText})`;
+    const text = `${frame} ${phase}${substateText !== 'active' ? ' > ' + substateText : ''}`;
 
     // Truncate text if too long for terminal
     if (text.length > MAX_TEXT_WIDTH) {
