@@ -324,6 +324,11 @@ function parseCliSettings(raw: Record<string, unknown> | undefined): CliSettings
   }
   if ('watch_interval' in raw) {
     result.watch_interval = validateNumber(raw.watch_interval, 'cli.watch_interval');
+    if (!Number.isFinite(result.watch_interval) || result.watch_interval <= 0) {
+      throw new ConfigParseError(
+        `Invalid value for 'cli.watch_interval': must be a finite positive number, got ${String(result.watch_interval)}`
+      );
+    }
   }
   if ('unicode' in raw) {
     result.unicode = validateBoolean(raw.unicode, 'cli.unicode');
