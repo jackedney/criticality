@@ -12,6 +12,7 @@ import { handleStatusCommand } from './commands/status.js';
 import { handleResumeCommand } from './commands/resume.js';
 import { handleResolveCommand } from './commands/resolve.js';
 import { handleVersionCommand } from './commands/version.js';
+import { withErrorHandling } from './utils/errorHandling.js';
 
 /**
  * Displays usage information.
@@ -50,16 +51,7 @@ For more information, visit: https://github.com/anomalyco/criticality
  * Handles version command with CLI context.
  */
 function handleVersionCommandWithContext(): void {
-  try {
-    const result = handleVersionCommand();
-    process.exit(result.exitCode);
-  } catch (error) {
-    if (error instanceof Error) {
-      console.error(`Error: ${error.message}`);
-      process.exit(1);
-    }
-    process.exit(1);
-  }
+  withErrorHandling(() => handleVersionCommand());
 }
 
 /**
@@ -75,7 +67,7 @@ function showError(message: string): void {
 /**
  * Main CLI entry point.
  */
-async function main(): Promise<void> {
+function main(): void {
   const args = process.argv.slice(2);
 
   if (args.length === 0) {
@@ -108,7 +100,7 @@ async function main(): Promise<void> {
         showHelpForCommand('status');
         process.exit(0);
       }
-      await handleStatusCommandWithContext(commandArgs);
+      handleStatusCommandWithContext(commandArgs);
       break;
 
     case 'resume':
@@ -116,7 +108,7 @@ async function main(): Promise<void> {
         showHelpForCommand('resume');
         process.exit(0);
       }
-      await handleResumeCommandWithContext(commandArgs);
+      handleResumeCommandWithContext(commandArgs);
       break;
 
     case 'resolve':
@@ -124,7 +116,7 @@ async function main(): Promise<void> {
         showHelpForCommand('resolve');
         process.exit(0);
       }
-      await handleResolveCommandWithContext(commandArgs);
+      handleResolveCommandWithContext(commandArgs);
       break;
 
     default:
@@ -188,59 +180,38 @@ EXAMPLES:
 /**
  * Handles status command with CLI context.
  */
-async function handleStatusCommandWithContext(statusArgs: string[]): Promise<void> {
-  try {
+function handleStatusCommandWithContext(statusArgs: string[]): void {
+  withErrorHandling(async () => {
     const context = createCliApp();
     context.args = statusArgs;
-    const result = await handleStatusCommand(context);
-    process.exit(result.exitCode);
-  } catch (error) {
-    if (error instanceof Error) {
-      console.error(`Error: ${error.message}`);
-      process.exit(1);
-    }
-    process.exit(1);
-  }
+    return await handleStatusCommand(context);
+  });
 }
 
 /**
  * Handles resolve command with CLI context.
  */
-async function handleResolveCommandWithContext(resolveArgs: string[]): Promise<void> {
-  try {
+function handleResolveCommandWithContext(resolveArgs: string[]): void {
+  withErrorHandling(async () => {
     const context = createCliApp();
     context.args = resolveArgs;
-    const result = await handleResolveCommand(context);
-    process.exit(result.exitCode);
-  } catch (error) {
-    if (error instanceof Error) {
-      console.error(`Error: ${error.message}`);
-      process.exit(1);
-    }
-    process.exit(1);
-  }
+    return await handleResolveCommand(context);
+  });
 }
 
 /**
  * Handles resume command with CLI context.
  */
-async function handleResumeCommandWithContext(resumeArgs: string[]): Promise<void> {
-  try {
+function handleResumeCommandWithContext(resumeArgs: string[]): void {
+  withErrorHandling(async () => {
     const context = createCliApp();
     context.args = resumeArgs;
-    const result = await handleResumeCommand(context);
-    process.exit(result.exitCode);
-  } catch (error) {
-    if (error instanceof Error) {
-      console.error(`Error: ${error.message}`);
-      process.exit(1);
-    }
-    process.exit(1);
-  }
+    return await handleResumeCommand(context);
+  });
 }
 
 try {
-  await main();
+  main();
 } catch {
   console.error('Unexpected error: An unknown error occurred');
   process.exit(1);
