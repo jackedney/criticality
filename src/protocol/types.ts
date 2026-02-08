@@ -49,6 +49,10 @@ export const PROTOCOL_PHASES: readonly ProtocolPhase[] = [
 export interface ActiveSubstate {
   /** Discriminant for the Active substate. */
   readonly kind: 'Active';
+  /** Current task being performed within the phase (optional). */
+  readonly task?: string;
+  /** Current atomic operation being executed (optional). */
+  readonly operation?: string;
 }
 
 /**
@@ -182,11 +186,37 @@ export function isFailedSubstate(substate: ProtocolSubstate): substate is Failed
 }
 
 /**
+ * Options for creating an Active substate.
+ */
+export interface ActiveSubstateOptions {
+  /** Current task being performed within the phase. */
+  task?: string;
+  /** Current atomic operation being executed. */
+  operation?: string;
+}
+
+/**
  * Creates an Active substate.
  *
+ * @param options - Optional task and operation information.
  * @returns A new Active substate.
  */
-export function createActiveSubstate(): ActiveSubstate {
+export function createActiveSubstate(options?: ActiveSubstateOptions): ActiveSubstate {
+  if (options === undefined) {
+    return { kind: 'Active' };
+  }
+  const { task, operation } = options;
+
+  if (task !== undefined && operation !== undefined) {
+    return { kind: 'Active', task, operation };
+  }
+  if (task !== undefined) {
+    return { kind: 'Active', task };
+  }
+  if (operation !== undefined) {
+    return { kind: 'Active', operation };
+  }
+
   return { kind: 'Active' };
 }
 
@@ -293,10 +323,14 @@ export function createProtocolState(
  * Creates an active ProtocolState for the given phase.
  *
  * @param phase - The protocol phase.
+ * @param options - Optional task and operation information.
  * @returns A new ProtocolState in Active substate.
  */
-export function createActiveState(phase: ProtocolPhase): ProtocolState {
-  return createProtocolState(phase, createActiveSubstate());
+export function createActiveState(
+  phase: ProtocolPhase,
+  options?: ActiveSubstateOptions
+): ProtocolState {
+  return createProtocolState(phase, createActiveSubstate(options));
 }
 
 /**

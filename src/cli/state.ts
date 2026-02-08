@@ -17,6 +17,8 @@ import { renameSync } from 'node:fs';
 import { stat, writeFile, rename, unlink } from 'node:fs/promises';
 import path from 'node:path';
 import readline from 'node:readline';
+import { TelemetryCollector } from './telemetry.js';
+import type { TelemetryData } from './telemetry.js';
 
 /**
  * Extended protocol state snapshot with CLI-specific metadata.
@@ -28,6 +30,8 @@ export interface CliStateSnapshot extends ProtocolStateSnapshot {
   readonly lastActivity: string;
   /** List of resolved query responses for resume functionality. */
   readonly resolvedQueries: readonly ResolvedQuery[];
+  /** Telemetry data tracking model calls, tokens, and execution time. */
+  readonly telemetry?: TelemetryData;
 }
 
 /**
@@ -220,9 +224,9 @@ export function updateStateAfterResolution(
  * @returns JSON string representation of the CLI state.
  */
 function serializeCliState(snapshot: CliStateSnapshot, options?: SaveCliStateOptions): string {
-  const { createdAt, lastActivity, resolvedQueries } = snapshot;
+  const { createdAt, lastActivity, resolvedQueries, telemetry } = snapshot;
 
-  const data = {
+  const data: Record<string, unknown> = {
     state: snapshot.state,
     artifacts: snapshot.artifacts,
     blockingQueries: snapshot.blockingQueries,
@@ -231,6 +235,10 @@ function serializeCliState(snapshot: CliStateSnapshot, options?: SaveCliStateOpt
     resolvedQueries,
     version: '1.0.0-cli',
   };
+
+  if (telemetry !== undefined) {
+    data.telemetry = TelemetryCollector.serialize(telemetry);
+  }
 
   const pretty = options?.pretty !== false;
   const indent = options?.indent ?? 2;
@@ -244,7 +252,7 @@ function serializeCliState(snapshot: CliStateSnapshot, options?: SaveCliStateOpt
 /**
  * Upgrades a legacy ProtocolStateSnapshot to a CliStateSnapshot.
  *
- * Adds createdAt, lastActivity, and resolvedQueries fields with default values
+ * Adds createdAt, lastActivity, resolvedQueries, and telemetry fields with default values
  * if they don't exist (for backward compatibility).
  *
  * @param snapshot - The legacy protocol state snapshot.
@@ -254,12 +262,22 @@ function upgradeToCliState(snapshot: ProtocolStateSnapshot): CliStateSnapshot {
   const now = new Date().toISOString();
   const maybeCliSnapshot = snapshot as unknown as Partial<CliStateSnapshot>;
 
-  return {
+  const base = {
     ...snapshot,
     createdAt: maybeCliSnapshot.createdAt ?? now,
     lastActivity: maybeCliSnapshot.lastActivity ?? now,
     resolvedQueries: maybeCliSnapshot.resolvedQueries ?? [],
   };
+
+  if (maybeCliSnapshot.telemetry !== undefined) {
+    try {
+      return { ...base, telemetry: TelemetryCollector.deserialize(maybeCliSnapshot.telemetry) };
+    } catch {
+      return base;
+    }
+  }
+
+  return base;
 }
 
 /**

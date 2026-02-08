@@ -90,15 +90,33 @@ export interface CliSettingsConfig {
 }
 
 /**
+ * Notification channel configuration.
+ */
+export interface NotificationChannelConfig {
+  /** Type of notification channel. */
+  readonly type: 'webhook' | 'slack' | 'email';
+  /** Endpoint URL for sending notifications. */
+  readonly endpoint: string;
+  /** Whether this channel is enabled. */
+  readonly enabled: boolean;
+  /** Events that this channel subscribes to. */
+  readonly events: readonly string[];
+}
+
+/**
  * Notification configuration for blocking states.
  */
 export interface NotificationConfig {
   /** Whether notifications are enabled. */
-  enabled: boolean;
-  /** Notification channel type. */
-  channel?: 'slack' | 'email' | 'webhook';
-  /** Webhook URL or email address. */
-  endpoint?: string;
+  readonly enabled: boolean;
+  /** Notification channels array. */
+  readonly channels?: readonly NotificationChannelConfig[] | undefined;
+  /** Reminder schedule as cron expression. */
+  readonly reminder_schedule?: string | undefined;
+  /** Notification channel type (legacy, use channels instead). */
+  readonly channel?: 'slack' | 'email' | 'webhook' | undefined;
+  /** Webhook URL or email address (legacy, use channels instead). */
+  readonly endpoint?: string | undefined;
 }
 
 /**
@@ -127,7 +145,9 @@ export interface PartialConfig {
   models?: Partial<ModelAssignments>;
   paths?: Partial<PathConfig>;
   thresholds?: Partial<ThresholdConfig>;
-  notifications?: Partial<NotificationConfig>;
+  notifications?: Partial<NotificationConfig> & {
+    channels?: readonly NotificationChannelConfig[];
+  };
   mass_defect?: {
     targets?: Partial<MassDefectTargetsConfig>;
     catalog_path?: string;
