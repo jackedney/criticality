@@ -28,6 +28,9 @@ import { TelemetryCollector } from '../telemetry.js';
 import { existsSync, readFileSync } from 'node:fs';
 import { parseConfig } from '../../config/index.js';
 import { displayErrorWithSuggestions, inferErrorType } from '../errors.js';
+import { NotificationService } from '../../notifications/service.js';
+import { ReminderScheduler } from '../../notifications/reminder.js';
+import * as path from 'node:path';
 
 interface ResumeDisplayOptions {
   colors: boolean;
@@ -66,6 +69,47 @@ async function loadCliConfig(): Promise<
   }
 
   return await parseConfig('');
+}
+
+/**
+ * Checks and sends reminder if protocol is blocked.
+ *
+ * @param snapshot - The protocol state snapshot.
+ * @param cliConfig - The configuration object.
+ * @param statePath - Path to state file.
+ */
+async function checkAndSendReminder(
+  snapshot: ProtocolStateSnapshot,
+  cliConfig: Awaited<ReturnType<(typeof import('../../config/index.js'))['parseConfig']>>,
+  statePath: string
+): Promise<void> {
+  if (!cliConfig.notifications.enabled || cliConfig.notifications.reminder_schedule === undefined) {
+    return;
+  }
+
+  const blockingRecord = snapshot.blockingQueries.find((q) => !q.resolved);
+  if (!blockingRecord) {
+    return;
+  }
+
+  const notificationService = new NotificationService(cliConfig.notifications);
+  const stateDir = path.dirname(statePath);
+  const reminderScheduler = new ReminderScheduler({
+    cronExpression: cliConfig.notifications.reminder_schedule,
+    notificationService,
+    stateDir,
+    enabled: true,
+  });
+
+  await reminderScheduler.initialize();
+
+  const result = await reminderScheduler.checkAndSendReminder(new Date(), blockingRecord);
+
+  if (result.sent) {
+    const nextScheduled = new Date(result.nextScheduled);
+    const timeStr = nextScheduled.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    console.log(`Reminder sent. Next reminder at ${timeStr}`);
+  }
 }
 
 /**
@@ -411,6 +455,9 @@ export async function handleResumeCommand(context: CliContext): Promise<CliComma
 
   try {
     const snapshot = await loadCliStateWithRecovery(statePath);
+    const cliConfig = await loadCliConfig();
+
+    await checkAndSendReminder(snapshot, cliConfig, statePath);
 
     if (snapshot.resolvedQueries.length === 0) {
       console.error('Error: No blocked state to resume');

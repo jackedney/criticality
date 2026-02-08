@@ -21,6 +21,11 @@ import type { Decision } from '../../ledger/types.js';
 import { loadStateWithRecovery, getDefaultStatePath, getDefaultLedgerPath } from '../state.js';
 import { formatRelativeTime, formatConfidence, wrapInBox } from '../utils/displayUtils.js';
 import { TelemetryCollector } from '../telemetry.js';
+import { NotificationService } from '../../notifications/service.js';
+import { ReminderScheduler } from '../../notifications/reminder.js';
+import { existsSync, readFileSync } from 'node:fs';
+import { parseConfig } from '../../config/index.js';
+import * as path from 'node:path';
 
 interface StatusDisplayOptions {
   colors: boolean;
@@ -28,6 +33,28 @@ interface StatusDisplayOptions {
   watch?: boolean;
   interval?: number;
   verbose?: boolean;
+}
+
+/**
+ * Loads configuration from criticality.toml.
+ *
+ * @returns The loaded configuration or defaults.
+ */
+async function loadCliConfig(): Promise<
+  Awaited<ReturnType<(typeof import('../../config/index.js'))['parseConfig']>>
+> {
+  const configFilePath = 'criticality.toml';
+
+  if (existsSync(configFilePath)) {
+    try {
+      const tomlContent = readFileSync(configFilePath, 'utf-8');
+      return await parseConfig(tomlContent);
+    } catch (_error) {
+      // Use defaults if config loading fails
+    }
+  }
+
+  return await parseConfig('');
 }
 
 /**
@@ -40,6 +67,50 @@ interface StatusDisplayOptions {
  */
 function getStatePath(): string {
   return getDefaultStatePath();
+}
+
+/**
+ * Checks and sends reminder if protocol is blocked.
+ *
+ * @param snapshot - The protocol state snapshot.
+ * @param statePath - Path to state file.
+ * @returns Next scheduled reminder time, or undefined if not scheduled.
+ */
+async function checkAndSendReminder(
+  snapshot: ProtocolStateSnapshot,
+  statePath: string
+): Promise<string | undefined> {
+  const cliConfig = await loadCliConfig();
+
+  if (!cliConfig.notifications.enabled || cliConfig.notifications.reminder_schedule === undefined) {
+    return undefined;
+  }
+
+  const blockingRecord = snapshot.blockingQueries.find((q) => !q.resolved);
+  if (!blockingRecord) {
+    return undefined;
+  }
+
+  const notificationService = new NotificationService(cliConfig.notifications);
+  const stateDir = path.dirname(statePath);
+  const reminderScheduler = new ReminderScheduler({
+    cronExpression: cliConfig.notifications.reminder_schedule,
+    notificationService,
+    stateDir,
+    enabled: true,
+  });
+
+  await reminderScheduler.initialize();
+
+  const result = await reminderScheduler.checkAndSendReminder(new Date(), blockingRecord);
+
+  if (result.sent) {
+    const nextScheduled = new Date(result.nextScheduled);
+    const timeStr = nextScheduled.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    console.log(`Reminder sent. Next reminder at ${timeStr}`);
+  }
+
+  return reminderScheduler.getNextScheduled();
 }
 
 /**
@@ -205,20 +276,35 @@ function formatTimestamp(date: Date): string {
 /**
  * Formats notification status for display.
  *
- * This function is designed to be extended in Phase 4.2 when the
- * notification system is implemented. For now, it shows that the
- * notification system is not configured.
- *
  * @param options - Display options.
+ * @param nextScheduled - Next scheduled reminder time (optional).
  * @returns The formatted notification status text.
  */
-function formatNotifications(options: StatusDisplayOptions): string {
+function formatNotifications(options: StatusDisplayOptions, nextScheduled?: string): string {
   const boldCode = options.colors ? '\x1b[1m' : '';
   const resetCode = options.colors ? '\x1b[0m' : '';
   const dimCode = options.colors ? '\x1b[2m' : '';
+  const yellowCode = options.colors ? '\x1b[33m' : '';
 
   let result = `${boldCode}Notifications:${resetCode}\n`;
-  result += `${dimCode}Notification system: not configured (see Phase 4.2)${resetCode}`;
+
+  if (nextScheduled !== undefined) {
+    const nextDate = new Date(nextScheduled);
+    const now = new Date();
+    const timeUntil = nextDate.getTime() - now.getTime();
+    const hoursUntil = Math.floor(timeUntil / (1000 * 60 * 60));
+    const minutesUntil = Math.floor((timeUntil % (1000 * 60 * 60)) / (1000 * 60));
+
+    let timeStr = '';
+    if (hoursUntil > 0) {
+      timeStr += `${String(hoursUntil)}h `;
+    }
+    timeStr += `${String(minutesUntil)}m`;
+
+    result += `${yellowCode}Next reminder${resetCode}: in ${timeStr}`;
+  } else {
+    result += `${dimCode}Notification system: not configured${resetCode}`;
+  }
 
   return result;
 }
@@ -268,6 +354,9 @@ async function renderStatus(
   snapshot: ProtocolStateSnapshot,
   options: StatusDisplayOptions
 ): Promise<void> {
+  const statePath = getStatePath();
+  const nextScheduled = await checkAndSendReminder(snapshot, statePath);
+
   const hierarchicalState = formatHierarchicalState(
     snapshot.state.phase,
     snapshot.state.substate,
@@ -322,7 +411,7 @@ async function renderStatus(
   }
 
   // Display notifications status (Phase 4.2 integration point)
-  const notificationsText = formatNotifications(options);
+  const notificationsText = formatNotifications(options, nextScheduled);
   console.log();
   console.log(wrapInBox(notificationsText, options));
 
