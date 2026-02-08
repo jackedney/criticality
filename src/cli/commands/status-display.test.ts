@@ -124,6 +124,7 @@ describe('Pending Queries Display (US-004)', () => {
       blockedAt: new Date().toISOString(),
       resolved: true,
       resolution: {
+        queryId: 'test-query-001',
         response: 'TypeScript',
         resolvedAt: new Date().toISOString(),
         rationale: 'Type safety is important',
