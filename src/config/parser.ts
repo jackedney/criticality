@@ -22,12 +22,14 @@ import type {
   MassDefectConfig,
   MassDefectTargetsConfig,
   ModelAssignments,
+  NotificationChannelConfig,
   NotificationConfig,
   NotificationHook,
   NotificationHooks,
   PathConfig,
   ThresholdConfig,
 } from './types.js';
+import { isValidCronExpression } from '../notifications/cron.js';
 
 /**
  * Error class for configuration parsing errors.
@@ -98,6 +100,65 @@ function validateBoolean(value: unknown, fieldPath: string): boolean {
     );
   }
   return value;
+}
+
+/**
+ * Validates that a value is an array.
+ *
+ * @param value - Value to validate.
+ * @param fieldPath - Path to the field for error messages.
+ * @returns The validated array.
+ * @throws ConfigParseError if value is not an array.
+ */
+function validateArray(value: unknown, fieldPath: string): unknown[] {
+  if (!Array.isArray(value)) {
+    throw new ConfigParseError(
+      `Invalid type for '${fieldPath}': expected array, got ${typeof value}`
+    );
+  }
+  return value;
+}
+
+/**
+ * Validates that a URL is valid.
+ *
+ * @param url - URL string to validate.
+ * @param fieldPath - Path to the field for error messages.
+ * @returns The validated URL string.
+ * @throws ConfigParseError if URL is invalid.
+ */
+function validateUrl(url: string, fieldPath: string): string {
+  try {
+    const parsed = new URL(url);
+    if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
+      throw new ConfigParseError(
+        `Invalid value for '${fieldPath}': URL must use http or https protocol`
+      );
+    }
+    return url;
+  } catch (error) {
+    if (error instanceof ConfigParseError) {
+      throw error;
+    }
+    throw new ConfigParseError(`Invalid value for '${fieldPath}': '${url}' is not a valid URL`);
+  }
+}
+
+/**
+ * Validates that a cron expression is valid.
+ *
+ * @param cron - Cron expression to validate.
+ * @param fieldPath - Path to the field for error messages.
+ * @returns The validated cron expression.
+ * @throws ConfigParseError if cron expression is invalid.
+ */
+function validateCron(cron: string, fieldPath: string): string {
+  if (!isValidCronExpression(cron)) {
+    throw new ConfigParseError(
+      `Invalid value for '${fieldPath}': '${cron}' is not a valid cron expression. Expected format: 'minute hour day month weekday' (e.g., '0 9 * * *' for daily at 9am)`
+    );
+  }
+  return cron;
 }
 
 /**
@@ -324,6 +385,112 @@ async function parseNotificationHooks(
 }
 
 /**
+ * Parses a notification channel configuration from raw TOML data.
+ *
+ * @param raw - Raw TOML object for a single channel.
+ * @param index - Index of the channel for error messages.
+ * @returns Validated notification channel configuration.
+ */
+function parseNotificationChannel(raw: unknown, index: number): NotificationChannelConfig {
+  if (typeof raw !== 'object' || raw === null) {
+    throw new ConfigParseError(
+      `Invalid type for 'notifications.channels[${String(index)}]': expected object`
+    );
+  }
+
+  const channelRaw = raw as Record<string, unknown>;
+
+  const typeRaw = channelRaw.type;
+  if (typeof typeRaw !== 'string') {
+    throw new ConfigParseError(
+      `Missing required field 'type' for 'notifications.channels[${String(index)}]'`
+    );
+  }
+  const type = validateString(typeRaw, `notifications.channels[${String(index)}].type`);
+  if (type !== 'webhook' && type !== 'slack' && type !== 'email') {
+    throw new ConfigParseError(
+      `Invalid value for 'notifications.channels[${String(index)}].type': expected 'webhook', 'slack', or 'email', got '${type}'`
+    );
+  }
+
+  const endpointRaw = channelRaw.endpoint;
+  if (typeof endpointRaw !== 'string') {
+    throw new ConfigParseError(
+      `Missing required field 'endpoint' for 'notifications.channels[${String(index)}]'`
+    );
+  }
+  const endpoint = validateUrl(
+    validateString(endpointRaw, `notifications.channels[${String(index)}].endpoint`),
+    `notifications.channels[${String(index)}].endpoint`
+  );
+
+  const enabled =
+    'enabled' in channelRaw
+      ? validateBoolean(channelRaw.enabled, `notifications.channels[${String(index)}].enabled`)
+      : true;
+
+  let events: readonly string[] = ['block'];
+  if ('events' in channelRaw) {
+    const eventsRaw = validateArray(
+      channelRaw.events,
+      `notifications.channels[${String(index)}].events`
+    );
+    const eventsArr: string[] = [];
+    for (let i = 0; i < eventsRaw.length; i++) {
+      const event = eventsRaw[i];
+      if (typeof event !== 'string') {
+        throw new ConfigParseError(
+          `Invalid type for 'notifications.channels[${String(index)}].events[${String(i)}]': expected string, got ${typeof event}`
+        );
+      }
+      if (
+        event !== 'block' &&
+        event !== 'complete' &&
+        event !== 'error' &&
+        event !== 'phase_change'
+      ) {
+        throw new ConfigParseError(
+          `Invalid value for 'notifications.channels[${String(index)}].events[${String(i)}]': expected 'block', 'complete', 'error', or 'phase_change', got '${event}'`
+        );
+      }
+      eventsArr.push(event);
+    }
+    events = eventsArr;
+  }
+
+  return {
+    type,
+    endpoint,
+    enabled,
+    events,
+  };
+}
+
+/**
+ * Parses notification channels from raw TOML data.
+ *
+ * @param raw - Raw TOML object for notifications.channels section.
+ * @returns Validated notification channels array.
+ */
+function parseNotificationChannels(raw: unknown): readonly NotificationChannelConfig[] | undefined {
+  if (raw === undefined) {
+    return undefined;
+  }
+
+  const channelsRaw = validateArray(raw, 'notifications.channels');
+  if (channelsRaw.length === 0) {
+    return undefined;
+  }
+
+  const channels: NotificationChannelConfig[] = [];
+  for (let i = 0; i < channelsRaw.length; i++) {
+    channels.push(parseNotificationChannel(channelsRaw[i], i));
+  }
+
+  return channels;
+}
+
+/**
  * Parses notification configuration from raw TOML data.
  *
  * @param raw - Raw TOML object for notifications section.
@@ -336,31 +503,51 @@ async function parseNotifications(
     return { ...DEFAULT_NOTIFICATIONS };
   }
 
-  const result: NotificationConfig = { ...DEFAULT_NOTIFICATIONS };
+  const enabled =
+    'enabled' in raw
+      ? validateBoolean(raw.enabled, 'notifications.enabled')
+      : DEFAULT_NOTIFICATIONS.enabled;
 
-  if ('enabled' in raw) {
-    result.enabled = validateBoolean(raw.enabled, 'notifications.enabled');
-  }
+  const channels =
+    'channels' in raw ? parseNotificationChannels(raw.channels) : DEFAULT_NOTIFICATIONS.channels;
 
+  const reminder_schedule =
+    'reminder_schedule' in raw
+      ? validateCron(
+          validateString(raw.reminder_schedule, 'notifications.reminder_schedule'),
+          'notifications.reminder_schedule'
+        )
+      : DEFAULT_NOTIFICATIONS.reminder_schedule;
+
+  let channel: 'slack' | 'email' | 'webhook' | undefined = DEFAULT_NOTIFICATIONS.channel;
   if ('channel' in raw) {
-    const channel = validateString(raw.channel, 'notifications.channel');
-    if (channel !== 'slack' && channel !== 'email' && channel !== 'webhook') {
+    const channelValue = validateString(raw.channel, 'notifications.channel');
+    if (channelValue !== 'slack' && channelValue !== 'email' && channelValue !== 'webhook') {
       throw new ConfigParseError(
-        `Invalid value for 'notifications.channel': expected 'slack', 'email', or 'webhook', got '${channel}'`
+        `Invalid value for 'notifications.channel': expected 'slack', 'email', or 'webhook', got '${channelValue}'`
       );
     }
-    result.channel = channel;
+    channel = channelValue;
   }
 
-  if ('endpoint' in raw) {
-    result.endpoint = validateString(raw.endpoint, 'notifications.endpoint');
-  }
+  const endpoint =
+    'endpoint' in raw
+      ? validateString(raw.endpoint, 'notifications.endpoint')
+      : DEFAULT_NOTIFICATIONS.endpoint;
 
-  if ('hooks' in raw) {
-    result.hooks = await parseNotificationHooks(raw.hooks as Record<string, unknown> | undefined);
-  }
+  const hooks =
+    'hooks' in raw
+      ? await parseNotificationHooks(raw.hooks as Record<string, unknown> | undefined)
+      : DEFAULT_NOTIFICATIONS.hooks;
 
-  return result;
+  return {
+    enabled,
+    channels,
+    reminder_schedule,
+    channel,
+    endpoint,
+    hooks,
+  };
 }
 
 /**
@@ -517,6 +704,6 @@ export async function parseConfig(tomlContent: string): Promise<Config> {
  * console.log(config.models.architect_model); // "claude-opus-4.5"
  * ```
  */
-export async function getDefaultConfig(): Promise<Config> {
-  return { ...DEFAULT_CONFIG };
+export function getDefaultConfig(): Promise<Config> {
+  return Promise.resolve({ ...DEFAULT_CONFIG });
 }
