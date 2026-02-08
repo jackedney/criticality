@@ -6,7 +6,7 @@ The TypeScript adapter provides Criticality Protocol support for TypeScript proj
 
 The TypeScript adapter is organized as a facade that coordinates multiple specialized modules:
 
-```
+```text
 ┌──────────────────────────────────────────────────────────────┐
 │                    TypeScriptAdapter                         │
 │                    (Facade - index.ts)                       │

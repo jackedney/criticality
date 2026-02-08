@@ -1,4 +1,4 @@
-```
+```text
 1  ▄▀▀▀ █▀▀▄ ▀█▀ ▀█▀ ▀█▀ ▄▀▀▀ ▄▀▀▄ █    ▀█▀ ▀█▀ █  █
 2  █    █▄▄▀  █   █   █  █    █▄▄█ █     █   █  ▀▄▄▀
 3  ▀▄▄▄ █  █ ▄█▄  █  ▄█▄ ▀▄▄▄ █  █ █▄▄▄ ▄█▄  █    █   ●
@@ -6,7 +6,7 @@
 
 > autonomous software synthesis through context-shedding
 
-```
+```text
                     ┌─────────────────────────────────────────┐
                     │                                         │
   intent ──────────>│  ignition -> lattice -> injection ->   │──────────> code
@@ -18,7 +18,7 @@
 
 ## status
 
-```
+```text
 phase 3: protocol phases ................................. complete
 phase 4: human interface ................................. pending
 ```
@@ -34,7 +34,7 @@ npm test
 
 ## architecture
 
-```
+```text
 src/
 ├── interview/        # phase I: ignition
 ├── lattice/          # phase II: type lattice construction

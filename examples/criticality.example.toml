@@ -82,27 +82,29 @@ performance_variance_threshold = 0.2
 # Whether notifications are enabled
 enabled = false
 
-# Notification channel type: "slack", "email", or "webhook"
-# channel = "slack"
+# Notification channel type: "webhook" (currently supported)
+# channel = "webhook"
 
-# Webhook URL, email address, or Slack webhook URL
+# Webhook URL for sending notifications
 # endpoint = "https://hooks.slack.com/services/xxx/yyy/zzz"
 
-# Notification hooks - shell commands executed on specific events
-# Hooks support template variables: {phase}, {error}, {timestamp}
+# Events to trigger notifications: "block", "complete", "error", "phase_change"
+# events = ["block", "complete", "error", "phase_change"]
 
-[notifications.hooks]
-# Hook triggered when protocol enters blocking state
-# notifications.hooks.on_block = { command = 'notify-send "Protocol blocked: {error}"', enabled = true }
-
-# Hook triggered when protocol completes successfully
-# notifications.hooks.on_complete = { command = 'notify-send "Protocol completed in phase {phase}"', enabled = false }
-
-# Hook triggered when an error occurs
-# notifications.hooks.on_error = { command = 'notify-send "Protocol error: {error}"', enabled = true }
-
-# Hook triggered when phase changes
-# notifications.hooks.on_phase_change = { command = 'notify-send "Phase changed to {phase}"', enabled = false }
+# NOTE: Hooks are not supported in the current notification system
+# The following section is provided for future reference only
+# [notifications.hooks]
+# # Hook triggered when protocol enters blocking state
+# # notifications.hooks.on_block = { command = 'notify-send "Protocol blocked: {error}"', enabled = true }
+#
+# # Hook triggered when protocol completes successfully
+# # notifications.hooks.on_complete = { command = 'notify-send "Protocol completed in phase {phase}"', enabled = false }
+#
+# # Hook triggered when an error occurs
+# # notifications.hooks.on_error = { command = 'notify-send "Protocol error: {error}"', enabled = true }
+#
+# # Hook triggered when phase changes
+# # notifications.hooks.on_phase_change = { command = 'notify-send "Phase changed to {phase}"', enabled = false }
 
 # =============================================================================
 # CLI CONFIGURATION
