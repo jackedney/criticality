@@ -188,7 +188,7 @@ EXAMPLES:
  */
 function handleStatusCommandWithContext(statusArgs: string[]): void {
   withErrorHandling(async () => {
-    const context = await createCliApp();
+    const context = createCliApp();
     context.args = statusArgs;
     return await handleStatusCommand(context);
   });
@@ -199,7 +199,7 @@ function handleStatusCommandWithContext(statusArgs: string[]): void {
  */
 function handleResolveCommandWithContext(resolveArgs: string[]): void {
   withErrorHandling(async () => {
-    const context = await createCliApp();
+    const context = createCliApp();
     context.args = resolveArgs;
     return await handleResolveCommand(context);
   });
@@ -210,7 +210,7 @@ function handleResolveCommandWithContext(resolveArgs: string[]): void {
  */
 function handleResumeCommandWithContext(resumeArgs: string[]): void {
   withErrorHandling(async () => {
-    const context = await createCliApp();
+    const context = createCliApp();
     context.args = resumeArgs;
     return await handleResumeCommand(context);
   });

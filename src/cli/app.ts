@@ -10,9 +10,9 @@ import type { CliConfig, CliContext } from './types.js';
  * Creates and initializes CLI application context.
  *
  * @param config - CLI configuration options (overrides config file values).
- * @returns A promise resolving to CLI context.
+ * @returns CLI context.
  */
-export async function createCliApp(config: Partial<CliConfig> = {}): Promise<CliContext> {
+export function createCliApp(config: Partial<CliConfig> = {}): CliContext {
   const context: CliContext = {
     renderer: {},
     args: process.argv.slice(2),
@@ -28,7 +28,7 @@ export async function createCliApp(config: Partial<CliConfig> = {}): Promise<Cli
   if (existsSync(configFilePath)) {
     try {
       const tomlContent = readFileSync(configFilePath, 'utf-8');
-      const parsedConfig = await parseConfig(tomlContent);
+      const parsedConfig = parseConfig(tomlContent);
 
       context.config.colors = config.colors ?? parsedConfig.cli.colors;
       context.config.unicode = config.unicode ?? parsedConfig.cli.unicode;

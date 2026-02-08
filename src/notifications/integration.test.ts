@@ -44,6 +44,34 @@ type ArtifactType =
   | 'structuralDefectReport'
   | 'clusterFailureReport';
 
+// Type for reminder state file
+interface ReminderState {
+  enabled: boolean;
+  last_sent?: string;
+  next_scheduled?: string;
+}
+
+// Type for webhook payload
+interface WebhookPayload {
+  event: string;
+  timestamp: string;
+  blocking_record: {
+    id: string;
+    phase: string;
+    query: string;
+    options?: string[];
+    blockedAt: string;
+    timeoutMs?: number;
+    resolved: boolean;
+  };
+  protocol_state: {
+    phase: string;
+    substate: {
+      kind: string;
+    };
+  };
+}
+
 describe('Notification Integration Tests', () => {
   let mockFetch: ReturnType<typeof vi.fn>;
   let testStateDir: string;
@@ -90,7 +118,7 @@ describe('Notification Integration Tests', () => {
       mockFetch.mockResolvedValue({
         ok: true,
         status: 200,
-        json: async () => ({}),
+        json: () => Promise.resolve({}),
       });
 
       const service = new NotificationServiceImpl(config);
@@ -112,12 +140,12 @@ describe('Notification Integration Tests', () => {
 
       const firstCall = mockFetch.mock.calls[0] as [string, RequestInit];
       expect(firstCall[0]).toBe('https://webhook1.example.com/hook');
-      expect(firstCall[1]?.method).toBe('POST');
-      expect(firstCall[1]?.headers).toHaveProperty('Content-Type', 'application/json');
+      expect(firstCall[1].method).toBe('POST');
+      expect(firstCall[1].headers).toHaveProperty('Content-Type', 'application/json');
 
       const secondCall = mockFetch.mock.calls[1] as [string, RequestInit];
       expect(secondCall[0]).toBe('https://webhook2.example.com/hook');
-      expect(secondCall[1]?.method).toBe('POST');
+      expect(secondCall[1].method).toBe('POST');
     });
 
     it('should filter channels by event type', async () => {
@@ -143,7 +171,7 @@ describe('Notification Integration Tests', () => {
       mockFetch.mockResolvedValue({
         ok: true,
         status: 200,
-        json: async () => ({}),
+        json: () => Promise.resolve({}),
       });
 
       const service = new NotificationServiceImpl(config);
@@ -164,12 +192,12 @@ describe('Notification Integration Tests', () => {
   describe('ReminderScheduler state persistence and loading', () => {
     it('should persist and load reminder state', async () => {
       const mockNotificationService: INotificationService = {
-        async send(): Promise<NotificationSendResult> {
-          return {
+        send(): Promise<NotificationSendResult> {
+          return Promise.resolve({
             results: [],
             allSucceeded: true,
             anySucceeded: false,
-          };
+          });
         },
         hasSubscribers() {
           return true;
@@ -200,7 +228,7 @@ describe('Notification Integration Tests', () => {
 
       await scheduler1.checkAndSendReminder(new Date('2024-01-15T09:00:00.000Z'), blockingRecord);
 
-      const stateData = JSON.parse(readFileSync(reminderStatePath, 'utf-8'));
+      const stateData = JSON.parse(readFileSync(reminderStatePath, 'utf-8')) as ReminderState;
 
       expect(stateData.enabled).toBe(true);
       expect(stateData.last_sent).toBeDefined();
@@ -221,12 +249,12 @@ describe('Notification Integration Tests', () => {
 
     it('should handle missing state file gracefully', async () => {
       const mockNotificationService: INotificationService = {
-        async send(): Promise<NotificationSendResult> {
-          return {
+        send(): Promise<NotificationSendResult> {
+          return Promise.resolve({
             results: [],
             allSucceeded: true,
             anySucceeded: false,
-          };
+          });
         },
         hasSubscribers() {
           return true;
@@ -253,13 +281,13 @@ describe('Notification Integration Tests', () => {
       const notificationCalls: Array<{ event: string }> = [];
 
       const mockNotificationService: INotificationService = {
-        async send(_event: string, _payload: { event: string }): Promise<NotificationSendResult> {
+        send(_event: string, _payload: { event: string }): Promise<NotificationSendResult> {
           notificationCalls.push({ event: _event });
-          return {
+          return Promise.resolve({
             results: [],
             allSucceeded: true,
             anySucceeded: false,
-          };
+          });
         },
         hasSubscribers() {
           return true;
@@ -267,20 +295,20 @@ describe('Notification Integration Tests', () => {
       };
 
       const mockOperations: ExternalOperations = {
-        async executeModelCall() {
-          return { success: true };
+        executeModelCall() {
+          return Promise.resolve({ success: true });
         },
-        async runCompilation() {
-          return { success: true };
+        runCompilation() {
+          return Promise.resolve({ success: true });
         },
-        async runTests() {
-          return { success: true };
+        runTests() {
+          return Promise.resolve({ success: true });
         },
-        async archivePhaseArtifacts() {
-          return { success: true };
+        archivePhaseArtifacts() {
+          return Promise.resolve({ success: true });
         },
-        async sendBlockingNotification() {
-          return;
+        sendBlockingNotification() {
+          return Promise.resolve();
         },
       };
 
@@ -290,7 +318,7 @@ describe('Notification Integration Tests', () => {
         notificationService: mockNotificationService as unknown as NotificationServiceImpl,
       });
 
-      await orchestrator.addArtifact('latticeCode' as ArtifactType);
+      orchestrator.addArtifact('latticeCode' as ArtifactType);
 
       const result = await orchestrator.tick();
 
@@ -304,13 +332,13 @@ describe('Notification Integration Tests', () => {
       const notificationCalls: Array<{ event: string }> = [];
 
       const mockNotificationService: INotificationService = {
-        async send(_event: string, _payload: { event: string }): Promise<NotificationSendResult> {
+        send(_event: string, _payload: { event: string }): Promise<NotificationSendResult> {
           notificationCalls.push({ event: _event });
-          return {
+          return Promise.resolve({
             results: [],
             allSucceeded: true,
             anySucceeded: false,
-          };
+          });
         },
         hasSubscribers() {
           return true;
@@ -318,20 +346,20 @@ describe('Notification Integration Tests', () => {
       };
 
       const mockOperations: ExternalOperations = {
-        async executeModelCall() {
-          return { success: true, artifacts: ['spec'] };
+        executeModelCall() {
+          return Promise.resolve({ success: true, artifacts: ['spec'] });
         },
-        async runCompilation() {
-          return { success: true };
+        runCompilation() {
+          return Promise.resolve({ success: true });
         },
-        async runTests() {
-          return { success: true };
+        runTests() {
+          return Promise.resolve({ success: true });
         },
-        async archivePhaseArtifacts() {
-          return { success: true };
+        archivePhaseArtifacts() {
+          return Promise.resolve({ success: true });
         },
-        async sendBlockingNotification() {
-          return;
+        sendBlockingNotification() {
+          return Promise.resolve();
         },
       };
 
@@ -356,7 +384,7 @@ describe('Notification Integration Tests', () => {
       mockFetch.mockResolvedValue({
         ok: true,
         status: 200,
-        json: async () => ({}),
+        json: () => Promise.resolve({}),
       });
 
       const config: NotificationConfig = {
@@ -452,7 +480,7 @@ describe('Notification Integration Tests', () => {
       );
 
       expect(result.sent).toBe(false);
-      if (result.sent === false) {
+      if (!result.sent) {
         expect((result as { sent: false; reason: string }).reason).toBe('not_blocked');
       }
       expect(mockFetch).not.toHaveBeenCalled();
@@ -489,7 +517,7 @@ describe('Notification Integration Tests', () => {
       mockFetch.mockResolvedValue({
         ok: true,
         status: 200,
-        json: async () => ({}),
+        json: () => Promise.resolve({}),
       });
 
       const service = new NotificationServiceImpl(config);
@@ -509,7 +537,7 @@ describe('Notification Integration Tests', () => {
       expect(result.allSucceeded).toBe(true);
       expect(result.anySucceeded).toBe(true);
 
-      const endpoints = mockFetch.mock.calls.map((call) => call[0]);
+      const endpoints = mockFetch.mock.calls.map((call) => call[0] as string);
       expect(endpoints).toContain('https://webhook1.example.com/hook');
       expect(endpoints).toContain('https://webhook2.example.com/hook');
       expect(endpoints).toContain('https://webhook3.example.com/hook');
@@ -533,15 +561,16 @@ describe('Notification Integration Tests', () => {
 
       let receivedPayload: string | undefined;
 
-      mockFetch.mockImplementation(async (_url: string, options: RequestInit) => {
-        if (options?.body) {
+      // eslint-disable-next-line @typescript-eslint/no-misused-promises
+      mockFetch.mockImplementation((_url: string, options: RequestInit) => {
+        if (options.body) {
           receivedPayload = options.body as string;
         }
-        return {
+        return Promise.resolve({
           ok: true,
           status: 200,
-          json: async () => ({}),
-        } as Response;
+          json: () => Promise.resolve({}),
+        } as Response);
       });
 
       const service = new NotificationServiceImpl(config);
@@ -560,7 +589,7 @@ describe('Notification Integration Tests', () => {
 
       expect(receivedPayload).toBeDefined();
 
-      const payload = JSON.parse(receivedPayload ?? '{}');
+      const payload = JSON.parse(receivedPayload ?? '{}') as WebhookPayload;
 
       expect(payload).toHaveProperty('event', 'block');
       expect(payload).toHaveProperty('timestamp');
@@ -619,25 +648,25 @@ describe('Notification Integration Tests', () => {
       expect(result.anySucceeded).toBe(false);
       expect(result.results).toHaveLength(1);
       expect(result.results[0]?.success).toBe(false);
-      if (result.results[0]?.success === false) {
+      if (result.results[0] && !result.results[0].success) {
         expect((result.results[0] as { success: false; error: string }).error).toBeDefined();
       }
 
       const mockOperations: ExternalOperations = {
-        async executeModelCall() {
-          return { success: true };
+        executeModelCall() {
+          return Promise.resolve({ success: true });
         },
-        async runCompilation() {
-          return { success: true };
+        runCompilation() {
+          return Promise.resolve({ success: true });
         },
-        async runTests() {
-          return { success: true };
+        runTests() {
+          return Promise.resolve({ success: true });
         },
-        async archivePhaseArtifacts() {
-          return { success: true };
+        archivePhaseArtifacts() {
+          return Promise.resolve({ success: true });
         },
-        async sendBlockingNotification() {
-          return;
+        sendBlockingNotification() {
+          return Promise.resolve();
         },
       };
 
@@ -647,7 +676,7 @@ describe('Notification Integration Tests', () => {
         notificationService: service as unknown as NotificationServiceImpl,
       });
 
-      await orchestrator.addArtifact('latticeCode' as ArtifactType);
+      orchestrator.addArtifact('latticeCode' as ArtifactType);
 
       const tickResult = await orchestrator.tick();
 
@@ -680,7 +709,7 @@ describe('Notification Integration Tests', () => {
         .mockResolvedValueOnce({
           ok: true,
           status: 200,
-          json: async () => ({}),
+          json: () => Promise.resolve({}),
         })
         .mockRejectedValueOnce(new Error('Network error'));
 
@@ -706,7 +735,7 @@ describe('Notification Integration Tests', () => {
 
       expect(successResult).toBeDefined();
       expect(failureResult).toBeDefined();
-      if (failureResult !== undefined && failureResult.success === false) {
+      if (failureResult !== undefined) {
         expect((failureResult as { success: false; error: string }).error).toBeDefined();
       }
     });

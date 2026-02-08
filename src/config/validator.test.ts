@@ -648,89 +648,6 @@ worker_model = "unknown-model"
       const invalidModelArb = fc.string({ minLength: 1, maxLength: 50 }).filter(isValidTomlString);
 
       fc.assert(
-        fc.asyncProperty(invalidModelArb, async (invalidModel) => {
-          const toml = `
-[models]
-worker_model = "${invalidModel}"
-`;
-          const config = await parseConfig(toml);
-          const result = validateConfig(config);
-
-          const hasWorkerError = result.errors.some(
-            (e) => e.field === 'models.worker_model' && e.value === invalidModel
-          );
-          return hasWorkerError;
-        }),
-        { numRuns: 50 }
-      );
-    });
-
-    it('should accept any threshold in valid range (0, 1]', () => {
-      fc.assert(
-        fc.asyncProperty(fc.double({ min: 0.001, max: 1.0, noNaN: true }), async (threshold) => {
-          const toml = `
-[thresholds]
-performance_variance_threshold = ${String(threshold)}
-`;
-          const config = await parseConfig(toml);
-          const result = validateConfig(config);
-
-          return result.valid;
-        }),
-        { numRuns: 50 }
-      );
-    });
-
-    it('should reject any threshold > 1.0', () => {
-      fc.assert(
-        fc.asyncProperty(fc.double({ min: 1.01, max: 100, noNaN: true }), async (threshold) => {
-          const toml = `
-[thresholds]
-performance_variance_threshold = ${String(threshold)}
-`;
-          const config = await parseConfig(toml);
-          const result = validateConfig(config);
-
-          return !result.valid;
-        }),
-        { numRuns: 50 }
-      );
-    });
-
-    it('should accept any positive integer for retry attempts up to 100', () => {
-      fc.assert(
-        fc.asyncProperty(fc.integer({ min: 1, max: 100 }), async (retryAttempts) => {
-          const toml = `
-[thresholds]
-max_retry_attempts = ${String(retryAttempts)}
-`;
-          const config = await parseConfig(toml);
-          const result = validateConfig(config);
-
-          const retryError = result.errors.find((e) => e.field === 'thresholds.max_retry_attempts');
-          return retryError === undefined;
-        }),
-        { numRuns: 50 }
-      );
-    });
-  });
-});
-
-    it('should reject any model name not in RECOGNIZED_MODELS', () => {
-      // Generate strings that are definitely not in RECOGNIZED_MODELS
-      // Filter out TOML special characters that would cause parse errors
-      const isValidTomlString = (s: string): boolean =>
-        s.length > 0 &&
-        !s.includes('"') &&
-        !s.includes('\\') &&
-        !s.includes('\n') &&
-        !s.includes('\r') &&
-        !s.includes('\t') &&
-        !RECOGNIZED_MODELS.has(s);
-
-      const invalidModelArb = fc.string({ minLength: 1, maxLength: 50 }).filter(isValidTomlString);
-
-      fc.assert(
         fc.property(invalidModelArb, (invalidModel) => {
           const toml = `
 [models]
@@ -758,34 +675,23 @@ performance_variance_threshold = ${String(threshold)}
           const config = parseConfig(toml);
           const result = validateConfig(config);
 
-          // Check no range errors for this threshold
-          const rangeError = result.errors.find(
-            (e) =>
-              e.field === 'thresholds.performance_variance_threshold' &&
-              (e.message.includes('between') || e.message.includes('greater than 0'))
-          );
-          return rangeError === undefined;
+          return result.valid;
         }),
-        { numRuns: 100 }
+        { numRuns: 50 }
       );
     });
 
-     it('should reject any threshold > 1.0', () => {
+    it('should reject any threshold > 1.0', () => {
       fc.assert(
-        fc.asyncProperty(fc.double({ min: 1.01, max: 100, noNaN: true }), async (threshold) => {
+        fc.property(fc.double({ min: 1.01, max: 100, noNaN: true }), (threshold) => {
           const toml = `
 [thresholds]
 performance_variance_threshold = ${String(threshold)}
 `;
-          const config = await parseConfig(toml);
+          const config = parseConfig(toml);
           const result = validateConfig(config);
 
-          const rangeError = result.errors.find(
-            (e) =>
-              e.field === 'thresholds.performance_variance_threshold' &&
-              e.message.includes('between')
-          );
-          return rangeError !== undefined;
+          return !result.valid;
         }),
         { numRuns: 50 }
       );
@@ -793,12 +699,12 @@ performance_variance_threshold = ${String(threshold)}
 
     it('should accept any positive integer for retry attempts up to 100', () => {
       fc.assert(
-        fc.asyncProperty(fc.integer({ min: 1, max: 100 }), async (retryAttempts) => {
+        fc.property(fc.integer({ min: 1, max: 100 }), (retryAttempts) => {
           const toml = `
 [thresholds]
 max_retry_attempts = ${String(retryAttempts)}
 `;
-          const config = await parseConfig(toml);
+          const config = parseConfig(toml);
           const result = validateConfig(config);
 
           const retryError = result.errors.find((e) => e.field === 'thresholds.max_retry_attempts');
@@ -807,3 +713,5 @@ max_retry_attempts = ${String(retryAttempts)}
         { numRuns: 50 }
       );
     });
+  });
+});

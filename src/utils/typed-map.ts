@@ -275,14 +275,13 @@ export class TypedMap<K, V> {
    * ```
    */
   toObject(): Record<string, V> {
-    const obj: Record<string, V> = Object.create(null);
+    const obj: Record<string, V> = Object.create(null) as Record<string, V>;
     const entriesArray = Array.from(this.map.entries());
     for (const [key, value] of entriesArray) {
       const stringKey = String(key);
       if (stringKey !== '__proto__' && stringKey !== 'constructor') {
-        // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
         // eslint-disable-next-line security/detect-object-injection
-        obj[stringKey] = value as V;
+        obj[stringKey] = value;
       }
     }
     return obj;
