@@ -33,6 +33,7 @@ describe('Phase Execution', () => {
           artifacts: new Set(),
           pendingResolutions: [],
           operations,
+          notificationService: undefined,
         };
 
         // Create a properly typed mock router

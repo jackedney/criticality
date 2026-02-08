@@ -18,16 +18,16 @@ import { readFileSync } from 'node:fs';
 import { rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { mkdtemp } from 'node:fs/promises';
-import { NotificationService as NotificationServiceImpl } from './service.ts';
-import { ReminderScheduler } from './reminder.ts';
-import { createOrchestrator, type ExternalOperations } from '../protocol/orchestrator.ts';
-import { createActiveSubstate, type ProtocolPhase } from '../protocol/types.ts';
-import type { BlockingRecord } from '../protocol/blocking.ts';
-import type { NotificationConfig } from '../config/types.ts';
+import { NotificationService as NotificationServiceImpl } from './service.js';
+import { ReminderScheduler } from './reminder.js';
+import { createOrchestrator, type ExternalOperations } from '../protocol/orchestrator.js';
+import { createActiveSubstate, type ProtocolPhase } from '../protocol/types.js';
+import type { BlockingRecord } from '../protocol/blocking.js';
+import type { NotificationConfig } from '../config/types.js';
 import type {
   NotificationService as INotificationService,
   NotificationSendResult,
-} from './types.ts';
+} from './types.js';
 import * as path from 'node:path';
 
 // Artifact type for casts - using correct ArtifactType from transitions.ts
@@ -440,6 +440,7 @@ describe('Notification Integration Tests', () => {
         blockedAt: new Date('2024-01-15T08:00:00.000Z').toISOString(),
         resolved: true,
         resolution: {
+          queryId: 'blocking-test-5',
           response: 'Response',
           resolvedAt: new Date('2024-01-15T08:30:00.000Z').toISOString(),
         },

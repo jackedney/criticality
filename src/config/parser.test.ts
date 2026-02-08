@@ -184,16 +184,23 @@ events = ["error"]
 
         expect(config.notifications.enabled).toBe(true);
         expect(config.notifications.channels).toBeDefined();
-        if (config.notifications.channels !== undefined) {
-          expect(config.notifications.channels).toHaveLength(2);
-          expect(config.notifications.channels[0].type).toBe('webhook');
-          expect(config.notifications.channels[0].endpoint).toBe('https://example.com/webhook1');
-          expect(config.notifications.channels[0].enabled).toBe(true);
-          expect(config.notifications.channels[0].events).toEqual(['block', 'complete']);
-          expect(config.notifications.channels[1].type).toBe('webhook');
-          expect(config.notifications.channels[1].endpoint).toBe('https://example.com/webhook2');
-          expect(config.notifications.channels[1].enabled).toBe(true);
-          expect(config.notifications.channels[1].events).toEqual(['error']);
+        const channels = config.notifications.channels;
+        if (channels !== undefined) {
+          expect(channels).toHaveLength(2);
+          const channel0 = channels[0];
+          const channel1 = channels[1];
+          expect(channel0).toBeDefined();
+          expect(channel1).toBeDefined();
+          if (channel0 && channel1) {
+            expect(channel0.type).toBe('webhook');
+            expect(channel0.endpoint).toBe('https://example.com/webhook1');
+            expect(channel0.enabled).toBe(true);
+            expect(channel0.events).toEqual(['block', 'complete']);
+            expect(channel1.type).toBe('webhook');
+            expect(channel1.endpoint).toBe('https://example.com/webhook2');
+            expect(channel1.enabled).toBe(true);
+            expect(channel1.events).toEqual(['error']);
+          }
         }
       });
 
@@ -232,14 +239,17 @@ events = ["block"]
         expect(config.notifications.enabled).toBe(true);
         expect(config.notifications.reminder_schedule).toBe('0 9 * * *');
         expect(config.notifications.channels).toBeDefined();
-        if (config.notifications.channels !== undefined) {
-          expect(config.notifications.channels).toHaveLength(2);
-          expect(config.notifications.channels[0].endpoint).toBe(
-            'https://hooks.example.com/webhook1'
-          );
-          expect(config.notifications.channels[1].endpoint).toBe(
-            'https://hooks.example.com/webhook2'
-          );
+        const channels = config.notifications.channels;
+        if (channels !== undefined) {
+          expect(channels).toHaveLength(2);
+          const channel0 = channels[0];
+          const channel1 = channels[1];
+          expect(channel0).toBeDefined();
+          expect(channel1).toBeDefined();
+          if (channel0 && channel1) {
+            expect(channel0.endpoint).toBe('https://hooks.example.com/webhook1');
+            expect(channel1.endpoint).toBe('https://hooks.example.com/webhook2');
+          }
         }
       });
 
@@ -255,9 +265,14 @@ endpoint = "https://example.com/webhook"
         const config = parseConfig(toml);
 
         expect(config.notifications.channels).toBeDefined();
-        if (config.notifications.channels !== undefined) {
-          expect(config.notifications.channels[0].enabled).toBe(true);
-          expect(config.notifications.channels[0].events).toEqual(['block']);
+        const channels = config.notifications.channels;
+        if (channels !== undefined) {
+          const channel0 = channels[0];
+          expect(channel0).toBeDefined();
+          if (channel0) {
+            expect(channel0.enabled).toBe(true);
+            expect(channel0.events).toEqual(['block']);
+          }
         }
       });
 

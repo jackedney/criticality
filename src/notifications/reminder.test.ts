@@ -123,6 +123,7 @@ describe('ReminderScheduler', () => {
         ...blockingRecord,
         resolved: true,
         resolution: {
+          queryId: blockingRecord.id,
           response: 'Yes',
           resolvedAt: '2024-01-15T08:30:00.000Z',
         },
@@ -409,6 +410,7 @@ describe('ReminderScheduler', () => {
         blockedAt: blockedAt.toISOString(),
         resolved: true,
         resolution: {
+          queryId: 'blocking_1',
           response: 'Yes',
           resolvedAt: '2024-01-15T08:30:00.000Z',
         },

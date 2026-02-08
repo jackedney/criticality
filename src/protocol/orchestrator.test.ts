@@ -143,7 +143,7 @@ describe('Protocol Orchestrator', () => {
         const ctx: TickContext = {
           snapshot: { state: createActiveState('Ignition'), artifacts: [], blockingQueries: [] },
           artifacts: new Set(),
-          pendingResolutions: [{ response: 'yes', resolvedAt: new Date().toISOString() }],
+          pendingResolutions: [{ queryId: 'test-id', response: 'yes', resolvedAt: new Date().toISOString() }],
           operations: {} as ExternalOperations,
           notificationService: undefined,
         };
