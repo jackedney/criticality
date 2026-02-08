@@ -1,15 +1,21 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { WebhookSender, validateWebhookEndpoint } from './webhook.js';
 import type { WebhookPayload } from './types.js';
 
 describe('WebhookSender', () => {
   let sender: WebhookSender;
   let mockFetch: ReturnType<typeof vi.fn>;
+  let originalFetch: typeof fetch;
 
   beforeEach(() => {
     sender = new WebhookSender({ timeoutMs: 1000 });
     mockFetch = vi.fn();
+    originalFetch = global.fetch;
     global.fetch = mockFetch as unknown as typeof fetch;
+  });
+
+  afterEach(() => {
+    global.fetch = originalFetch;
   });
 
   describe('send', () => {
@@ -473,22 +479,25 @@ describe('WebhookSender', () => {
     });
 
     it('should send test ping when ping option is enabled', async () => {
-      const mockFetch = vi.fn();
-      global.fetch = mockFetch as unknown as typeof fetch;
+      const originalFetch = global.fetch;
+      const pingMockFetch = vi.fn();
+      global.fetch = pingMockFetch as unknown as typeof fetch;
 
-      mockFetch.mockResolvedValueOnce({
+      pingMockFetch.mockResolvedValueOnce({
         ok: true,
         status: 200,
       });
 
       const result = await validateWebhookEndpoint('https://example.com/webhook', { ping: true });
 
+      global.fetch = originalFetch;
+
       expect(result.success).toBe(true);
       if (result.success) {
         expect(result.message).toContain('validated successfully');
         expect(result.message).toContain('200');
       }
-      expect(mockFetch).toHaveBeenCalledWith(
+      expect(pingMockFetch).toHaveBeenCalledWith(
         'https://example.com/webhook',
         expect.objectContaining({
           method: 'POST',
@@ -498,13 +507,16 @@ describe('WebhookSender', () => {
     });
 
     it('should return failure when ping fails', async () => {
-      const mockFetch = vi.fn();
-      global.fetch = mockFetch as unknown as typeof fetch;
+      const originalFetch = global.fetch;
+      const pingMockFetch = vi.fn();
+      global.fetch = pingMockFetch as unknown as typeof fetch;
 
       const networkError = new Error('ECONNREFUSED');
-      mockFetch.mockRejectedValueOnce(networkError);
+      pingMockFetch.mockRejectedValueOnce(networkError);
 
       const result = await validateWebhookEndpoint('https://example.com/webhook', { ping: true });
+
+      global.fetch = originalFetch;
 
       expect(result.success).toBe(false);
       if (!result.success) {
@@ -514,14 +526,17 @@ describe('WebhookSender', () => {
     });
 
     it('should return failure when ping times out', async () => {
-      const mockFetch = vi.fn();
-      global.fetch = mockFetch as unknown as typeof fetch;
+      const originalFetch = global.fetch;
+      const pingMockFetch = vi.fn();
+      global.fetch = pingMockFetch as unknown as typeof fetch;
 
       const timeoutError = new Error('Request timeout');
       timeoutError.name = 'AbortError';
-      mockFetch.mockRejectedValueOnce(timeoutError);
+      pingMockFetch.mockRejectedValueOnce(timeoutError);
 
       const result = await validateWebhookEndpoint('https://example.com/webhook', { ping: true });
+
+      global.fetch = originalFetch;
 
       expect(result.success).toBe(false);
       if (!result.success) {

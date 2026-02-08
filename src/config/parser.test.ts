@@ -271,75 +271,6 @@ channels = []
 
         expect(config.notifications.channels).toBeUndefined();
       });
-
-      it('should parse notifications with reminder_schedule cron expression', () => {
-        const toml = `
-[notifications]
-enabled = true
-reminder_schedule = "0 9 * * *"
-`;
-        const config = parseConfig(toml);
-
-        expect(config.notifications.enabled).toBe(true);
-        expect(config.notifications.reminder_schedule).toBe('0 9 * * *');
-      });
-
-      it('should parse complete notification config with channels and reminder_schedule', () => {
-        const toml = `
-[notifications]
-enabled = true
-reminder_schedule = "0 9 * * *"
-
-[[notifications.channels]]
-type = "webhook"
-endpoint = "https://hooks.example.com/webhook1"
-enabled = true
-events = ["block", "complete", "error"]
-
-[[notifications.channels]]
-type = "webhook"
-endpoint = "https://hooks.example.com/webhook2"
-enabled = true
-events = ["block"]
-`;
-        const config = parseConfig(toml);
-
-        expect(config.notifications.enabled).toBe(true);
-        expect(config.notifications.reminder_schedule).toBe('0 9 * * *');
-        expect(config.notifications.channels).toHaveLength(2);
-        expect(config.notifications.channels?.[0].endpoint).toBe(
-          'https://hooks.example.com/webhook1'
-        );
-        expect(config.notifications.channels?.[1].endpoint).toBe(
-          'https://hooks.example.com/webhook2'
-        );
-      });
-
-      it('should use default values for optional channel fields', () => {
-        const toml = `
-[notifications]
-enabled = true
-
-[[notifications.channels]]
-type = "webhook"
-endpoint = "https://example.com/webhook"
-`;
-        const config = parseConfig(toml);
-
-        expect(config.notifications.channels?.[0].enabled).toBe(true);
-        expect(config.notifications.channels?.[0].events).toEqual(['block']);
-      });
-
-      it('should handle empty channels array as undefined', () => {
-        const toml = `
-[notifications]
-enabled = true
-channels = []
-`;
-        const config = parseConfig(toml);
-
-        expect(config.notifications.channels).toBeUndefined();
-      });
     });
 
     describe('notification validation errors', () => {
@@ -601,7 +532,7 @@ channel = "telegram"
   });
 
   describe('getDefaultConfig', () => {
-    it('should return a copy of default config', () => {
+    it('should return a copy of default config', async () => {
       const config1 = await getDefaultConfig();
       const config2 = await getDefaultConfig();
 
@@ -609,7 +540,7 @@ channel = "telegram"
       expect(config1).not.toBe(config2);
     });
 
-    it('should have all expected default model assignments', () => {
+    it('should have all expected default model assignments', async () => {
       const config = await getDefaultConfig();
 
       expect(config.models.architect_model).toBe('claude-opus-4.5');
@@ -619,7 +550,7 @@ channel = "telegram"
       expect(config.models.fallback_model).toBe('claude-sonnet-4.5');
     });
 
-    it('should have all expected default paths', () => {
+    it('should have all expected default paths', async () => {
       const config = await getDefaultConfig();
 
       expect(config.paths.specs).toBe('.criticality/specs');
@@ -629,7 +560,7 @@ channel = "telegram"
       expect(config.paths.ledger).toBe('.criticality/ledger');
     });
 
-    it('should have all expected default thresholds', () => {
+    it('should have all expected default thresholds', async () => {
       const config = await getDefaultConfig();
 
       expect(config.thresholds.context_token_upgrade).toBe(12000);
@@ -639,7 +570,7 @@ channel = "telegram"
       expect(config.thresholds.performance_variance_threshold).toBe(0.2);
     });
 
-    it('should have notifications disabled by default', () => {
+    it('should have notifications disabled by default', async () => {
       const config = await getDefaultConfig();
 
       expect(config.notifications.enabled).toBe(false);
