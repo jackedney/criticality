@@ -57,6 +57,8 @@ export interface WebhookPayload {
   readonly timestamp: string;
   /** The blocking record (for block/error events). */
   readonly blocking_record?: BlockingRecord;
+  /** Phase change data (for phase_change events). */
+  readonly phase_change?: PhaseChangeData;
   /** Current protocol state (for all events). */
   readonly protocol_state: ProtocolState;
 }

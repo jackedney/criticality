@@ -100,6 +100,53 @@ describe('NotificationService', () => {
       expect(service.hasSubscribers('complete')).toBe(true);
       expect(service.hasSubscribers('error')).toBe(false);
     });
+
+    it('should filter out invalid event types', () => {
+      const config: NotificationConfig = {
+        enabled: true,
+        channels: [
+          {
+            type: 'webhook',
+            endpoint: defaultWebhookUrl1,
+            enabled: true,
+            events: ['block', 'on_block', 'complete', 'invalid_event'],
+          },
+        ],
+        reminder_schedule: undefined,
+      };
+
+      const service = new NotificationService(config);
+
+      expect(service.hasSubscribers('block')).toBe(true);
+      expect(service.hasSubscribers('complete')).toBe(true);
+      expect(service.hasSubscribers('error')).toBe(false);
+    });
+
+    it('should ignore channel with all invalid events', () => {
+      const config: NotificationConfig = {
+        enabled: true,
+        channels: [
+          {
+            type: 'webhook',
+            endpoint: defaultWebhookUrl1,
+            enabled: true,
+            events: ['on_block', 'on_complete', 'on_error'],
+          },
+          {
+            type: 'webhook',
+            endpoint: defaultWebhookUrl2,
+            enabled: true,
+            events: ['block'],
+          },
+        ],
+        reminder_schedule: undefined,
+      };
+
+      const service = new NotificationService(config);
+
+      expect(service.hasSubscribers('block')).toBe(true);
+      expect(service.hasSubscribers('error')).toBe(false);
+    });
   });
 
   describe('notify with BlockingRecord', () => {

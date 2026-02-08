@@ -10,7 +10,13 @@
 import type { BlockingRecord } from '../protocol/blocking.js';
 import type { ProtocolState } from '../protocol/types.js';
 import type { NotificationConfig } from '../config/types.js';
-import type { NotificationEvent, NotificationSendResult, WebhookPayload } from './types.js';
+import type {
+  NotificationChannel,
+  NotificationEvent,
+  NotificationSendResult,
+  WebhookPayload,
+} from './types.js';
+import { NOTIFICATION_EVENTS } from './types.js';
 import { WebhookSender } from './webhook.js';
 
 /**
@@ -34,13 +40,19 @@ export class NotificationService {
     if (config.enabled && config.channels !== undefined && config.channels.length > 0) {
       for (const channelConfig of config.channels) {
         if (channelConfig.type === 'webhook') {
-          const channel: NotificationChannel = {
-            type: 'webhook',
-            endpoint: channelConfig.endpoint,
-            enabled: channelConfig.enabled,
-            events: channelConfig.events as readonly NotificationEvent[],
-          };
-          channelsArr.push(channel);
+          const validEvents = channelConfig.events.filter((e): e is NotificationEvent =>
+            (NOTIFICATION_EVENTS as readonly string[]).includes(e)
+          );
+
+          if (validEvents.length > 0) {
+            const channel: NotificationChannel = {
+              type: 'webhook',
+              endpoint: channelConfig.endpoint,
+              enabled: channelConfig.enabled,
+              events: validEvents,
+            };
+            channelsArr.push(channel);
+          }
         }
       }
     }
@@ -175,14 +187,4 @@ export class NotificationService {
 
     return this.send(event, payload);
   }
-}
-
-/**
- * Internal notification channel representation.
- */
-interface NotificationChannel {
-  readonly type: 'webhook';
-  readonly endpoint: string;
-  readonly enabled: boolean;
-  readonly events: readonly NotificationEvent[];
 }
