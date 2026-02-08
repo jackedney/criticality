@@ -12,11 +12,11 @@ import type { ExternalOperations, ActionResult } from '../protocol/orchestrator.
 import type { Config } from '../config/types.js';
 import { createClaudeCodeClient, type ClaudeCodeClient } from '../router/claude-code-client.js';
 import type { ModelAlias } from '../router/types.js';
+import { NotificationService } from '../notifications/service.js';
 import { execa } from 'execa';
 import { copyFile, mkdir } from 'node:fs/promises';
 import path from 'node:path';
 import { TelemetryCollector } from './telemetry.js';
-import { createHooksExecutor } from './hooks.js';
 
 /**
  * Telemetry data collected from operations.
@@ -90,7 +90,7 @@ export class CliOperations implements ExternalOperations {
   private readonly collectTelemetry: boolean;
   private readonly onTelemetryUpdate: (telemetry: OperationTelemetry) => void;
   private readonly telemetryCollector: TelemetryCollector;
-  private readonly hooksExecutor: ReturnType<typeof createHooksExecutor>;
+  private readonly notificationService: NotificationService;
   private modelClient: ClaudeCodeClient | null = null;
   private telemetry: OperationTelemetry;
   private currentPhase: ProtocolPhase;
@@ -107,7 +107,7 @@ export class CliOperations implements ExternalOperations {
     this.collectTelemetry = options.collectTelemetry ?? true;
     this.onTelemetryUpdate = options.onTelemetryUpdate;
     this.telemetryCollector = options.telemetryCollector ?? new TelemetryCollector();
-    this.hooksExecutor = createHooksExecutor(this.config.notifications.hooks ?? {}, this.cwd);
+    this.notificationService = new NotificationService(this.config.notifications);
     this.telemetry = {
       modelCalls: 0,
       promptTokens: 0,
@@ -409,43 +409,21 @@ export class CliOperations implements ExternalOperations {
   /**
    * Send blocking notification.
    *
-   * Triggers notification hooks configured in criticality.toml.
+   * Delegates to NotificationService to send notifications to configured channels.
    *
    * @param query - The blocking query.
    */
   async sendBlockingNotification(query: string): Promise<void> {
     try {
-      if (!this.config.notifications.enabled) {
-        return;
-      }
+      const blockingRecord = {
+        id: `blocking-${this.currentPhase}`,
+        phase: this.currentPhase,
+        query,
+        blockedAt: new Date().toISOString(),
+        resolved: false,
+      };
 
-      const endpoint = this.config.notifications.endpoint;
-      if (endpoint === undefined) {
-        return;
-      }
-
-      const channel = this.config.notifications.channel;
-
-      if (channel === 'webhook' && endpoint) {
-        await execa(
-          'curl',
-          [
-            '-X',
-            'POST',
-            '-H',
-            'Content-Type: application/json',
-            '-d',
-            JSON.stringify({ query }),
-            endpoint,
-          ],
-          {
-            cwd: this.cwd,
-            reject: false,
-          }
-        );
-      }
-
-      await this.hooksExecutor.onBlock(query);
+      await this.notificationService.notify('block', blockingRecord);
     } catch {
       // Ignore notification errors to avoid blocking protocol execution
     }
