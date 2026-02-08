@@ -517,10 +517,22 @@ export async function handleResumeCommand(context: CliContext): Promise<CliComma
       telemetryCollector,
     });
 
-    const orchestrator = await createOrchestrator({
+    const orchestratorOptions: {
+      statePath: string;
+      operations: typeof operations;
+      notificationService?: NotificationService;
+    } = {
       statePath,
       operations,
-    });
+    };
+
+    // Check for notification service and pass to orchestrator if available
+    // This pattern allows orchestrator to work without notifications if needed
+    if (operations.notificationService !== undefined) {
+      orchestratorOptions.notificationService = operations.notificationService;
+    }
+
+    const orchestrator = await createOrchestrator(orchestratorOptions);
 
     const liveDisplay = new LiveDisplay({
       colors: options.colors,

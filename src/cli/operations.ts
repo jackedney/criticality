@@ -90,7 +90,7 @@ export class CliOperations implements ExternalOperations {
   private readonly collectTelemetry: boolean;
   private readonly onTelemetryUpdate: (telemetry: OperationTelemetry) => void;
   private readonly telemetryCollector: TelemetryCollector;
-  private readonly notificationService: NotificationService;
+  private readonly _notificationService: NotificationService;
   private modelClient: ClaudeCodeClient | null = null;
   private telemetry: OperationTelemetry;
   private currentPhase: ProtocolPhase;
@@ -107,7 +107,7 @@ export class CliOperations implements ExternalOperations {
     this.collectTelemetry = options.collectTelemetry ?? true;
     this.onTelemetryUpdate = options.onTelemetryUpdate;
     this.telemetryCollector = options.telemetryCollector ?? new TelemetryCollector();
-    this.notificationService = new NotificationService(this.config.notifications);
+    this._notificationService = new NotificationService(this.config.notifications);
     this.telemetry = {
       modelCalls: 0,
       promptTokens: 0,
@@ -423,7 +423,7 @@ export class CliOperations implements ExternalOperations {
         resolved: false,
       };
 
-      await this.notificationService.notify('block', blockingRecord);
+      await this._notificationService.notify('block', blockingRecord);
     } catch {
       // Ignore notification errors to avoid blocking protocol execution
     }
@@ -459,6 +459,15 @@ export class CliOperations implements ExternalOperations {
     };
     this.telemetryCollector.reset();
     this.onTelemetryUpdate(this.telemetry);
+  }
+
+  /**
+   * Gets the notification service instance.
+   *
+   * @returns The notification service.
+   */
+  get notificationService(): NotificationService {
+    return this._notificationService;
   }
 }
 
