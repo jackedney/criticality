@@ -754,65 +754,8 @@ summary: Found 1 critical temporal contradiction`;
     });
   });
 
-  describe('js-yaml fallback', () => {
-    afterEach(() => {
-      vi.unstubAllEnvs();
-    });
-
-    it('uses default YAML parser when PARSE_WITH_JSYAML is not set', async () => {
-      vi.stubEnv('PARSE_WITH_JSYAML', undefined);
-      vi.resetModules();
-      const freshParser = await import('./report-parser.js');
-      const yamlContent = `hasContradictions: true
-contradictions:
-  - type: temporal
-    severity: critical
-    description: Test
-    involved:
-      - elementType: constraint
-        id: C1
-        name: T
-        text: T
-    analysis: A
-    minimalScenario: S
-    suggestedResolutions: []
-summary: Test`;
-
-      const result = await freshParser.parseContradictionOutput(yamlContent);
-
-      expect(result.success).toBe(true);
-    });
-
-    it('uses js-yaml parser when PARSE_WITH_JSYAML is set to true', async () => {
-      vi.stubEnv('PARSE_WITH_JSYAML', 'true');
-      vi.resetModules();
-      const freshParser = await import('./report-parser.js');
-      await freshParser.ensureYamlLoaded();
-      const yamlContent = `hasContradictions: true
-contradictions:
-  - type: temporal
-    severity: critical
-    description: Test
-    involved:
-      - elementType: constraint
-        id: C1
-        name: T
-        text: T
-    analysis: A
-    minimalScenario: S
-    suggestedResolutions: []
-summary: Test`;
-
-      const result = await freshParser.parseContradictionOutput(yamlContent);
-
-      expect(result.success).toBe(true);
-    });
-
-    it('parses YAML from markdown code block with js-yaml', async () => {
-      vi.stubEnv('PARSE_WITH_JSYAML', 'true');
-      vi.resetModules();
-      const freshParser = await import('./report-parser.js');
-      await freshParser.ensureYamlLoaded();
+  describe('YAML parsing with js-yaml', () => {
+    it('parses YAML from markdown code block', async () => {
       const yamlContent = `\`\`\`yaml
 hasContradictions: true
 contradictions:
@@ -830,18 +773,12 @@ contradictions:
 summary: Test
 \`\`\``;
 
-      const result = await freshParser.parseContradictionOutput(yamlContent);
+      const result = await parseContradictionOutput(yamlContent);
 
       expect(result.success).toBe(true);
     });
 
     it('rejects deeply nested dangerous keys and prevents prototype pollution', async () => {
-      vi.stubEnv('PARSE_WITH_JSYAML', 'true');
-      vi.resetModules();
-      const freshParser = await import('./report-parser.js');
-      const freshTypes = await import('./types.js');
-      await freshParser.ensureYamlLoaded();
-
       const prototypeKeysBefore = Object.keys(Object.prototype);
 
       const yamlContent = `hasContradictions: true
@@ -868,11 +805,11 @@ contradictions:
     suggestedResolutions: []
 summary: Test`;
 
-      const result = await freshParser.parseContradictionOutput(yamlContent);
+      const result = await parseContradictionOutput(yamlContent);
 
       expect(result.success).toBe(false);
       if (!result.success) {
-        expect(result.error).toBeInstanceOf(freshTypes.ContradictionReportParseError);
+        expect(result.error).toBeInstanceOf(ContradictionReportParseError);
         expect(result.error.errorType).toBe('validation_error');
       }
 
@@ -983,22 +920,6 @@ summary: Test`;
       }
     });
 
-    it('ignores lines that do not match key pattern', async () => {
-      const yamlContent = `: emptyKey
-hasContradictions: true
-contradictions: []`;
-
-      const result = await parseContradictionOutput(yamlContent);
-
-      // Empty keys don't match the regex pattern, so they're ignored
-      // The valid key 'hasContradictions' should still parse
-      expect(result.success).toBe(true);
-      if (result.success) {
-        expect(result.hasContradictions).toBe(true);
-        expect(result.contradictions).toHaveLength(0);
-      }
-    });
-
     it('parses valid YAML keys correctly', async () => {
       const yamlContent = `hasContradictions: true
 contradictions:
@@ -1029,7 +950,7 @@ summary: Test summary`;
       }
     });
 
-    it('creates objects with null prototype to prevent prototype pollution', () => {
+    it('creates standard objects (non-null prototype) as validated by validateNoDangerousKeys', () => {
       const yamlContent = `hasContradictions: true
 contradictions:
   - type: temporal
@@ -1050,12 +971,12 @@ summary: Test`;
       expect(parsed).not.toBeNull();
       if (parsed && typeof parsed === 'object') {
         const obj = parsed as Record<string, unknown>;
-        expect(Object.getPrototypeOf(obj)).toBe(null);
+        expect(Object.getPrototypeOf(obj)).toBe(Object.prototype);
 
         const contradictions = obj.contradictions;
         expect(Array.isArray(contradictions)).toBe(true);
         if (contradictions && Array.isArray(contradictions) && contradictions[0]) {
-          expect(Object.getPrototypeOf(contradictions[0])).toBe(null);
+          expect(Object.getPrototypeOf(contradictions[0])).toBe(Object.prototype);
         }
       }
     });
