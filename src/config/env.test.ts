@@ -242,8 +242,8 @@ describe('Environment Variable Overrides', () => {
   });
 
   describe('applyEnvOverrides', () => {
-    it('should merge env overrides with config', async () => {
-      const config = await parseConfig('');
+    it('should merge env overrides with config', () => {
+      const config = parseConfig('');
       const env = { CRITICALITY_MODEL: 'claude-3-opus' };
 
       const result = applyEnvOverrides(config, env);
@@ -253,12 +253,12 @@ describe('Environment Variable Overrides', () => {
       expect(result.models.architect_model).toBe(DEFAULT_CONFIG.models.architect_model);
     });
 
-    it('should demonstrate override precedence: env > config file', async () => {
+    it('should demonstrate override precedence: env > config file', () => {
       const toml = `
 [models]
 worker_model = "config-file-model"
 `;
-      const config = await parseConfig(toml);
+      const config = parseConfig(toml);
       const env = { CRITICALITY_WORKER_MODEL: 'env-override-model' };
 
       const result = applyEnvOverrides(config, env);
@@ -267,7 +267,7 @@ worker_model = "config-file-model"
       expect(result.models.worker_model).toBe('env-override-model');
     });
 
-    it('should preserve config values not overridden by env', async () => {
+    it('should preserve config values not overridden by env', () => {
       const toml = `
 [models]
 architect_model = "custom-architect"
@@ -276,7 +276,7 @@ worker_model = "custom-worker"
 [thresholds]
 max_retry_attempts = 10
 `;
-      const config = await parseConfig(toml);
+      const config = parseConfig(toml);
       const env = { CRITICALITY_WORKER_MODEL: 'env-worker' };
 
       const result = applyEnvOverrides(config, env);
@@ -413,8 +413,8 @@ max_retry_attempts = 10
 
     it('should apply env overrides without losing other config values', () => {
       fc.assert(
-        fc.asyncProperty(fc.string({ minLength: 1, maxLength: 50 }), async (modelName) => {
-          const config = await parseConfig('');
+        fc.property(fc.string({ minLength: 1, maxLength: 50 }), (modelName) => {
+          const config = parseConfig('');
           const env = { CRITICALITY_MODEL: modelName };
           const result = applyEnvOverrides(config, env);
 

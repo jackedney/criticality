@@ -57,7 +57,6 @@ export const DEFAULT_NOTIFICATIONS: NotificationConfig = {
   enabled: false,
   channels: undefined,
   reminder_schedule: undefined,
-  hooks: {},
 };
 
 /**

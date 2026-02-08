@@ -5,7 +5,6 @@
  */
 
 import * as TOML from '@iarna/toml';
-import { execa } from 'execa';
 import {
   DEFAULT_CLI_CONFIG,
   DEFAULT_CONFIG,
@@ -24,8 +23,6 @@ import type {
   ModelAssignments,
   NotificationChannelConfig,
   NotificationConfig,
-  NotificationHook,
-  NotificationHooks,
   PathConfig,
   ThresholdConfig,
 } from './types.js';
@@ -273,118 +270,6 @@ function parseThresholds(raw: Record<string, unknown> | undefined): ThresholdCon
 }
 
 /**
- * Parses a notification hook from raw TOML data.
- *
- * @param raw - Raw TOML object for a single hook.
- * @param hookName - Name of the hook for error messages.
- * @returns Validated notification hook.
- */
-function parseNotificationHook(raw: unknown, hookName: string): NotificationHook | undefined {
-  if (raw === undefined || typeof raw !== 'object' || raw === null) {
-    return undefined;
-  }
-
-  const hookRaw = raw as Record<string, unknown>;
-  const hook: Partial<NotificationHook> = {};
-
-  if ('command' in hookRaw) {
-    hook.command = validateString(hookRaw.command, `notifications.hooks.${hookName}.command`);
-  }
-
-  if ('enabled' in hookRaw) {
-    hook.enabled = validateBoolean(hookRaw.enabled, `notifications.hooks.${hookName}.enabled`);
-  }
-
-  if (hook.command === undefined || hook.enabled === undefined) {
-    return undefined;
-  }
-
-  return {
-    command: hook.command,
-    enabled: hook.enabled,
-  };
-}
-
-/**
- * Validates that a shell command exists and is executable.
- *
- * @param command - The shell command to validate.
- * @param hookName - Name of the hook for warning messages.
- * @returns Whether the command exists.
- */
-async function validateCommandExists(command: string, hookName: string): Promise<boolean> {
-  const commandName = command.split(' ')[0];
-  if (commandName === undefined) {
-    console.warn(`Warning: Invalid command for hook '${hookName}'. The hook will not execute.`);
-    return false;
-  }
-
-  try {
-    await execa('which', [commandName], {
-      reject: true,
-      timeout: 1000,
-    });
-    return true;
-  } catch {
-    console.warn(
-      `Warning: Command '${commandName}' not found for hook '${hookName}'. ` +
-        `The hook will not execute. Please ensure the command is available in PATH.`
-    );
-    return false;
-  }
-}
-
-/**
- * Parses notification hooks from raw TOML data.
- *
- * @param raw - Raw TOML object for notifications.hooks section.
- * @returns Validated notification hooks.
- */
-async function parseNotificationHooks(
-  raw: Record<string, unknown> | undefined
-): Promise<NotificationHooks> {
-  if (raw === undefined) {
-    return {};
-  }
-
-  const hooks: NotificationHooks = {};
-
-  if ('on_block' in raw) {
-    const hook = parseNotificationHook(raw.on_block, 'on_block');
-    if (hook !== undefined) {
-      await validateCommandExists(hook.command, 'on_block');
-      hooks.on_block = hook;
-    }
-  }
-
-  if ('on_complete' in raw) {
-    const hook = parseNotificationHook(raw.on_complete, 'on_complete');
-    if (hook !== undefined) {
-      await validateCommandExists(hook.command, 'on_complete');
-      hooks.on_complete = hook;
-    }
-  }
-
-  if ('on_error' in raw) {
-    const hook = parseNotificationHook(raw.on_error, 'on_error');
-    if (hook !== undefined) {
-      await validateCommandExists(hook.command, 'on_error');
-      hooks.on_error = hook;
-    }
-  }
-
-  if ('on_phase_change' in raw) {
-    const hook = parseNotificationHook(raw.on_phase_change, 'on_phase_change');
-    if (hook !== undefined) {
-      await validateCommandExists(hook.command, 'on_phase_change');
-      hooks.on_phase_change = hook;
-    }
-  }
-
-  return hooks;
-}
-
-/**
  * Parses a notification channel configuration from raw TOML data.
  *
  * @param raw - Raw TOML object for a single channel.
@@ -496,9 +381,7 @@ function parseNotificationChannels(raw: unknown): readonly NotificationChannelCo
  * @param raw - Raw TOML object for notifications section.
  * @returns Validated notification configuration merged with defaults.
  */
-async function parseNotifications(
-  raw: Record<string, unknown> | undefined
-): Promise<NotificationConfig> {
+function parseNotifications(raw: Record<string, unknown> | undefined): NotificationConfig {
   if (raw === undefined) {
     return { ...DEFAULT_NOTIFICATIONS };
   }
@@ -535,18 +418,12 @@ async function parseNotifications(
       ? validateString(raw.endpoint, 'notifications.endpoint')
       : DEFAULT_NOTIFICATIONS.endpoint;
 
-  const hooks =
-    'hooks' in raw
-      ? await parseNotificationHooks(raw.hooks as Record<string, unknown> | undefined)
-      : DEFAULT_NOTIFICATIONS.hooks;
-
   return {
     enabled,
     channels,
     reminder_schedule,
     channel,
     endpoint,
-    hooks,
   };
 }
 
@@ -646,30 +523,20 @@ function parseCliSettings(raw: Record<string, unknown> | undefined): CliSettings
 }
 
 /**
- * Parses a TOML string into a validated Config object.
+ * Parses a TOML string and validates the configuration.
  *
- * @param tomlContent - Raw TOML content as a string.
- * @returns Validated configuration object with defaults applied for missing fields.
- * @throws ConfigParseError for invalid TOML syntax or invalid field values.
+ * @param tomlContent - The TOML configuration string.
+ * @returns Validated configuration object.
  *
  * @example
  * ```typescript
  * import { parseConfig } from './config/parser.js';
- *
- * const toml = `
- * [models]
- * worker_model = "custom-model"
- *
- * [thresholds]
- * max_retry_attempts = 5
- * `;
- *
- * const config = parseConfig(toml);
- * console.log(config.models.worker_model); // "custom-model"
+ * const config = parseConfig('[models]\nworker_model = "custom"');
+ * console.log(config.models.worker_model); // "custom"
  * console.log(config.thresholds.max_retry_attempts); // 5
  * ```
  */
-export async function parseConfig(tomlContent: string): Promise<Config> {
+export function parseConfig(tomlContent: string): Config {
   let parsed: Record<string, unknown>;
 
   try {
@@ -683,9 +550,7 @@ export async function parseConfig(tomlContent: string): Promise<Config> {
     models: parseModelAssignments(parsed.models as Record<string, unknown> | undefined),
     paths: parsePaths(parsed.paths as Record<string, unknown> | undefined),
     thresholds: parseThresholds(parsed.thresholds as Record<string, unknown> | undefined),
-    notifications: await parseNotifications(
-      parsed.notifications as Record<string, unknown> | undefined
-    ),
+    notifications: parseNotifications(parsed.notifications as Record<string, unknown> | undefined),
     mass_defect: parseMassDefect(parsed.mass_defect as Record<string, unknown> | undefined),
     cli: parseCliSettings(parsed.cli as Record<string, unknown> | undefined),
   };

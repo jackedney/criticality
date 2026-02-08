@@ -20,7 +20,6 @@ describe('NotificationService', () => {
         enabled: false,
         channels: undefined,
         reminder_schedule: undefined,
-        hooks: {},
       };
 
       const service = new NotificationService(config);
@@ -47,7 +46,6 @@ describe('NotificationService', () => {
           },
         ],
         reminder_schedule: undefined,
-        hooks: {},
       };
 
       const service = new NotificationService(config);
@@ -69,7 +67,6 @@ describe('NotificationService', () => {
           },
         ],
         reminder_schedule: undefined,
-        hooks: {},
       };
 
       const service = new NotificationService(config);
@@ -95,7 +92,6 @@ describe('NotificationService', () => {
           },
         ],
         reminder_schedule: undefined,
-        hooks: {},
       };
 
       const service = new NotificationService(config);
@@ -125,7 +121,6 @@ describe('NotificationService', () => {
           },
         ],
         reminder_schedule: undefined,
-        hooks: {},
       };
 
       const service = new NotificationService(config);
@@ -179,7 +174,6 @@ describe('NotificationService', () => {
           },
         ],
         reminder_schedule: undefined,
-        hooks: {},
       };
 
       const service = new NotificationService(config);
@@ -228,7 +222,6 @@ describe('NotificationService', () => {
           },
         ],
         reminder_schedule: undefined,
-        hooks: {},
       };
 
       const service = new NotificationService(config);
@@ -275,7 +268,6 @@ describe('NotificationService', () => {
           },
         ],
         reminder_schedule: undefined,
-        hooks: {},
       };
 
       const service = new NotificationService(config);
@@ -316,7 +308,6 @@ describe('NotificationService', () => {
           },
         ],
         reminder_schedule: undefined,
-        hooks: {},
       };
 
       const service = new NotificationService(config);
@@ -354,7 +345,6 @@ describe('NotificationService', () => {
           },
         ],
         reminder_schedule: undefined,
-        hooks: {},
       };
 
       const service = new NotificationService(config);
@@ -397,7 +387,6 @@ describe('NotificationService', () => {
           },
         ],
         reminder_schedule: undefined,
-        hooks: {},
       };
 
       const service = new NotificationService(config);
@@ -454,7 +443,6 @@ describe('NotificationService', () => {
           },
         ],
         reminder_schedule: undefined,
-        hooks: {},
       };
 
       const service = new NotificationService(config);
@@ -496,7 +484,6 @@ describe('NotificationService', () => {
           },
         ],
         reminder_schedule: undefined,
-        hooks: {},
       };
 
       const service = new NotificationService(config);
@@ -543,7 +530,6 @@ describe('NotificationService', () => {
           },
         ],
         reminder_schedule: undefined,
-        hooks: {},
       };
 
       const service = new NotificationService(config);
@@ -576,7 +562,6 @@ describe('NotificationService', () => {
           },
         ],
         reminder_schedule: undefined,
-        hooks: {},
       };
 
       const service = new NotificationService(config);
@@ -607,7 +592,6 @@ describe('NotificationService', () => {
           },
         ],
         reminder_schedule: undefined,
-        hooks: {},
       };
 
       const service = new NotificationService(config);

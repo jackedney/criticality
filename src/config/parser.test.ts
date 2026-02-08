@@ -5,12 +5,12 @@ import { ConfigParseError, DEFAULT_CONFIG, getDefaultConfig, parseConfig } from 
 describe('Config Parser', () => {
   describe('parseConfig', () => {
     describe('valid TOML parsing', () => {
-      it('should parse empty TOML to default config', async () => {
-        const config = await parseConfig('');
+      it('should parse empty TOML to default config', () => {
+        const config = parseConfig('');
         expect(config).toEqual(DEFAULT_CONFIG);
       });
 
-      it('should parse complete valid configuration', async () => {
+      it('should parse complete valid configuration', () => {
         const toml = `
 [models]
 architect_model = "custom-architect"
@@ -38,10 +38,6 @@ enabled = true
 channel = "slack"
 endpoint = "https://hooks.slack.com/test"
 
-[notifications.hooks]
-on_block = { command = "notify-send", enabled = true }
-on_complete = { command = "notify-send", enabled = false }
-
 [mass_defect.targets]
 max_cyclomatic_complexity = 8
 max_function_length_lines = 40
@@ -51,7 +47,7 @@ min_test_coverage = 0.9
 [mass_defect]
 catalog_path = "./custom-catalog"
 `;
-        const config = await parseConfig(toml);
+        const config = parseConfig(toml);
 
         expect(config.models.architect_model).toBe('custom-architect');
         expect(config.models.auditor_model).toBe('custom-auditor');
@@ -75,11 +71,6 @@ catalog_path = "./custom-catalog"
         expect(config.notifications.channel).toBe('slack');
         expect(config.notifications.endpoint).toBe('https://hooks.slack.com/test');
 
-        expect(config.notifications.hooks?.on_block?.command).toBe('notify-send');
-        expect(config.notifications.hooks?.on_block?.enabled).toBe(true);
-        expect(config.notifications.hooks?.on_complete?.command).toBe('notify-send');
-        expect(config.notifications.hooks?.on_complete?.enabled).toBe(false);
-
         expect(config.mass_defect.targets.max_cyclomatic_complexity).toBe(8);
         expect(config.mass_defect.targets.max_function_length_lines).toBe(40);
         expect(config.mass_defect.targets.max_nesting_depth).toBe(3);
@@ -87,12 +78,12 @@ catalog_path = "./custom-catalog"
         expect(config.mass_defect.catalog_path).toBe('./custom-catalog');
       });
 
-      it('should use default values for missing optional fields', async () => {
+      it('should use default values for missing optional fields', () => {
         const toml = `
 [models]
 worker_model = "custom-worker"
 `;
-        const config = await parseConfig(toml);
+        const config = parseConfig(toml);
 
         expect(config.models.worker_model).toBe('custom-worker');
 
@@ -110,24 +101,24 @@ worker_model = "custom-worker"
         expect(config.mass_defect).toEqual(DEFAULT_CONFIG.mass_defect);
       });
 
-      it('should handle partial sections correctly', async () => {
+      it('should handle partial sections correctly', () => {
         const toml = `
 [thresholds]
 max_retry_attempts = 10
 `;
-        const config = await parseConfig(toml);
+        const config = parseConfig(toml);
 
         expect(config.thresholds.max_retry_attempts).toBe(10);
         expect(config.thresholds.context_token_upgrade).toBe(12000);
         expect(config.thresholds.signature_complexity_upgrade).toBe(5);
       });
 
-      it('should parse mass_defect targets section with overrides', async () => {
+      it('should parse mass_defect targets section with overrides', () => {
         const toml = `
 [mass_defect.targets]
 max_cyclomatic_complexity = 8
 `;
-        const config = await parseConfig(toml);
+        const config = parseConfig(toml);
 
         expect(config.mass_defect.targets.max_cyclomatic_complexity).toBe(8);
         expect(config.mass_defect.targets.max_function_length_lines).toBe(50);
@@ -135,19 +126,19 @@ max_cyclomatic_complexity = 8
         expect(config.mass_defect.targets.min_test_coverage).toBe(0.8);
       });
 
-      it('should parse mass_defect catalog_path with override', async () => {
+      it('should parse mass_defect catalog_path with override', () => {
         const toml = `
 [mass_defect]
 catalog_path = "./my-catalog"
 `;
-        const config = await parseConfig(toml);
+        const config = parseConfig(toml);
 
         expect(config.mass_defect.catalog_path).toBe('./my-catalog');
         expect(config.mass_defect.targets).toEqual(DEFAULT_CONFIG.mass_defect.targets);
       });
 
-      it('should use default mass_defect when section omitted', async () => {
-        const config = await parseConfig('');
+      it('should use default mass_defect when section omitted', () => {
+        const config = parseConfig('');
 
         expect(config.mass_defect).toEqual(DEFAULT_CONFIG.mass_defect);
         expect(config.mass_defect.targets.max_cyclomatic_complexity).toBe(10);
@@ -157,7 +148,7 @@ catalog_path = "./my-catalog"
         expect(config.mass_defect.catalog_path).toBe('./mass-defect-catalog');
       });
 
-      it('should parse all valid notification channels', async () => {
+      it('should parse all valid notification channels', () => {
         const channels = ['slack', 'email', 'webhook'] as const;
 
         for (const channel of channels) {
@@ -167,12 +158,12 @@ enabled = true
 channel = "${channel}"
 endpoint = "test-endpoint"
 `;
-          const config = await parseConfig(toml);
+          const config = parseConfig(toml);
           expect(config.notifications.channel).toBe(channel);
         }
       });
 
-      it('should parse notifications with channels array', async () => {
+      it('should parse notifications with channels array', () => {
         const toml = `
 [notifications]
 enabled = true
@@ -189,7 +180,7 @@ endpoint = "https://example.com/webhook2"
 enabled = true
 events = ["error"]
 `;
-        const config = await parseConfig(toml);
+        const config = parseConfig(toml);
 
         expect(config.notifications.enabled).toBe(true);
         expect(config.notifications.channels).toBeDefined();
@@ -206,19 +197,19 @@ events = ["error"]
         }
       });
 
-      it('should parse notifications with reminder_schedule cron expression', async () => {
+      it('should parse notifications with reminder_schedule cron expression', () => {
         const toml = `
 [notifications]
 enabled = true
 reminder_schedule = "0 9 * * *"
 `;
-        const config = await parseConfig(toml);
+        const config = parseConfig(toml);
 
         expect(config.notifications.enabled).toBe(true);
         expect(config.notifications.reminder_schedule).toBe('0 9 * * *');
       });
 
-      it('should parse complete notification config with channels and reminder_schedule', async () => {
+      it('should parse complete notification config with channels and reminder_schedule', () => {
         const toml = `
 [notifications]
 enabled = true
@@ -236,7 +227,7 @@ endpoint = "https://hooks.example.com/webhook2"
 enabled = true
 events = ["block"]
 `;
-        const config = await parseConfig(toml);
+        const config = parseConfig(toml);
 
         expect(config.notifications.enabled).toBe(true);
         expect(config.notifications.reminder_schedule).toBe('0 9 * * *');
@@ -252,7 +243,7 @@ events = ["block"]
         }
       });
 
-      it('should use default values for optional channel fields', async () => {
+      it('should use default values for optional channel fields', () => {
         const toml = `
 [notifications]
 enabled = true
@@ -261,7 +252,7 @@ enabled = true
 type = "webhook"
 endpoint = "https://example.com/webhook"
 `;
-        const config = await parseConfig(toml);
+        const config = parseConfig(toml);
 
         expect(config.notifications.channels).toBeDefined();
         if (config.notifications.channels !== undefined) {
@@ -270,30 +261,30 @@ endpoint = "https://example.com/webhook"
         }
       });
 
-      it('should handle empty channels array as undefined', async () => {
+      it('should handle empty channels array as undefined', () => {
         const toml = `
 [notifications]
 enabled = true
 channels = []
 `;
-        const config = await parseConfig(toml);
+        const config = parseConfig(toml);
 
         expect(config.notifications.channels).toBeUndefined();
       });
 
-      it('should parse notifications with reminder_schedule cron expression', async () => {
+      it('should parse notifications with reminder_schedule cron expression', () => {
         const toml = `
 [notifications]
 enabled = true
 reminder_schedule = "0 9 * * *"
 `;
-        const config = await parseConfig(toml);
+        const config = parseConfig(toml);
 
         expect(config.notifications.enabled).toBe(true);
         expect(config.notifications.reminder_schedule).toBe('0 9 * * *');
       });
 
-      it('should parse complete notification config with channels and reminder_schedule', async () => {
+      it('should parse complete notification config with channels and reminder_schedule', () => {
         const toml = `
 [notifications]
 enabled = true
@@ -311,7 +302,7 @@ endpoint = "https://hooks.example.com/webhook2"
 enabled = true
 events = ["block"]
 `;
-        const config = await parseConfig(toml);
+        const config = parseConfig(toml);
 
         expect(config.notifications.enabled).toBe(true);
         expect(config.notifications.reminder_schedule).toBe('0 9 * * *');
@@ -324,7 +315,7 @@ events = ["block"]
         );
       });
 
-      it('should use default values for optional channel fields', async () => {
+      it('should use default values for optional channel fields', () => {
         const toml = `
 [notifications]
 enabled = true
@@ -333,58 +324,58 @@ enabled = true
 type = "webhook"
 endpoint = "https://example.com/webhook"
 `;
-        const config = await parseConfig(toml);
+        const config = parseConfig(toml);
 
         expect(config.notifications.channels?.[0].enabled).toBe(true);
         expect(config.notifications.channels?.[0].events).toEqual(['block']);
       });
 
-      it('should handle empty channels array as undefined', async () => {
+      it('should handle empty channels array as undefined', () => {
         const toml = `
 [notifications]
 enabled = true
 channels = []
 `;
-        const config = await parseConfig(toml);
+        const config = parseConfig(toml);
 
         expect(config.notifications.channels).toBeUndefined();
       });
     });
 
     describe('notification validation errors', () => {
-      it('should error for invalid cron expression', async () => {
+      it('should error for invalid cron expression', () => {
         const toml = `
 [notifications]
 enabled = true
 reminder_schedule = "invalid-cron"
 `;
-        await expect(parseConfig(toml)).rejects.toThrow(ConfigParseError);
+        expect(() => parseConfig(toml)).toThrow(ConfigParseError);
 
         try {
-          await parseConfig(toml);
+          parseConfig(toml);
         } catch (error) {
           expect(error).toBeInstanceOf(ConfigParseError);
           expect((error as ConfigParseError).message).toContain('not a valid cron expression');
         }
       });
 
-      it('should error for incomplete cron expression', async () => {
+      it('should error for incomplete cron expression', () => {
         const toml = `
 [notifications]
 enabled = true
 reminder_schedule = "0 9 * *"
 `;
-        await expect(parseConfig(toml)).rejects.toThrow(ConfigParseError);
+        expect(() => parseConfig(toml)).toThrow(ConfigParseError);
 
         try {
-          await parseConfig(toml);
+          parseConfig(toml);
         } catch (error) {
           expect(error).toBeInstanceOf(ConfigParseError);
           expect((error as ConfigParseError).message).toContain('not a valid cron expression');
         }
       });
 
-      it('should error for invalid webhook URL', async () => {
+      it('should error for invalid webhook URL', () => {
         const toml = `
 [notifications]
 enabled = true
@@ -393,17 +384,17 @@ enabled = true
 type = "webhook"
 endpoint = "not-a-valid-url"
 `;
-        await expect(parseConfig(toml)).rejects.toThrow(ConfigParseError);
+        expect(() => parseConfig(toml)).toThrow(ConfigParseError);
 
         try {
-          await parseConfig(toml);
+          parseConfig(toml);
         } catch (error) {
           expect(error).toBeInstanceOf(ConfigParseError);
           expect((error as ConfigParseError).message).toContain('not a valid URL');
         }
       });
 
-      it('should error for webhook URL with invalid protocol', async () => {
+      it('should error for webhook URL with invalid protocol', () => {
         const toml = `
 [notifications]
 enabled = true
@@ -412,17 +403,17 @@ enabled = true
 type = "webhook"
 endpoint = "ftp://example.com/webhook"
 `;
-        await expect(parseConfig(toml)).rejects.toThrow(ConfigParseError);
+        expect(() => parseConfig(toml)).toThrow(ConfigParseError);
 
         try {
-          await parseConfig(toml);
+          parseConfig(toml);
         } catch (error) {
           expect(error).toBeInstanceOf(ConfigParseError);
           expect((error as ConfigParseError).message).toContain('http or https protocol');
         }
       });
 
-      it('should error for missing channel type', async () => {
+      it('should error for missing channel type', () => {
         const toml = `
 [notifications]
 enabled = true
@@ -430,17 +421,17 @@ enabled = true
 [[notifications.channels]]
 endpoint = "https://example.com/webhook"
 `;
-        await expect(parseConfig(toml)).rejects.toThrow(ConfigParseError);
+        expect(() => parseConfig(toml)).toThrow(ConfigParseError);
 
         try {
-          await parseConfig(toml);
+          parseConfig(toml);
         } catch (error) {
           expect(error).toBeInstanceOf(ConfigParseError);
           expect((error as ConfigParseError).message).toContain("Missing required field 'type'");
         }
       });
 
-      it('should error for missing channel endpoint', async () => {
+      it('should error for missing channel endpoint', () => {
         const toml = `
 [notifications]
 enabled = true
@@ -448,10 +439,10 @@ enabled = true
 [[notifications.channels]]
 type = "webhook"
 `;
-        await expect(parseConfig(toml)).rejects.toThrow(ConfigParseError);
+        expect(() => parseConfig(toml)).toThrow(ConfigParseError);
 
         try {
-          await parseConfig(toml);
+          parseConfig(toml);
         } catch (error) {
           expect(error).toBeInstanceOf(ConfigParseError);
           expect((error as ConfigParseError).message).toContain(
@@ -460,7 +451,7 @@ type = "webhook"
         }
       });
 
-      it('should error for invalid channel type', async () => {
+      it('should error for invalid channel type', () => {
         const toml = `
 [notifications]
 enabled = true
@@ -469,10 +460,10 @@ enabled = true
 type = "telegram"
 endpoint = "https://example.com/webhook"
 `;
-        await expect(parseConfig(toml)).rejects.toThrow(ConfigParseError);
+        expect(() => parseConfig(toml)).toThrow(ConfigParseError);
 
         try {
-          await parseConfig(toml);
+          parseConfig(toml);
         } catch (error) {
           expect(error).toBeInstanceOf(ConfigParseError);
           expect((error as ConfigParseError).message).toContain(
@@ -481,7 +472,7 @@ endpoint = "https://example.com/webhook"
         }
       });
 
-      it('should error for invalid event type', async () => {
+      it('should error for invalid event type', () => {
         const toml = `
 [notifications]
 enabled = true
@@ -491,10 +482,10 @@ type = "webhook"
 endpoint = "https://example.com/webhook"
 events = ["invalid-event"]
 `;
-        await expect(parseConfig(toml)).rejects.toThrow(ConfigParseError);
+        expect(() => parseConfig(toml)).toThrow(ConfigParseError);
 
         try {
-          await parseConfig(toml);
+          parseConfig(toml);
         } catch (error) {
           expect(error).toBeInstanceOf(ConfigParseError);
           expect((error as ConfigParseError).message).toContain(
@@ -505,48 +496,48 @@ events = ["invalid-event"]
     });
 
     describe('invalid TOML syntax', () => {
-      it('should return descriptive error for malformed TOML', async () => {
+      it('should return descriptive error for malformed TOML', () => {
         const invalidToml = `
 [models
 worker_model = "test"
 `;
-        await expect(parseConfig(invalidToml)).rejects.toThrow(ConfigParseError);
+        expect(() => parseConfig(invalidToml)).toThrow(ConfigParseError);
 
         try {
-          await parseConfig(invalidToml);
+          parseConfig(invalidToml);
         } catch (error) {
           expect(error).toBeInstanceOf(ConfigParseError);
           expect((error as ConfigParseError).message).toContain('Invalid TOML syntax');
         }
       });
 
-      it('should return descriptive error for invalid key format', async () => {
+      it('should return descriptive error for invalid key format', () => {
         const invalidToml = `
 [models]
 = "no key"
 `;
-        await expect(parseConfig(invalidToml)).rejects.toThrow(ConfigParseError);
+        expect(() => parseConfig(invalidToml)).toThrow(ConfigParseError);
       });
 
-      it('should return descriptive error for unclosed string', async () => {
+      it('should return descriptive error for unclosed string', () => {
         const invalidToml = `
 [models]
 worker_model = "unclosed
 `;
-        await expect(parseConfig(invalidToml)).rejects.toThrow(ConfigParseError);
+        expect(() => parseConfig(invalidToml)).toThrow(ConfigParseError);
       });
     });
 
     describe('type validation errors', () => {
-      it('should error when string field receives number', async () => {
+      it('should error when string field receives number', () => {
         const toml = `
 [models]
 worker_model = 123
 `;
-        await expect(parseConfig(toml)).rejects.toThrow(ConfigParseError);
+        expect(() => parseConfig(toml)).toThrow(ConfigParseError);
 
         try {
-          await parseConfig(toml);
+          parseConfig(toml);
         } catch (error) {
           expect((error as ConfigParseError).message).toContain(
             "Invalid type for 'models.worker_model'"
@@ -555,15 +546,15 @@ worker_model = 123
         }
       });
 
-      it('should error when number field receives string', async () => {
+      it('should error when number field receives string', () => {
         const toml = `
 [thresholds]
 max_retry_attempts = "five"
 `;
-        await expect(parseConfig(toml)).rejects.toThrow(ConfigParseError);
+        expect(() => parseConfig(toml)).toThrow(ConfigParseError);
 
         try {
-          await parseConfig(toml);
+          parseConfig(toml);
         } catch (error) {
           expect((error as ConfigParseError).message).toContain(
             "Invalid type for 'thresholds.max_retry_attempts'"
@@ -572,15 +563,15 @@ max_retry_attempts = "five"
         }
       });
 
-      it('should error when boolean field receives string', async () => {
+      it('should error when boolean field receives string', () => {
         const toml = `
 [notifications]
 enabled = "true"
 `;
-        await expect(parseConfig(toml)).rejects.toThrow(ConfigParseError);
+        expect(() => parseConfig(toml)).toThrow(ConfigParseError);
 
         try {
-          await parseConfig(toml);
+          parseConfig(toml);
         } catch (error) {
           expect((error as ConfigParseError).message).toContain(
             "Invalid type for 'notifications.enabled'"
@@ -589,16 +580,16 @@ enabled = "true"
         }
       });
 
-      it('should error for invalid notification channel value', async () => {
+      it('should error for invalid notification channel value', () => {
         const toml = `
 [notifications]
 enabled = true
 channel = "telegram"
 `;
-        await expect(parseConfig(toml)).rejects.toThrow(ConfigParseError);
+        expect(() => parseConfig(toml)).toThrow(ConfigParseError);
 
         try {
-          await parseConfig(toml);
+          parseConfig(toml);
         } catch (error) {
           expect((error as ConfigParseError).message).toContain(
             "Invalid value for 'notifications.channel'"
@@ -610,7 +601,7 @@ channel = "telegram"
   });
 
   describe('getDefaultConfig', () => {
-    it('should return a copy of default config', async () => {
+    it('should return a copy of default config', () => {
       const config1 = await getDefaultConfig();
       const config2 = await getDefaultConfig();
 
@@ -618,7 +609,7 @@ channel = "telegram"
       expect(config1).not.toBe(config2);
     });
 
-    it('should have all expected default model assignments', async () => {
+    it('should have all expected default model assignments', () => {
       const config = await getDefaultConfig();
 
       expect(config.models.architect_model).toBe('claude-opus-4.5');
@@ -628,7 +619,7 @@ channel = "telegram"
       expect(config.models.fallback_model).toBe('claude-sonnet-4.5');
     });
 
-    it('should have all expected default paths', async () => {
+    it('should have all expected default paths', () => {
       const config = await getDefaultConfig();
 
       expect(config.paths.specs).toBe('.criticality/specs');
@@ -638,7 +629,7 @@ channel = "telegram"
       expect(config.paths.ledger).toBe('.criticality/ledger');
     });
 
-    it('should have all expected default thresholds', async () => {
+    it('should have all expected default thresholds', () => {
       const config = await getDefaultConfig();
 
       expect(config.thresholds.context_token_upgrade).toBe(12000);
@@ -648,7 +639,7 @@ channel = "telegram"
       expect(config.thresholds.performance_variance_threshold).toBe(0.2);
     });
 
-    it('should have notifications disabled by default', async () => {
+    it('should have notifications disabled by default', () => {
       const config = await getDefaultConfig();
 
       expect(config.notifications.enabled).toBe(false);
@@ -677,10 +668,10 @@ channel = "telegram"
   });
 
   describe('property-based tests', () => {
-    it('should always return valid config for empty input', async () => {
-      await fc.assert(
-        fc.asyncProperty(fc.constant(''), async (input) => {
-          const config = await parseConfig(input);
+    it('should always return valid config for empty input', () => {
+      fc.assert(
+        fc.property(fc.constant(''), (input) => {
+          const config = parseConfig(input);
           return (
             typeof config.models.architect_model === 'string' &&
             typeof config.paths.specs === 'string' &&
@@ -692,7 +683,7 @@ channel = "telegram"
       );
     });
 
-    it('should preserve string values when provided', async () => {
+    it('should preserve string values when provided', () => {
       const isValidTomlString = (s: string): boolean =>
         s.length > 0 &&
         !s.includes('"') &&
@@ -701,41 +692,41 @@ channel = "telegram"
         !s.includes('\r') &&
         !s.includes('\t');
 
-      await fc.assert(
-        fc.asyncProperty(fc.string().filter(isValidTomlString), async (modelName) => {
+      fc.assert(
+        fc.property(fc.string().filter(isValidTomlString), (modelName) => {
           const toml = `
 [models]
 worker_model = "${modelName}"
 `;
-          const config = await parseConfig(toml);
+          const config = parseConfig(toml);
           return config.models.worker_model === modelName;
         }),
         { numRuns: 50 }
       );
     });
 
-    it('should preserve positive integer thresholds', async () => {
-      await fc.assert(
-        fc.asyncProperty(fc.integer({ min: 1, max: 100000 }), async (retryAttempts) => {
+    it('should preserve positive integer thresholds', () => {
+      fc.assert(
+        fc.property(fc.integer({ min: 1, max: 100000 }), (retryAttempts) => {
           const toml = `
 [thresholds]
 max_retry_attempts = ${String(retryAttempts)}
 `;
-          const config = await parseConfig(toml);
+          const config = parseConfig(toml);
           return config.thresholds.max_retry_attempts === retryAttempts;
         }),
         { numRuns: 50 }
       );
     });
 
-    it('should preserve float thresholds', async () => {
-      await fc.assert(
-        fc.asyncProperty(fc.double({ min: 0.01, max: 1.0, noNaN: true }), async (threshold) => {
+    it('should preserve float thresholds', () => {
+      fc.assert(
+        fc.property(fc.double({ min: 0.01, max: 1.0, noNaN: true }), (threshold) => {
           const toml = `
 [thresholds]
 performance_variance_threshold = ${String(threshold)}
 `;
-          const config = await parseConfig(toml);
+          const config = parseConfig(toml);
           return Math.abs(config.thresholds.performance_variance_threshold - threshold) < 0.0001;
         }),
         { numRuns: 50 }

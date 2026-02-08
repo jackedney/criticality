@@ -81,7 +81,7 @@ export interface CliOperationsOptions {
  *
  * Uses Claude Code CLI for model calls, runs subprocesses for
  * compilation and tests, creates backups for archiving, and
- * triggers notification hooks.
+ * sends notifications via NotificationService.
  */
 export class CliOperations implements ExternalOperations {
   private readonly config: Config;
