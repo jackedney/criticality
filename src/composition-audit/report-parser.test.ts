@@ -4,7 +4,7 @@
  * @packageDocumentation
  */
 
-import { describe, it, expect, vi, afterEach } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import type { ModelRouter, ModelRouterResult, ModelRouterResponse } from '../router/types.js';
 import {
   parseContradictionOutput,
