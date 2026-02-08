@@ -86,6 +86,9 @@ export class LiveDisplay {
 
     if (this.isTty) {
       this.spinnerInterval = setInterval(() => {
+        this.currentFrame =
+          (this.currentFrame + 1) %
+          (this.options.unicode ? SPINNER_FRAMES.length : ASCII_SPINNER_FRAMES.length);
         this.update();
       }, 100);
 
@@ -117,7 +120,7 @@ export class LiveDisplay {
 
     if (this.isTty) {
       process.stdout.write('\r\x1b[2K');
-      process.stdout.write('\x1b[?25l');
+      process.stdout.write('\x1b[?25h');
     }
   }
 
