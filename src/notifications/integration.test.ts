@@ -14,8 +14,10 @@
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { unlinkSync, existsSync, readFileSync } from 'node:fs';
-import { mkdirSync } from 'node:fs';
+import { readFileSync } from 'node:fs';
+import { rm } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { mkdtemp } from 'node:fs/promises';
 import { NotificationService as NotificationServiceImpl } from './service.ts';
 import { ReminderScheduler } from './reminder.ts';
 import { createOrchestrator, type ExternalOperations } from '../protocol/orchestrator.ts';
@@ -44,42 +46,24 @@ type ArtifactType =
 
 describe('Notification Integration Tests', () => {
   let mockFetch: ReturnType<typeof vi.fn>;
-  const testStateDir = '/tmp/test-criticality-integration';
-  const testStatePath = path.join(testStateDir, 'test-state.json');
-  const reminderStatePath = path.join(testStateDir, 'notification-state.json');
+  let testStateDir: string;
+  let testStatePath: string;
+  let reminderStatePath: string;
 
-  function cleanupTestFiles(): void {
-    if (existsSync(testStatePath)) {
-      try {
-        unlinkSync(testStatePath);
-      } catch {
-        // Ignore cleanup errors
-      }
-    }
-    if (existsSync(reminderStatePath)) {
-      try {
-        unlinkSync(reminderStatePath);
-      } catch {
-        // Ignore cleanup errors
-      }
-    }
-    if (!existsSync(testStateDir)) {
-      try {
-        mkdirSync(testStateDir, { recursive: true });
-      } catch {
-        // Ignore mkdir errors
-      }
-    }
-  }
-
-  beforeEach(() => {
+  beforeEach(async () => {
     mockFetch = vi.fn();
     global.fetch = mockFetch as unknown as typeof fetch;
-    cleanupTestFiles();
+    testStateDir = await mkdtemp(path.join(tmpdir(), 'integration-test-'));
+    testStatePath = path.join(testStateDir, 'test-state.json');
+    reminderStatePath = path.join(testStateDir, 'notification-state.json');
   });
 
-  afterEach(() => {
-    cleanupTestFiles();
+  afterEach(async () => {
+    try {
+      await rm(testStateDir, { recursive: true, force: true });
+    } catch {
+      // Ignore cleanup errors
+    }
   });
 
   describe('NotificationService with mocked webhook endpoints', () => {

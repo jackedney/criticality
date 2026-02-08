@@ -4,8 +4,10 @@
  * @packageDocumentation
  */
 
-import { describe, it, expect, beforeEach } from 'vitest';
-import { unlinkSync, existsSync } from 'node:fs';
+import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { rm } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { mkdtemp } from 'node:fs/promises';
 import type { BlockingRecord } from '../protocol/blocking.js';
 import { ReminderScheduler } from './reminder.js';
 import type { NotificationService, NotificationSendResult } from './types.js';
@@ -31,23 +33,12 @@ class MockNotificationService implements NotificationService {
 
 describe('ReminderScheduler', () => {
   const mockNotificationService = new MockNotificationService();
-  const stateDir = '/tmp/test-criticality-reminder';
-  const stateFilePath = path.join(stateDir, 'notification-state.json');
+  let stateDir: string;
 
   let scheduler: ReminderScheduler;
 
-  function cleanupStateFile(): void {
-    if (existsSync(stateFilePath)) {
-      try {
-        unlinkSync(stateFilePath);
-      } catch {
-        // Ignore cleanup errors
-      }
-    }
-  }
-
   beforeEach(async () => {
-    cleanupStateFile();
+    stateDir = await mkdtemp(path.join(tmpdir(), 'reminder-test-'));
 
     scheduler = new ReminderScheduler({
       cronExpression: '0 9 * * *',
@@ -57,6 +48,14 @@ describe('ReminderScheduler', () => {
     });
 
     await scheduler.initialize();
+  });
+
+  afterEach(async () => {
+    try {
+      await rm(stateDir, { recursive: true, force: true });
+    } catch {
+      // Ignore cleanup errors
+    }
   });
 
   describe('initialize', () => {
