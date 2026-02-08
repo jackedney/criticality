@@ -86,10 +86,7 @@ export class Spinner {
   private getCurrentFrame(): string {
     const frames = this.options.unicode ? SPINNER_FRAMES : ASCII_SPINNER_FRAMES;
     const frameIndex = this.state.currentFrame % frames.length;
-    const frame = frames[frameIndex];
-    if (frame === undefined) {
-      return frames[0];
-    }
+    const frame = frames[frameIndex] ?? '⠋';
     return frame;
   }
 
@@ -181,7 +178,9 @@ export class Spinner {
    */
   update(phase: ProtocolPhase, substate: ProtocolSubstate): void {
     const phaseChanged = this.state.phase !== phase;
-    const substateChanged = this.state.substate.kind !== substate.kind;
+    const substateChanged =
+      this.state.substate.kind !== substate.kind ||
+      JSON.stringify(this.state.substate) !== JSON.stringify(substate);
 
     this.state.phase = phase;
     this.state.substate = substate;

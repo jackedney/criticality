@@ -160,6 +160,17 @@ const ERROR_SUGGESTIONS: Readonly<Record<ErrorType, readonly Suggestion[]>> = {
 export function inferErrorType(errorMessage: string): ErrorType {
   const lowerMessage = errorMessage.toLowerCase();
 
+  // Priority order: more specific matches first
+  // "test" before "api" to catch "API test failed" as test_failure
+  if (
+    lowerMessage.includes('test') ||
+    lowerMessage.includes('spec') ||
+    lowerMessage.includes('assert') ||
+    lowerMessage.includes('vitest')
+  ) {
+    return 'test_failure';
+  }
+
   if (
     lowerMessage.includes('model') ||
     lowerMessage.includes('api') ||
@@ -182,15 +193,6 @@ export function inferErrorType(errorMessage: string): ErrorType {
     lowerMessage.includes('type error')
   ) {
     return 'compilation_error';
-  }
-
-  if (
-    lowerMessage.includes('test') ||
-    lowerMessage.includes('spec') ||
-    lowerMessage.includes('assert') ||
-    lowerMessage.includes('vitest')
-  ) {
-    return 'test_failure';
   }
 
   if (
