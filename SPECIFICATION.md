@@ -3411,13 +3411,13 @@ reminder_schedule = "0 9 * * *"
 type = "webhook"
 endpoint = "https://example.com/webhook"
 enabled = true
-events = ["on_block", "on_complete", "on_error"]
+events = ["block", "complete", "error"]
 
 [[notifications.channels]]
 type = "webhook"
 endpoint = "https://alerts.example.com/hooks"
 enabled = true
-events = ["on_block", "on_phase_change"]
+events = ["block", "phase_change"]
 ```
 
 #### Notification Configuration Fields
@@ -3435,7 +3435,7 @@ events = ["on_block", "on_phase_change"]
 | `type` | string | Channel type (currently only `"webhook"` supported) |
 | `endpoint` | string | URL for sending notifications (webhook URL) |
 | `enabled` | boolean | Whether this specific channel is enabled |
-| `events` | array of strings | Events to subscribe to: `"on_block"`, `"on_complete"`, `"on_error"`, `"on_phase_change"` |
+| `events` | array of strings | Events to subscribe to: `"block"`, `"complete"`, `"error"`, `"phase_change"` |
 
 #### Example: Multiple Webhooks with Daily Reminders
 
@@ -3448,13 +3448,13 @@ reminder_schedule = "0 9 * * 1-5"  # Weekdays at 9am
 type = "webhook"
 endpoint = "https://hooks.slack.com/services/xxx/yyy"
 enabled = true
-events = ["on_block", "on_error"]
+events = ["block", "error"]
 
 [[notifications.channels]]
 type = "webhook"
 endpoint = "https://api.pagerduty.com/integration/xxx/enqueue"
 enabled = true
-events = ["on_block", "on_error", "on_complete"]
+events = ["block", "error", "complete"]
 ```
 
 ### Appendix D: Version History

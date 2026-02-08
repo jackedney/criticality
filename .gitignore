@@ -37,6 +37,11 @@ docs/
 coverage/
 *.egg-info/
 
+# Compiled JavaScript in src/
+src/**/*.js
+src/**/*.js.map
+!src/**/*.config.js
+
 # Local configuration
 .env.local
 .env.*.local
