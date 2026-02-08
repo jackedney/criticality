@@ -392,6 +392,7 @@ export async function executeTick(context: TickContext, statePath: string): Prom
         const newSnapshot: ProtocolStateSnapshot = {
           ...snapshot,
           state: { phase, substate: activeSubstate },
+          blockingQueries: snapshot.blockingQueries.filter((q) => q.id !== resolution.queryId),
         };
 
         await saveState(newSnapshot, statePath);
@@ -599,7 +600,9 @@ export async function createOrchestrator(options: OrchestratorOptions): Promise<
    * Add a blocking resolution.
    */
   function addResolution(response: string): void {
+    const queryId = `blocking-${currentSnapshot.state.phase}`;
     pendingResolutions.push({
+      queryId,
       response,
       resolvedAt: new Date().toISOString(),
     });

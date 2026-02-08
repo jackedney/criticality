@@ -49,6 +49,8 @@ export interface BlockingRecord {
  * Resolution of a blocking query.
  */
 export interface BlockingResolution {
+  /** The ID of the blocking query being resolved. */
+  readonly queryId: BlockingQueryId;
   /** The selected option or custom response. */
   readonly response: string;
   /** Timestamp when resolution occurred (ISO 8601). */
@@ -391,6 +393,7 @@ export function resolveBlocking(
 
   // Create the resolution
   const resolution: BlockingResolution = {
+    queryId: record.id,
     response: resolveOptions.response,
     resolvedAt: new Date().toISOString(),
   };
@@ -639,6 +642,7 @@ export function handleTimeout(
 
       // Update record as "resolved" (via timeout)
       const resolution: BlockingResolution = {
+        queryId: record.id,
         response: 'TIMEOUT_FAILURE',
         resolvedAt: failedSubstate.failedAt,
       };
@@ -687,10 +691,10 @@ export function handleTimeout(
  */
 export function getRemainingTimeout(record: BlockingRecord, now?: number): number | undefined {
   const result = checkTimeout(record, now);
-  if (result.timedOut) {
-    return undefined;
+  if (!result.timedOut) {
+    return (result as { timedOut: false; remainingMs: number }).remainingMs;
   }
-  return result.remainingMs;
+  return undefined;
 }
 
 /**
