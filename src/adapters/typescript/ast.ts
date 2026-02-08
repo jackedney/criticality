@@ -762,6 +762,14 @@ export function findTodoFunctions(project: Project): TodoFunction[] {
       continue;
     }
 
+    // Optimization: Skip files that don't contain any TODO markers in their text.
+    // This avoids expensive AST parsing and traversal for the vast majority of completed files.
+    // Matches logic in TODO_PATTERNS: 'TODO' literal or 'todo!' macro.
+    const fileText = sourceFile.getFullText();
+    if (!fileText.includes('TODO') && !/todo!/i.test(fileText)) {
+      continue;
+    }
+
     const functions = collectFunctions(sourceFile);
 
     for (const func of functions) {
