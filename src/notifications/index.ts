@@ -26,3 +26,6 @@ export { WebhookSender } from './webhook.js';
 export type { WebhookSenderOptions, WebhookSendResult } from './webhook.js';
 
 export { NotificationService } from './service.js';
+
+export { ReminderScheduler } from './reminder.js';
+export type { ReminderSchedulerOptions, ReminderCheckResult } from './reminder.js';
