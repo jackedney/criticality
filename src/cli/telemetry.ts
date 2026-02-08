@@ -144,15 +144,17 @@ export class TelemetryCollector {
   /**
    * Checks if any telemetry data has been collected.
    *
-   * @returns True if at least one model call has been recorded.
+   * @returns True if at least one model call has been recorded or total execution time > 0.
    */
   hasData(): boolean {
+    let totalExecutionTimeMs = 0;
     for (const [, phaseData] of this.phases) {
       if (phaseData.modelCalls > 0) {
         return true;
       }
+      totalExecutionTimeMs += phaseData.executionTimeMs;
     }
-    return false;
+    return totalExecutionTimeMs > 0 || this.phases.size > 0;
   }
 
   /**
@@ -359,6 +361,7 @@ function isValidProtocolPhase(value: string): value is ProtocolPhase {
     'Injection',
     'Mesoscopic',
     'MassDefect',
+    'Complete',
   ];
   return validPhases.includes(value);
 }

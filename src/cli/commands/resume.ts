@@ -146,8 +146,10 @@ async function checkAndSendReminder(
 
   if (result.sent) {
     const nextScheduled = new Date(result.nextScheduled);
-    const timeStr = nextScheduled.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-    console.log(`Reminder sent. Next reminder at ${timeStr}`);
+    if (!isNaN(nextScheduled.getTime())) {
+      const timeStr = nextScheduled.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+      console.log(`Reminder sent. Next reminder at ${timeStr}`);
+    }
   }
 }
 
