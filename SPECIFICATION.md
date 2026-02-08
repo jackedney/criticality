@@ -1650,10 +1650,127 @@ NOTE: Previous attempts discarded. Implement from scratch.
 - Security vulnerability requiring human review
 - Archive operation failure (disk full, permissions, etc.)
 
-#### Notification Format
+#### Notification System
 
-When blocked, a minimal notification is sent:
+The notification system uses a **webhook-first approach** (decision `notify_001`) for maximum flexibility. Webhooks allow users to integrate with any system that accepts HTTP POST requests (Slack, email, PagerDuty, custom systems, etc.) without requiring platform-specific implementations in the protocol.
 
+##### Notification Events
+
+Notifications are triggered on four event types:
+
+| Event | Description |
+|--------|-------------|
+| `block` | Protocol enters BLOCKED state |
+| `complete` | Protocol completes successfully |
+| `error` | Unrecoverable error occurs |
+| `phase_change` | Phase transition occurs |
+
+##### Webhook Payload Structure
+
+Webhook payloads use a rich JSON format for programmatic consumption while maintaining minimal user-facing messages per decision `block_005`.
+
+```typescript
+interface WebhookPayload {
+  /** The notification event type */
+  readonly event: 'block' | 'complete' | 'error' | 'phase_change';
+  /** Timestamp when notification was sent (ISO 8601) */
+  readonly timestamp: string;
+  /** The blocking record (for block/error events) */
+  readonly blocking_record?: BlockingRecord;
+  /** Current protocol state (for all events) */
+  readonly protocol_state: ProtocolState;
+}
+
+interface BlockingRecord {
+  /** Unique identifier for this blocking query */
+  readonly id: string;
+  /** The phase in which blocking occurred */
+  readonly phase: ProtocolPhase;
+  /** The query prompting human intervention */
+  readonly query: string;
+  /** Available options for human to choose from */
+  readonly options?: readonly string[];
+  /** Timestamp when blocking started (ISO 8601) */
+  readonly blockedAt: string;
+  /** Optional timeout in milliseconds */
+  readonly timeoutMs?: number;
+  /** Whether this blocking has been resolved */
+  readonly resolved: boolean;
+  /** The resolution if resolved */
+  readonly resolution?: BlockingResolution;
+}
+```
+
+The minimal notification format for human-facing channels remains:
+
+```
+Criticality blocked. Run `criticality status` for details.
+```
+
+This message is used in CLI output and can be displayed by webhook receivers. Full blocking context is available in the `blocking_record` field for programmatic handling.
+
+##### Reminder Scheduling
+
+Reminder notifications use **cron-based scheduling** to send periodic reminders while the protocol is blocked.
+
+```typescript
+interface ReminderSchedule {
+  /** Cron expression for reminder scheduling */
+  readonly cron_expression: string;
+  /** Whether reminders are enabled */
+  readonly enabled: boolean;
+  /** Timestamp of last reminder sent (ISO 8601) */
+  readonly last_sent?: string;
+  /** Timestamp of next scheduled reminder (ISO 8601) */
+  readonly next_scheduled?: string;
+}
+```
+
+Cron expressions use the standard 5-field format: `minute hour day month weekday`.
+
+Examples:
+- `0 9 * * *` — Daily at 9:00 AM
+- `0 */4 * * *` — Every 4 hours
+- `0 9 * * 1-5` — Weekdays at 9:00 AM
+
+Reminders are only sent while the protocol is in a BLOCKED state. The reminder scheduler tracks `last_sent` and `next_scheduled` timestamps in the notification state file (`.criticality/notification-state.json`) to avoid duplicate reminders.
+
+##### Notification Channels
+
+The system supports multiple simultaneous notification channels. Currently, only `webhook` type is implemented. Future phases may add `slack` and `email` channel types.
+
+```typescript
+interface NotificationChannel {
+  /** Type of notification channel */
+  readonly type: 'webhook';
+  /** Endpoint URL for sending notifications */
+  readonly endpoint: string;
+  /** Whether this channel is enabled */
+  readonly enabled: boolean;
+  /** Events that this channel subscribes to */
+  readonly events: readonly ('block' | 'complete' | 'error' | 'phase_change')[];
+}
+```
+
+Channels are filtered by the `events` array—each notification is sent only to channels that subscribe to that event type.
+
+##### Failure Handling
+
+Notification failures are **never blocking**. If a webhook endpoint fails:
+- Failure is logged to notification state
+- Protocol execution continues
+- Other channels are still notified
+- Human can check `criticality status` to see notification status
+
+This fire-and-forget approach ensures notification issues don't prevent protocol progress.
+
+#### Blocking State
+
+```typescript
+type ProtocolState =
+    | { type: 'active'; currentPhase: Phase; progress: PhaseProgress }
+    | { type: 'blocked'; reason: BlockReason; awaiting: HumanQuery }
+    | { type: 'completed'; artifacts: FinalArtifacts };
 ```
 Criticality blocked. Run `criticality status` for details.
 ```
@@ -3287,8 +3404,57 @@ max_function_length = 50
 target_coverage = 0.80
 
 [notifications]
-channels = ["cli"]
-reminder_hours = 24
+enabled = true
+reminder_schedule = "0 9 * * *"
+
+[[notifications.channels]]
+type = "webhook"
+endpoint = "https://example.com/webhook"
+enabled = true
+events = ["on_block", "on_complete", "on_error"]
+
+[[notifications.channels]]
+type = "webhook"
+endpoint = "https://alerts.example.com/hooks"
+enabled = true
+events = ["on_block", "on_phase_change"]
+```
+
+#### Notification Configuration Fields
+
+| Field | Type | Description |
+|--------|-------|-------------|
+| `enabled` | boolean | Whether notifications are globally enabled |
+| `reminder_schedule` | string | Cron expression for reminder scheduling (e.g., `"0 9 * * *"` for daily at 9am) |
+| `channels` | array of tables | Notification channel configurations |
+
+#### Channel Configuration Fields
+
+| Field | Type | Description |
+|--------|-------|-------------|
+| `type` | string | Channel type (currently only `"webhook"` supported) |
+| `endpoint` | string | URL for sending notifications (webhook URL) |
+| `enabled` | boolean | Whether this specific channel is enabled |
+| `events` | array of strings | Events to subscribe to: `"on_block"`, `"on_complete"`, `"on_error"`, `"on_phase_change"` |
+
+#### Example: Multiple Webhooks with Daily Reminders
+
+```toml
+[notifications]
+enabled = true
+reminder_schedule = "0 9 * * 1-5"  # Weekdays at 9am
+
+[[notifications.channels]]
+type = "webhook"
+endpoint = "https://hooks.slack.com/services/xxx/yyy"
+enabled = true
+events = ["on_block", "on_error"]
+
+[[notifications.channels]]
+type = "webhook"
+endpoint = "https://api.pagerduty.com/integration/xxx/enqueue"
+enabled = true
+events = ["on_block", "on_error", "on_complete"]
 ```
 
 ### Appendix D: Version History
