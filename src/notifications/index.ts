@@ -15,7 +15,7 @@ export type {
   SentNotification,
   ChannelSendResult,
   NotificationSendResult,
-  NotificationService,
+  NotificationService as NotificationServiceInterface,
 } from './types.js';
 
 export { NOTIFICATION_EVENTS } from './types.js';
@@ -24,3 +24,5 @@ export { parseCronExpression, isValidCronExpression, getNextOccurrence } from '.
 
 export { WebhookSender } from './webhook.js';
 export type { WebhookSenderOptions, WebhookSendResult } from './webhook.js';
+
+export { NotificationService } from './service.js';

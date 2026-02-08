@@ -132,7 +132,8 @@ export class WebhookSender {
     if (result.success) {
       return { success: true };
     } else {
-      return { success: false, error: result.error };
+      const failureResult = result as { readonly success: false; readonly error: string };
+      return { success: false, error: failureResult.error };
     }
   }
 }
