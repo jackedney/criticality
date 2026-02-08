@@ -186,8 +186,9 @@ export function isValidCronExpression(expr: string): boolean {
 export function getNextOccurrence(cronExpr: string, fromDate: Date = new Date()): Date {
   const parsed = parseCronExpression(cronExpr);
 
+  const isDayOfMonthRestricted = parsed.day.values.size < 31;
   const isWeekdayRestricted = parsed.weekday.values.size < 7;
-  const allDays = parsed.day.values.size === 31;
+  const bothRestricted = isDayOfMonthRestricted && isWeekdayRestricted;
 
   const current = new Date(fromDate.getTime());
 
@@ -207,10 +208,16 @@ export function getNextOccurrence(cronExpr: string, fromDate: Date = new Date())
       const day = current.getDate();
       const weekday = current.getDay();
 
-      let dayMatches = allDays || parsed.day.values.has(day);
+      let dayMatches = false;
 
-      if (isWeekdayRestricted) {
-        dayMatches = dayMatches && parsed.weekday.values.has(weekday);
+      if (bothRestricted) {
+        dayMatches = parsed.day.values.has(day) || parsed.weekday.values.has(weekday);
+      } else if (isDayOfMonthRestricted) {
+        dayMatches = parsed.day.values.has(day);
+      } else if (isWeekdayRestricted) {
+        dayMatches = parsed.weekday.values.has(weekday);
+      } else {
+        dayMatches = true;
       }
 
       if (dayMatches && current.getTime() > fromDate.getTime()) {

@@ -292,4 +292,118 @@ describe('getNextOccurrence', () => {
     expect(next.getHours()).toBe(9);
     expect(next.getMinutes()).toBe(0);
   });
+
+  describe('POSIX OR semantics for day-of-month and day-of-week', () => {
+    it('should trigger on 15th of month OR Monday (both restricted)', () => {
+      const fromDate = new Date('2024-02-14T08:00:00.000Z');
+      const next = getNextOccurrence('0 9 15 * 1', fromDate);
+
+      expect(next.getHours()).toBe(9);
+      expect(next.getMinutes()).toBe(0);
+
+      const day = next.getDate();
+      const weekday = next.getDay();
+
+      expect(day === 15 || weekday === 1).toBe(true);
+    });
+
+    it('should trigger on Monday if it comes before the 15th', () => {
+      const fromDate = new Date('2024-02-10T08:00:00.000Z');
+      const next = getNextOccurrence('0 9 15 * 1', fromDate);
+
+      expect(next.getHours()).toBe(9);
+      expect(next.getMinutes()).toBe(0);
+      expect(next.getDate()).toBe(12);
+      expect(next.getDay()).toBe(1);
+    });
+
+    it('should trigger on 15th if it comes before Monday', () => {
+      const fromDate = new Date('2024-02-14T08:00:00.000Z');
+      const next = getNextOccurrence('0 9 15 * 1', fromDate);
+
+      expect(next.getHours()).toBe(9);
+      expect(next.getMinutes()).toBe(0);
+      expect(next.getDate()).toBe(15);
+    });
+
+    it('should trigger on any Friday or the 1st', () => {
+      const fromDate = new Date('2024-02-01T09:00:00.000Z');
+      const next = getNextOccurrence('0 9 1 * 5', fromDate);
+
+      expect(next.getHours()).toBe(9);
+      expect(next.getMinutes()).toBe(0);
+
+      const day = next.getDate();
+      const weekday = next.getDay();
+
+      expect(day === 1 || weekday === 5).toBe(true);
+    });
+
+    it('should handle unrestricted days (both wildcards)', () => {
+      const fromDate = new Date('2024-02-07T08:00:00.000Z');
+      const next = getNextOccurrence('0 9 * * *', fromDate);
+
+      expect(next.getHours()).toBe(9);
+      expect(next.getMinutes()).toBe(0);
+      expect(next.getDate()).toBe(7);
+      expect(next.getTime()).toBeGreaterThan(fromDate.getTime());
+    });
+
+    it('should handle only day-of-month restricted', () => {
+      const fromDate = new Date('2024-02-07T09:00:00.000Z');
+      const next = getNextOccurrence('0 9 15 * *', fromDate);
+
+      expect(next.getHours()).toBe(9);
+      expect(next.getMinutes()).toBe(0);
+      expect(next.getDate()).toBe(15);
+    });
+
+    it('should handle only weekday restricted', () => {
+      const fromDate = new Date('2024-02-06T09:00:00.000Z');
+      const next = getNextOccurrence('0 9 * * 1', fromDate);
+
+      expect(next.getHours()).toBe(9);
+      expect(next.getMinutes()).toBe(0);
+      expect(next.getDay()).toBe(1);
+    });
+
+    it('should handle multiple day-of-month values with weekday', () => {
+      const fromDate = new Date('2024-02-01T08:00:00.000Z');
+      const next = getNextOccurrence('0 9 1,15 * 3', fromDate);
+
+      expect(next.getHours()).toBe(9);
+      expect(next.getMinutes()).toBe(0);
+
+      const day = next.getDate();
+      const weekday = next.getDay();
+
+      expect(day === 1 || day === 15 || weekday === 3).toBe(true);
+    });
+
+    it('should handle day-of-month range with weekday', () => {
+      const fromDate = new Date('2024-02-01T08:00:00.000Z');
+      const next = getNextOccurrence('0 9 10-20 * 5', fromDate);
+
+      expect(next.getHours()).toBe(9);
+      expect(next.getMinutes()).toBe(0);
+
+      const day = next.getDate();
+      const weekday = next.getDay();
+
+      expect((day >= 10 && day <= 20) || weekday === 5).toBe(true);
+    });
+
+    it('should handle weekday range with specific day-of-month', () => {
+      const fromDate = new Date('2024-02-01T08:00:00.000Z');
+      const next = getNextOccurrence('0 9 1 * 1-5', fromDate);
+
+      expect(next.getHours()).toBe(9);
+      expect(next.getMinutes()).toBe(0);
+
+      const day = next.getDate();
+      const weekday = next.getDay();
+
+      expect(day === 1 || (weekday >= 1 && weekday <= 5)).toBe(true);
+    });
+  });
 });
