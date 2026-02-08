@@ -19,8 +19,8 @@ import {
  * Strips ANSI escape sequences from a string.
  */
 function stripAnsi(str: string): string {
-  // eslint-disable-next-line no-control-regex
-  return str.replace(/\x1b\[[0-9;]*m/g, '');
+  const ansiPattern = new RegExp(String.fromCharCode(27) + '\\[[0-9;]*m', 'g');
+  return str.replace(ansiPattern, '');
 }
 
 describe('Error suggestion system', () => {

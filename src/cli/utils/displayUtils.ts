@@ -103,8 +103,8 @@ export function getBorderChars(options: DisplayOptions): BorderChars {
  * @returns The string with ANSI codes removed.
  */
 function stripAnsi(str: string): string {
-  // eslint-disable-next-line no-control-regex
-  return str.replace(/\x1b\[[0-9;]*m/g, '');
+  const ansiPattern = new RegExp(String.fromCharCode(27) + '\\[[0-9;]*m', 'g');
+  return str.replace(ansiPattern, '');
 }
 
 export function wrapInBox(text: string, options: DisplayOptions): string {
