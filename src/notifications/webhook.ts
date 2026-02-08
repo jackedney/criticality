@@ -77,8 +77,9 @@ export async function validateWebhookEndpoint(
   endpoint: string,
   options?: { readonly ping?: boolean }
 ): Promise<WebhookValidationResult> {
+  let url: URL;
   try {
-    new URL(endpoint);
+    url = new URL(endpoint);
   } catch {
     return {
       success: false,
@@ -87,7 +88,6 @@ export async function validateWebhookEndpoint(
     };
   }
 
-  const url = new URL(endpoint);
   if (url.protocol !== 'http:' && url.protocol !== 'https:') {
     return {
       success: false,
@@ -103,7 +103,7 @@ export async function validateWebhookEndpoint(
         controller.abort();
       }, 5000);
 
-      const response = await fetch(endpoint, {
+      const response = await fetch(url.href, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -244,11 +244,6 @@ export class WebhookSender {
   ): Promise<{ readonly success: true } | { readonly success: false; readonly error: string }> {
     const result = await this.send(endpoint, payload);
 
-    if (result.success) {
-      return { success: true };
-    } else {
-      const failureResult = result as { readonly success: false; readonly error: string };
-      return { success: false, error: failureResult.error };
-    }
+    return result.success ? { success: true } : result;
   }
 }

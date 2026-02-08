@@ -12,8 +12,7 @@ import type { BlockingRecord } from '../protocol/blocking.js';
 import type { BlockingSubstate } from '../protocol/types.js';
 import type { NotificationService } from './types.js';
 import { getNextOccurrence } from './cron.js';
-import { writeFile, mkdir, readFile, rename } from 'node:fs/promises';
-import { existsSync } from 'node:fs';
+import { writeFile, mkdir, readFile, rename, stat } from 'node:fs/promises';
 import * as path from 'node:path';
 
 /**
@@ -62,6 +61,18 @@ export interface ReminderSchedulerOptions {
 const DEFAULT_STATE_FILE = 'notification-state.json';
 
 /**
+ * Checks if a file exists using async stat.
+ */
+async function fileExists(filePath: string): Promise<boolean> {
+  try {
+    await stat(filePath);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/**
  * Reminder scheduler for blocking states.
  *
  * Sends reminder notifications at configured cron intervals while
@@ -96,14 +107,14 @@ export class ReminderScheduler {
    * @throws Error if state cannot be loaded.
    */
   async initialize(): Promise<void> {
-    // eslint-disable-next-line security/detect-non-literal-fs-filename
-    if (!existsSync(path.dirname(this.statePath))) {
+    const stateDir = path.dirname(this.statePath);
+
+    if (!(await fileExists(stateDir))) {
       // eslint-disable-next-line security/detect-non-literal-fs-filename
-      await mkdir(path.dirname(this.statePath), { recursive: true });
+      await mkdir(stateDir, { recursive: true });
     }
 
-    // eslint-disable-next-line security/detect-non-literal-fs-filename
-    if (existsSync(this.statePath)) {
+    if (await fileExists(this.statePath)) {
       try {
         // eslint-disable-next-line security/detect-non-literal-fs-filename
         const data = await readFile(this.statePath, 'utf-8');
