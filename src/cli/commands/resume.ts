@@ -83,6 +83,8 @@ async function validateWebhookEndpoints(
   }
 
   console.log();
+
+  return;
 }
 
 /**
@@ -481,7 +483,13 @@ export async function handleResumeCommand(context: CliContext): Promise<CliComma
     const snapshot = await loadCliStateWithRecovery(statePath);
     const cliConfig = loadCliConfig();
 
-    void validateWebhookEndpoints(cliConfig);
+    try {
+      await validateWebhookEndpoints(cliConfig);
+    } catch (error) {
+      console.warn(
+        `Warning: Failed to validate webhook endpoints: ${error instanceof Error ? error.message : String(error)}`
+      );
+    }
 
     await checkAndSendReminder(snapshot, cliConfig, statePath);
 
@@ -570,9 +578,12 @@ export async function handleResumeCommand(context: CliContext): Promise<CliComma
     process.on('SIGINT', sigintHandler);
 
     // Execute tick loop
-    let result: TickResult = await orchestrator.tick();
     let tickCount = 0;
     let shouldContinueLoop = true;
+
+    // Capture phase before first tick
+    let fromPhase = orchestrator.state.snapshot.state.phase;
+    let result: TickResult = await orchestrator.tick();
 
     do {
       tickCount++;
@@ -582,12 +593,14 @@ export async function handleResumeCommand(context: CliContext): Promise<CliComma
 
       // Add log entries for significant events
       if (result.transitioned) {
-        const fromPhase = orchestrator.state.snapshot.state.phase;
         const toPhase = result.snapshot.state.phase;
         if (fromPhase !== toPhase) {
           liveDisplay.addLog(`Transitioned: ${fromPhase} → ${toPhase}`);
         }
       }
+
+      // Update fromPhase for next iteration
+      fromPhase = result.snapshot.state.phase;
 
       // Check for graceful shutdown after processing tick
       // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition
@@ -634,6 +647,7 @@ export async function handleResumeCommand(context: CliContext): Promise<CliComma
       }
 
       if (shouldContinueLoop) {
+        fromPhase = orchestrator.state.snapshot.state.phase;
         result = await orchestrator.tick();
       }
     } while (shouldContinueLoop);
