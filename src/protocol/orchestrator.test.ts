@@ -20,6 +20,7 @@ import { rm } from 'node:fs/promises';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { safeMkdir } from '../utils/safe-fs.js';
+import type { NotificationService } from '../notifications/service.js';
 
 describe('Protocol Orchestrator', () => {
   describe('Guards', () => {
@@ -31,6 +32,7 @@ describe('Protocol Orchestrator', () => {
       artifacts: new Set(artifacts) as ReadonlySet<ArtifactType>,
       pendingResolutions: [],
       operations: {} as ExternalOperations,
+      notificationService: undefined,
     });
 
     describe('Guards.and', () => {
@@ -143,6 +145,7 @@ describe('Protocol Orchestrator', () => {
           artifacts: new Set(),
           pendingResolutions: [{ response: 'yes', resolvedAt: new Date().toISOString() }],
           operations: {} as ExternalOperations,
+          notificationService: undefined,
         };
         expect(guard(ctx)).toBe(true);
       });
@@ -322,6 +325,7 @@ describe('Protocol Orchestrator', () => {
         artifacts: new Set(snapshot.artifacts),
         pendingResolutions: [],
         operations: mockOperations,
+        notificationService: undefined,
       };
 
       const result = await executeTick(context, statePath);
@@ -346,6 +350,7 @@ describe('Protocol Orchestrator', () => {
         artifacts: new Set(),
         pendingResolutions: [],
         operations: mockOperations,
+        notificationService: undefined,
       };
 
       const result = await executeTick(context, statePath);
@@ -371,6 +376,7 @@ describe('Protocol Orchestrator', () => {
         artifacts: new Set(),
         pendingResolutions: [],
         operations: mockOperations,
+        notificationService: undefined,
       };
 
       const result = await executeTick(context, statePath);
@@ -395,6 +401,7 @@ describe('Protocol Orchestrator', () => {
         artifacts: new Set(['spec'] as const),
         pendingResolutions: [],
         operations: mockOperations,
+        notificationService: undefined,
       };
 
       const result = await executeTick(context, statePath);
@@ -416,6 +423,7 @@ describe('Protocol Orchestrator', () => {
         artifacts: new Set(),
         pendingResolutions: [],
         operations: mockOperations,
+        notificationService: undefined,
       };
 
       const result = await executeTick(context, statePath);
@@ -521,6 +529,235 @@ describe('Protocol Orchestrator', () => {
       expect(result.shouldContinue).toBe(false);
       expect(result.stopReason).toBe('EXTERNAL_ERROR');
       expect(orchestrator.state.tickCount).toBeGreaterThan(0);
+    });
+  });
+
+  describe('NotificationService Integration', () => {
+    let testDir: string;
+    let statePath: string;
+
+    beforeEach(async () => {
+      testDir = join(tmpdir(), `orchestrator-notify-test-${String(Date.now())}`);
+      await safeMkdir(testDir, { recursive: true });
+      statePath = join(testDir, 'state.json');
+    });
+
+    afterEach(async () => {
+      await rm(testDir, { recursive: true, force: true });
+    });
+
+    const mockOperations: ExternalOperations = {
+      executeModelCall: vi.fn().mockResolvedValue({ success: true }),
+      runCompilation: vi.fn().mockResolvedValue({ success: true }),
+      runTests: vi.fn().mockResolvedValue({ success: true }),
+      archivePhaseArtifacts: vi.fn().mockResolvedValue({ success: true }),
+      sendBlockingNotification: vi.fn().mockResolvedValue(undefined),
+    };
+
+    it('sends block notification when entering blocking state', async () => {
+      const mockNotify = vi.fn().mockResolvedValue({
+        results: [],
+        allSucceeded: true,
+        anySucceeded: false,
+      });
+
+      const mockNotificationService = {
+        notify: mockNotify,
+        hasSubscribers: vi.fn().mockReturnValue(false),
+        send: vi.fn().mockResolvedValue({
+          results: [],
+          allSucceeded: true,
+          anySucceeded: false,
+        }),
+      } as unknown as NotificationService;
+
+      // Create state with active substate
+      const activeSnapshot: ProtocolStateSnapshot = {
+        state: createActiveState('Ignition'),
+        artifacts: [],
+        blockingQueries: [],
+      };
+      await saveState(activeSnapshot, statePath);
+
+      const orchestrator = await createOrchestrator({
+        statePath,
+        operations: mockOperations,
+        notificationService: mockNotificationService,
+      });
+
+      // Execute a tick that will keep us in active state (no artifacts)
+      await orchestrator.tick();
+
+      // Now create a blocking state manually
+      const blockingSnapshot: ProtocolStateSnapshot = {
+        state: {
+          phase: 'Ignition',
+          substate: createBlockingSubstate({ query: 'Block test?' }),
+        },
+        artifacts: [],
+        blockingQueries: [],
+      };
+      await saveState(blockingSnapshot, statePath);
+
+      // Next tick should detect entering blocking and send notification
+      const result = await orchestrator.tick();
+
+      expect(result.stopReason).toBe('BLOCKED');
+      expect(mockNotify).toHaveBeenCalledWith(
+        'block',
+        expect.objectContaining({
+          phase: 'Ignition',
+          query: 'Block test?',
+          resolved: false,
+        })
+      );
+    });
+
+    it('sends complete notification when protocol completes', async () => {
+      const mockNotify = vi.fn().mockResolvedValue({
+        results: [],
+        allSucceeded: true,
+        anySucceeded: false,
+      });
+
+      const mockNotificationService = {
+        notify: mockNotify,
+        hasSubscribers: vi.fn().mockReturnValue(false),
+        send: vi.fn().mockResolvedValue({
+          results: [],
+          allSucceeded: true,
+          anySucceeded: false,
+        }),
+      } as unknown as NotificationService;
+
+      // Create state in Complete phase
+      const completeSnapshot: ProtocolStateSnapshot = {
+        state: createActiveState('Complete'),
+        artifacts: ['spec', 'latticeCode', 'witnesses', 'contracts', 'finalArtifact'],
+        blockingQueries: [],
+      };
+      await saveState(completeSnapshot, statePath);
+
+      const orchestrator = await createOrchestrator({
+        statePath,
+        operations: mockOperations,
+        notificationService: mockNotificationService,
+      });
+
+      const result = await orchestrator.tick();
+
+      expect(result.stopReason).toBe('COMPLETE');
+      expect(mockNotify).toHaveBeenCalledWith('complete', completeSnapshot.state);
+    });
+
+    it('sends error notification when protocol fails', async () => {
+      const mockNotify = vi.fn().mockResolvedValue({
+        results: [],
+        allSucceeded: true,
+        anySucceeded: false,
+      });
+
+      const mockNotificationService = {
+        notify: mockNotify,
+        hasSubscribers: vi.fn().mockReturnValue(false),
+        send: vi.fn().mockResolvedValue({
+          results: [],
+          allSucceeded: true,
+          anySucceeded: false,
+        }),
+      } as unknown as NotificationService;
+
+      // Create state in failed substate
+      const failedSnapshot: ProtocolStateSnapshot = {
+        state: {
+          phase: 'Injection',
+          substate: createFailedSubstate({ error: 'Test failure' }),
+        },
+        artifacts: [],
+        blockingQueries: [],
+      };
+      await saveState(failedSnapshot, statePath);
+
+      const orchestrator = await createOrchestrator({
+        statePath,
+        operations: mockOperations,
+        notificationService: mockNotificationService,
+      });
+
+      const result = await orchestrator.tick();
+
+      expect(result.stopReason).toBe('FAILED');
+      expect(result.error).toBe('Test failure');
+      expect(mockNotify).toHaveBeenCalledWith('error', failedSnapshot.state);
+    });
+
+    it('sends phase_change notification on phase transition', async () => {
+      const mockNotify = vi.fn().mockResolvedValue({
+        results: [],
+        allSucceeded: true,
+        anySucceeded: false,
+      });
+
+      const mockNotificationService = {
+        notify: mockNotify,
+        hasSubscribers: vi.fn().mockReturnValue(false),
+        send: vi.fn().mockResolvedValue({
+          results: [],
+          allSucceeded: true,
+          anySucceeded: false,
+        }),
+      } as unknown as NotificationService;
+
+      // Create state in Ignition phase with spec artifact
+      const initialSnapshot: ProtocolStateSnapshot = {
+        state: createActiveState('Ignition'),
+        artifacts: ['spec'],
+        blockingQueries: [],
+      };
+      await saveState(initialSnapshot, statePath);
+
+      const orchestrator = await createOrchestrator({
+        statePath,
+        operations: mockOperations,
+        notificationService: mockNotificationService,
+      });
+
+      // Tick should transition to Lattice and send phase_change notification
+      const result = await orchestrator.tick();
+
+      expect(result.transitioned).toBe(true);
+      expect(result.snapshot.state.phase).toBe('Lattice');
+      expect(mockNotify).toHaveBeenCalledWith('phase_change', result.snapshot.state);
+    });
+
+    it('notification failure does not block protocol execution', async () => {
+      const mockNotify = vi.fn().mockRejectedValue(new Error('Notification failed'));
+
+      const mockNotificationService = {
+        notify: mockNotify,
+        hasSubscribers: vi.fn().mockReturnValue(false),
+        send: vi.fn().mockRejectedValue(new Error('Notification failed')),
+      } as unknown as NotificationService;
+
+      // Create state in Complete phase
+      const completeSnapshot: ProtocolStateSnapshot = {
+        state: createActiveState('Complete'),
+        artifacts: ['spec', 'latticeCode', 'witnesses', 'contracts', 'finalArtifact'],
+        blockingQueries: [],
+      };
+      await saveState(completeSnapshot, statePath);
+
+      const orchestrator = await createOrchestrator({
+        statePath,
+        operations: mockOperations,
+        notificationService: mockNotificationService,
+      });
+
+      // Should not throw despite notification failure
+      const result = await orchestrator.tick();
+
+      expect(result.stopReason).toBe('COMPLETE');
+      expect(mockNotify).toHaveBeenCalledWith('complete', completeSnapshot.state);
     });
   });
 });

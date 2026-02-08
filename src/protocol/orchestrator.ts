@@ -14,6 +14,7 @@ import type { ProtocolPhase } from './types.js';
 import type { ArtifactType } from './transitions.js';
 import type { BlockingRecord, BlockingResolution } from './blocking.js';
 import type { ProtocolStateSnapshot } from './persistence.js';
+import type { NotificationService } from '../notifications/service.js';
 import { transition, getValidTransitions, REQUIRED_ARTIFACTS } from './transitions.js';
 import { checkTimeout } from './blocking.js';
 import { saveState } from './persistence.js';
@@ -73,6 +74,8 @@ export interface TickContext {
   readonly pendingResolutions: readonly BlockingResolution[];
   /** External operations interface. */
   readonly operations: ExternalOperations;
+  /** Notification service for sending protocol events. */
+  readonly notificationService: NotificationService | undefined;
 }
 
 /**
@@ -126,6 +129,8 @@ export interface OrchestratorOptions {
   readonly statePath: string;
   /** External operations implementation. */
   readonly operations: ExternalOperations;
+  /** Notification service for sending protocol events. */
+  readonly notificationService?: NotificationService;
   /** Maximum ticks before forced stop (safety limit). */
   readonly maxTicks?: number;
 }
@@ -142,6 +147,8 @@ export interface OrchestratorState {
   running: boolean;
   /** Last tick result. */
   lastTickResult: TickResult | undefined;
+  /** Previous snapshot for detecting state changes. */
+  previousSnapshot: ProtocolStateSnapshot | undefined;
 }
 
 /**
@@ -280,11 +287,18 @@ function hasRequiredArtifacts(
  * @returns The tick result.
  */
 export async function executeTick(context: TickContext, statePath: string): Promise<TickResult> {
-  const { snapshot } = context;
+  const { snapshot, notificationService } = context;
   const { phase, substate } = snapshot.state;
 
   // Check if already complete
   if (phase === 'Complete') {
+    try {
+      if (notificationService !== undefined) {
+        await notificationService.notify('complete', snapshot.state);
+      }
+    } catch {
+      // Notification failure should not block protocol execution
+    }
     return {
       transitioned: false,
       snapshot,
@@ -295,6 +309,13 @@ export async function executeTick(context: TickContext, statePath: string): Prom
 
   // Check if in failed state
   if (substate.kind === 'Failed') {
+    try {
+      if (notificationService !== undefined) {
+        await notificationService.notify('error', snapshot.state);
+      }
+    } catch {
+      // Notification failure should not block protocol execution
+    }
     return {
       transitioned: false,
       snapshot,
@@ -338,6 +359,14 @@ export async function executeTick(context: TickContext, statePath: string): Prom
       };
 
       await saveState(newSnapshot, statePath);
+
+      try {
+        if (notificationService !== undefined) {
+          await notificationService.notify('error', newSnapshot.state);
+        }
+      } catch {
+        // Notification failure should not block protocol execution
+      }
 
       return {
         transitioned: true,
@@ -407,6 +436,19 @@ export async function executeTick(context: TickContext, statePath: string): Prom
 
         await saveState(newSnapshot, statePath);
 
+        // Send phase_change notification if phase changed
+        if (snapshot.state.phase !== newSnapshot.state.phase) {
+          try {
+            if (notificationService !== undefined) {
+              // Create a pseudo-BlockingRecord for phase_change event
+              // Using the protocol state which contains phase info
+              await notificationService.notify('phase_change', newSnapshot.state);
+            }
+          } catch {
+            // Notification failure should not block protocol execution
+          }
+        }
+
         return {
           transitioned: true,
           snapshot: newSnapshot,
@@ -437,7 +479,7 @@ export async function createOrchestrator(options: OrchestratorOptions): Promise<
   addArtifact: (artifact: ArtifactType) => void;
   resolveBlocking: (response: string) => void;
 }> {
-  const { statePath, operations, maxTicks = 1000 } = options;
+  const { statePath, operations, notificationService, maxTicks = 1000 } = options;
 
   // Load or create initial state
   const startupResult = await getStartupState(statePath);
@@ -448,6 +490,7 @@ export async function createOrchestrator(options: OrchestratorOptions): Promise<
     tickCount: 0,
     running: false,
     lastTickResult: undefined,
+    previousSnapshot: undefined,
   };
 
   // Mutable state for collected artifacts and resolutions
@@ -463,14 +506,47 @@ export async function createOrchestrator(options: OrchestratorOptions): Promise<
       artifacts: collectedArtifacts,
       pendingResolutions,
       operations,
+      notificationService,
     };
 
     const result = await executeTick(context, statePath);
+
+    // Check for entering blocking state (first time)
+    if (
+      notificationService !== undefined &&
+      orchestratorState.previousSnapshot !== undefined &&
+      result.transitioned &&
+      result.snapshot.state.substate.kind === 'Blocking' &&
+      orchestratorState.previousSnapshot.state.substate.kind !== 'Blocking'
+    ) {
+      try {
+        const blockingRecord: BlockingRecord = {
+          id: `blocking-${result.snapshot.state.phase}`,
+          phase: result.snapshot.state.phase,
+          query: result.snapshot.state.substate.query,
+          blockedAt: result.snapshot.state.substate.blockedAt,
+          resolved: false,
+        };
+        // Add optional fields if present
+        if (result.snapshot.state.substate.options !== undefined) {
+          (blockingRecord as { options?: readonly string[] }).options =
+            result.snapshot.state.substate.options;
+        }
+        if (result.snapshot.state.substate.timeoutMs !== undefined) {
+          (blockingRecord as { timeoutMs?: number }).timeoutMs =
+            result.snapshot.state.substate.timeoutMs;
+        }
+        await notificationService.notify('block', blockingRecord);
+      } catch {
+        // Notification failure should not block protocol execution
+      }
+    }
 
     currentSnapshot = result.snapshot;
     orchestratorState.snapshot = result.snapshot;
     orchestratorState.tickCount++;
     orchestratorState.lastTickResult = result;
+    orchestratorState.previousSnapshot = currentSnapshot;
 
     // Clear pending resolutions after processing
     if (result.transitioned && pendingResolutions.length > 0) {
