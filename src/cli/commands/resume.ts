@@ -150,21 +150,6 @@ async function checkAndSendReminder(
 }
 
 /**
- * Telemetry state for tracking operations.
- */
-let telemetry: OperationTelemetry = {
-  modelCalls: 0,
-  promptTokens: 0,
-  completionTokens: 0,
-  executionTimeMs: 0,
-};
-
-/**
- * Telemetry collector for per-phase tracking.
- */
-let telemetryCollector: TelemetryCollector | null = null;
-
-/**
  * Gets the state file path.
  *
  * @returns The state file path.
@@ -360,6 +345,7 @@ function formatCompactSummary(
  * @param startTime - When execution started.
  * @param initialSnapshot - Initial state snapshot before execution.
  * @param options - Display options.
+ * @param telemetry - The telemetry data to display.
  */
 async function displayExecutionSummary(
   tickCount: number,
@@ -367,7 +353,8 @@ async function displayExecutionSummary(
   snapshot: ProtocolStateSnapshot,
   startTime: number,
   initialSnapshot: CliStateSnapshot,
-  options: ResumeDisplayOptions
+  options: ResumeDisplayOptions,
+  telemetry: OperationTelemetry
 ): Promise<void> {
   const elapsed = Date.now() - startTime;
   const elapsedSec = (elapsed / 1000).toFixed(1);
@@ -492,7 +479,7 @@ export async function handleResumeCommand(context: CliContext): Promise<CliComma
 
   try {
     const snapshot = await loadCliStateWithRecovery(statePath);
-    const cliConfig = await loadCliConfig();
+    const cliConfig = loadCliConfig();
 
     void validateWebhookEndpoints(cliConfig);
 
@@ -505,9 +492,15 @@ export async function handleResumeCommand(context: CliContext): Promise<CliComma
 
     await displayResumeSummary(snapshot, statePath, options);
 
-    const config = await loadCliConfig();
+    const config = loadCliConfig();
 
-    telemetryCollector = new TelemetryCollector();
+    let telemetry: OperationTelemetry = {
+      modelCalls: 0,
+      promptTokens: 0,
+      completionTokens: 0,
+      executionTimeMs: 0,
+    };
+    const telemetryCollector = new TelemetryCollector();
     const operations = await createCliOperations({
       config,
       statePath,
@@ -520,17 +513,12 @@ export async function handleResumeCommand(context: CliContext): Promise<CliComma
     const orchestratorOptions: {
       statePath: string;
       operations: typeof operations;
-      notificationService?: NotificationService;
+      notificationService: NotificationService;
     } = {
       statePath,
       operations,
+      notificationService: operations.notificationService,
     };
-
-    // Check for notification service and pass to orchestrator if available
-    // This pattern allows orchestrator to work without notifications if needed
-    if (operations.notificationService !== undefined) {
-      orchestratorOptions.notificationService = operations.notificationService;
-    }
 
     const orchestrator = await createOrchestrator(orchestratorOptions);
 
@@ -556,12 +544,11 @@ export async function handleResumeCommand(context: CliContext): Promise<CliComma
         void (async (): Promise<void> => {
           try {
             const currentState = await loadCliStateWithRecovery(statePath);
-            const telemetryData =
-              telemetryCollector !== null ? telemetryCollector.getTelemetryData() : undefined;
-            const updatedState: CliStateSnapshot =
-              telemetryData !== undefined
-                ? { ...currentState, telemetry: telemetryData }
-                : currentState;
+            const telemetryData = telemetryCollector.getTelemetryData();
+            const updatedState: CliStateSnapshot = {
+              ...currentState,
+              telemetry: telemetryData,
+            };
             await saveCliState(updatedState, statePath);
             console.log('State saved before force quit.');
           } catch (error) {
@@ -617,25 +604,23 @@ export async function handleResumeCommand(context: CliContext): Promise<CliComma
           orchestrator.state.snapshot,
           startTime,
           snapshot,
-          options
+          options,
+          telemetry
         );
         console.log();
 
         // Save telemetry to state file
-        // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition
-        if (telemetryCollector !== null) {
-          const telemetryData = telemetryCollector.getTelemetryData();
-          try {
-            const currentState = await loadCliStateWithRecovery(statePath);
-            const updatedState: CliStateSnapshot = {
-              ...currentState,
-              telemetry: telemetryData,
-            };
-            await saveCliState(updatedState, statePath);
-          } catch {
-            // If state save fails, telemetry update won't persist
-            // but this shouldn't block the interrupt
-          }
+        const telemetryData = telemetryCollector.getTelemetryData();
+        try {
+          const currentState = await loadCliStateWithRecovery(statePath);
+          const updatedState: CliStateSnapshot = {
+            ...currentState,
+            telemetry: telemetryData,
+          };
+          await saveCliState(updatedState, statePath);
+        } catch {
+          // If state save fails, telemetry update won't persist
+          // but this shouldn't block the interrupt
         }
 
         console.log('State saved successfully.');
@@ -658,19 +643,16 @@ export async function handleResumeCommand(context: CliContext): Promise<CliComma
     liveDisplay.stop();
 
     // Save telemetry to state file after normal completion
-    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition
-    if (telemetryCollector !== null) {
-      const telemetryData = telemetryCollector.getTelemetryData();
-      try {
-        const currentState = await loadCliStateWithRecovery(statePath);
-        const updatedState: CliStateSnapshot = {
-          ...currentState,
-          telemetry: telemetryData,
-        };
-        await saveCliState(updatedState, statePath);
-      } catch {
-        // If state save fails, telemetry update won't persist
-      }
+    const telemetryData = telemetryCollector.getTelemetryData();
+    try {
+      const currentState = await loadCliStateWithRecovery(statePath);
+      const updatedState: CliStateSnapshot = {
+        ...currentState,
+        telemetry: telemetryData,
+      };
+      await saveCliState(updatedState, statePath);
+    } catch {
+      // If state save fails, telemetry update won't persist
     }
 
     // Display execution summary
@@ -680,7 +662,8 @@ export async function handleResumeCommand(context: CliContext): Promise<CliComma
       result.snapshot,
       startTime,
       snapshot,
-      options
+      options,
+      telemetry
     );
 
     // Handle error states
