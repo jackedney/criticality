@@ -22,8 +22,12 @@ export { NOTIFICATION_EVENTS } from './types.js';
 
 export { parseCronExpression, isValidCronExpression, getNextOccurrence } from './cron.js';
 
-export { WebhookSender } from './webhook.js';
-export type { WebhookSenderOptions, WebhookSendResult } from './webhook.js';
+export { WebhookSender, validateWebhookEndpoint } from './webhook.js';
+export type {
+  WebhookSenderOptions,
+  WebhookSendResult,
+  WebhookValidationResult,
+} from './webhook.js';
 
 export { NotificationService } from './service.js';
 

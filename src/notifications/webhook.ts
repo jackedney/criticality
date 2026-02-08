@@ -15,7 +15,24 @@ import type { WebhookPayload } from './types.js';
 export interface WebhookSenderOptions {
   /** Timeout in milliseconds (default: 5000ms). */
   readonly timeoutMs?: number;
+  /** Whether to send a test ping on validation (default: false). */
+  readonly pingOnValidation?: boolean;
 }
+
+/**
+ * Result of webhook endpoint validation.
+ */
+export type WebhookValidationResult =
+  | {
+      readonly success: true;
+      readonly endpoint: string;
+      readonly message: string;
+    }
+  | {
+      readonly success: false;
+      readonly endpoint: string;
+      readonly error: string;
+    };
 
 /**
  * Result of a single webhook send attempt.
@@ -29,6 +46,104 @@ export type WebhookSendResult =
       readonly success: false;
       readonly error: string;
     };
+
+/**
+ * Validates a webhook endpoint URL and optionally sends a test ping.
+ *
+ * Validates that the endpoint is a valid http/https URL. If pingOnValidation
+ * is enabled, sends a test POST request to verify the endpoint is reachable.
+ * Validation failures do not throw - they return a failure result.
+ *
+ * @param endpoint - The webhook endpoint URL to validate.
+ * @param options - Optional validation settings.
+ * @returns Validation result with success status and message or error.
+ *
+ * @example
+ * ```typescript
+ * // URL validation only (no network request)
+ * const result1 = await validateWebhookEndpoint('https://example.com/webhook');
+ * if (result1.success) {
+ *   console.log(result1.message); // "Webhook https://example.com/webhook validated successfully"
+ * }
+ *
+ * // With test ping
+ * const result2 = await validateWebhookEndpoint('https://example.com/webhook', { ping: true });
+ * if (!result2.success) {
+ *   console.warn(result2.error); // "Ping failed: Connection refused"
+ * }
+ * ```
+ */
+export async function validateWebhookEndpoint(
+  endpoint: string,
+  options?: { readonly ping?: boolean }
+): Promise<WebhookValidationResult> {
+  try {
+    new URL(endpoint);
+  } catch {
+    return {
+      success: false,
+      endpoint,
+      error: `Invalid URL format: '${endpoint}' is not a valid URL`,
+    };
+  }
+
+  const url = new URL(endpoint);
+  if (url.protocol !== 'http:' && url.protocol !== 'https:') {
+    return {
+      success: false,
+      endpoint,
+      error: `Invalid URL protocol: '${endpoint}' must use http or https`,
+    };
+  }
+
+  if (options?.ping === true) {
+    try {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => {
+        controller.abort();
+      }, 5000);
+
+      const response = await fetch(endpoint, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ test: true }),
+        signal: controller.signal,
+      });
+
+      clearTimeout(timeoutId);
+
+      return {
+        success: true,
+        endpoint,
+        message: `Webhook ${endpoint} validated successfully (ping responded with ${String(response.status)})`,
+      };
+    } catch (error) {
+      let errorMessage = 'Unknown error';
+
+      if (error instanceof Error) {
+        if (error.name === 'AbortError') {
+          errorMessage = 'Ping timeout';
+        } else {
+          errorMessage = error.message;
+        }
+      }
+
+      return {
+        success: false,
+        endpoint,
+        error: `Ping failed: ${errorMessage}`,
+      };
+    }
+  }
+
+  return {
+    success: true,
+    endpoint,
+    message: `Webhook ${endpoint} validated successfully`,
+  };
+}
 
 /**
  * WebhookSender class for sending HTTP POST notifications.

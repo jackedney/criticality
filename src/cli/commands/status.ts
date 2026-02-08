@@ -23,6 +23,7 @@ import { formatRelativeTime, formatConfidence, wrapInBox } from '../utils/displa
 import { TelemetryCollector } from '../telemetry.js';
 import { NotificationService } from '../../notifications/service.js';
 import { ReminderScheduler } from '../../notifications/reminder.js';
+import { validateWebhookEndpoint } from '../../notifications/index.js';
 import type { Config, NotificationConfig } from '../../config/types.js';
 import { existsSync, readFileSync } from 'node:fs';
 import { parseConfig } from '../../config/index.js';
@@ -34,6 +35,42 @@ interface StatusDisplayOptions {
   watch?: boolean;
   interval?: number;
   verbose?: boolean;
+}
+
+/**
+ * Validates configured webhook endpoints at startup.
+ *
+ * Validates URL format and optionally sends test pings.
+ * Displays validation results as console output but does not block startup.
+ *
+ * @param config - The configuration object.
+ */
+async function validateWebhookEndpoints(config: Config): Promise<void> {
+  if (!config.notifications.enabled || config.notifications.channels === undefined) {
+    return;
+  }
+
+  const webhookChannels = config.notifications.channels.filter(
+    (c) => c.type === 'webhook' && c.enabled
+  );
+
+  if (webhookChannels.length === 0) {
+    return;
+  }
+
+  console.log('Validating webhook endpoints...');
+
+  for (const channel of webhookChannels) {
+    const result = await validateWebhookEndpoint(channel.endpoint, { ping: false });
+
+    if (result.success) {
+      console.log(`✓ ${result.message}`);
+    } else {
+      console.warn(`⚠ ${result.error}`);
+    }
+  }
+
+  console.log();
 }
 
 /**
@@ -553,6 +590,9 @@ export async function handleStatusCommand(context: CliContext): Promise<CliComma
 
   try {
     const snapshot = await loadStateWithRecovery(statePath);
+    const cliConfig = loadCliConfig();
+
+    void validateWebhookEndpoints(cliConfig);
 
     if (!watch) {
       await renderStatus(snapshot, options);

@@ -30,6 +30,7 @@ import { parseConfig } from '../../config/index.js';
 import { displayErrorWithSuggestions, inferErrorType } from '../errors.js';
 import { NotificationService } from '../../notifications/service.js';
 import { ReminderScheduler } from '../../notifications/reminder.js';
+import { validateWebhookEndpoint } from '../../notifications/index.js';
 import * as path from 'node:path';
 
 interface ResumeDisplayOptions {
@@ -47,19 +48,55 @@ interface ExecutionSummaryData {
 }
 
 /**
+ * Validates configured webhook endpoints at startup.
+ *
+ * Validates URL format and optionally sends test pings.
+ * Displays validation results as console output but does not block startup.
+ *
+ * @param config - The configuration object.
+ */
+async function validateWebhookEndpoints(
+  config: Awaited<ReturnType<(typeof import('../../config/index.js'))['parseConfig']>>
+): Promise<void> {
+  if (!config.notifications.enabled || config.notifications.channels === undefined) {
+    return;
+  }
+
+  const webhookChannels = config.notifications.channels.filter(
+    (c) => c.type === 'webhook' && c.enabled
+  );
+
+  if (webhookChannels.length === 0) {
+    return;
+  }
+
+  console.log('Validating webhook endpoints...');
+
+  for (const channel of webhookChannels) {
+    const result = await validateWebhookEndpoint(channel.endpoint, { ping: false });
+
+    if (result.success) {
+      console.log(`✓ ${result.message}`);
+    } else {
+      console.warn(`⚠ ${result.error}`);
+    }
+  }
+
+  console.log();
+}
+
+/**
  * Loads configuration from criticality.toml.
  *
  * @returns The loaded configuration or defaults.
  */
-async function loadCliConfig(): Promise<
-  Awaited<ReturnType<(typeof import('../../config/index.js'))['parseConfig']>>
-> {
+function loadCliConfig(): ReturnType<(typeof import('../../config/index.js'))['parseConfig']> {
   const configFilePath = 'criticality.toml';
 
   if (existsSync(configFilePath)) {
     try {
       const tomlContent = readFileSync(configFilePath, 'utf-8');
-      return await parseConfig(tomlContent);
+      return parseConfig(tomlContent);
     } catch (error) {
       console.warn(
         `Warning: Failed to load config from ${configFilePath}: ${error instanceof Error ? error.message : String(error)}`
@@ -68,7 +105,7 @@ async function loadCliConfig(): Promise<
     }
   }
 
-  return await parseConfig('');
+  return parseConfig('');
 }
 
 /**
@@ -456,6 +493,8 @@ export async function handleResumeCommand(context: CliContext): Promise<CliComma
   try {
     const snapshot = await loadCliStateWithRecovery(statePath);
     const cliConfig = await loadCliConfig();
+
+    void validateWebhookEndpoints(cliConfig);
 
     await checkAndSendReminder(snapshot, cliConfig, statePath);
 

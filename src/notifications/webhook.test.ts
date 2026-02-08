@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { WebhookSender } from './webhook.js';
+import { WebhookSender, validateWebhookEndpoint } from './webhook.js';
 import type { WebhookPayload } from './types.js';
 
 describe('WebhookSender', () => {
@@ -414,6 +414,120 @@ describe('WebhookSender', () => {
         success: false,
         error: `Request timeout after ${String(1000)}ms`,
       });
+    });
+  });
+
+  describe('validateWebhookEndpoint', () => {
+    it('should validate a valid http URL', async () => {
+      const result = await validateWebhookEndpoint('http://example.com/webhook');
+
+      expect(result.success).toBe(true);
+      if (result.success) {
+        expect(result.endpoint).toBe('http://example.com/webhook');
+        expect(result.message).toBe('Webhook http://example.com/webhook validated successfully');
+      }
+    });
+
+    it('should validate a valid https URL', async () => {
+      const result = await validateWebhookEndpoint('https://example.com/hook');
+
+      expect(result.success).toBe(true);
+      if (result.success) {
+        expect(result.endpoint).toBe('https://example.com/hook');
+        expect(result.message).toBe('Webhook https://example.com/hook validated successfully');
+      }
+    });
+
+    it('should reject invalid URL format', async () => {
+      const result = await validateWebhookEndpoint('not-a-url');
+
+      expect(result.success).toBe(false);
+      if (!result.success) {
+        expect(result.endpoint).toBe('not-a-url');
+        expect(result.error).toBe("Invalid URL format: 'not-a-url' is not a valid URL");
+      }
+    });
+
+    it('should reject ftp URL protocol', async () => {
+      const result = await validateWebhookEndpoint('ftp://example.com/webhook');
+
+      expect(result.success).toBe(false);
+      if (!result.success) {
+        expect(result.endpoint).toBe('ftp://example.com/webhook');
+        expect(result.error).toBe(
+          "Invalid URL protocol: 'ftp://example.com/webhook' must use http or https"
+        );
+      }
+    });
+
+    it('should reject file URL protocol', async () => {
+      const result = await validateWebhookEndpoint('file:///path/to/file');
+
+      expect(result.success).toBe(false);
+      if (!result.success) {
+        expect(result.endpoint).toBe('file:///path/to/file');
+        expect(result.error).toBe(
+          "Invalid URL protocol: 'file:///path/to/file' must use http or https"
+        );
+      }
+    });
+
+    it('should send test ping when ping option is enabled', async () => {
+      const mockFetch = vi.fn();
+      global.fetch = mockFetch as unknown as typeof fetch;
+
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+      });
+
+      const result = await validateWebhookEndpoint('https://example.com/webhook', { ping: true });
+
+      expect(result.success).toBe(true);
+      if (result.success) {
+        expect(result.message).toContain('validated successfully');
+        expect(result.message).toContain('200');
+      }
+      expect(mockFetch).toHaveBeenCalledWith(
+        'https://example.com/webhook',
+        expect.objectContaining({
+          method: 'POST',
+          body: JSON.stringify({ test: true }),
+        })
+      );
+    });
+
+    it('should return failure when ping fails', async () => {
+      const mockFetch = vi.fn();
+      global.fetch = mockFetch as unknown as typeof fetch;
+
+      const networkError = new Error('ECONNREFUSED');
+      mockFetch.mockRejectedValueOnce(networkError);
+
+      const result = await validateWebhookEndpoint('https://example.com/webhook', { ping: true });
+
+      expect(result.success).toBe(false);
+      if (!result.success) {
+        expect(result.endpoint).toBe('https://example.com/webhook');
+        expect(result.error).toBe('Ping failed: ECONNREFUSED');
+      }
+    });
+
+    it('should return failure when ping times out', async () => {
+      const mockFetch = vi.fn();
+      global.fetch = mockFetch as unknown as typeof fetch;
+
+      const timeoutError = new Error('Request timeout');
+      timeoutError.name = 'AbortError';
+      mockFetch.mockRejectedValueOnce(timeoutError);
+
+      const result = await validateWebhookEndpoint('https://example.com/webhook', { ping: true });
+
+      expect(result.success).toBe(false);
+      if (!result.success) {
+        expect(result.endpoint).toBe('https://example.com/webhook');
+        expect(result.error).toBe('Ping failed: Ping timeout');
+      }
     });
   });
 });
