@@ -23,6 +23,7 @@ import { formatRelativeTime, formatConfidence, wrapInBox } from '../utils/displa
 import { TelemetryCollector } from '../telemetry.js';
 import { NotificationService } from '../../notifications/service.js';
 import { ReminderScheduler } from '../../notifications/reminder.js';
+import type { Config, NotificationConfig } from '../../config/types.js';
 import { existsSync, readFileSync } from 'node:fs';
 import { parseConfig } from '../../config/index.js';
 import * as path from 'node:path';
@@ -40,21 +41,19 @@ interface StatusDisplayOptions {
  *
  * @returns The loaded configuration or defaults.
  */
-async function loadCliConfig(): Promise<
-  Awaited<ReturnType<(typeof import('../../config/index.js'))['parseConfig']>>
-> {
+function loadCliConfig(): Config {
   const configFilePath = 'criticality.toml';
 
   if (existsSync(configFilePath)) {
     try {
       const tomlContent = readFileSync(configFilePath, 'utf-8');
-      return await parseConfig(tomlContent);
+      return parseConfig(tomlContent);
     } catch (_error) {
       // Use defaults if config loading fails
     }
   }
 
-  return await parseConfig('');
+  return parseConfig('');
 }
 
 /**
@@ -80,7 +79,7 @@ async function checkAndSendReminder(
   snapshot: ProtocolStateSnapshot,
   statePath: string
 ): Promise<string | undefined> {
-  const cliConfig = await loadCliConfig();
+  const cliConfig = loadCliConfig();
 
   if (!cliConfig.notifications.enabled || cliConfig.notifications.reminder_schedule === undefined) {
     return undefined;
@@ -277,33 +276,67 @@ function formatTimestamp(date: Date): string {
  * Formats notification status for display.
  *
  * @param options - Display options.
+ * @param config - Notification configuration.
  * @param nextScheduled - Next scheduled reminder time (optional).
+ * @param isBlocked - Whether protocol is currently blocked.
  * @returns The formatted notification status text.
  */
-function formatNotifications(options: StatusDisplayOptions, nextScheduled?: string): string {
+function formatNotifications(
+  options: StatusDisplayOptions,
+  config: NotificationConfig,
+  nextScheduled?: string,
+  isBlocked: boolean = false
+): string {
   const boldCode = options.colors ? '\x1b[1m' : '';
   const resetCode = options.colors ? '\x1b[0m' : '';
   const dimCode = options.colors ? '\x1b[2m' : '';
   const yellowCode = options.colors ? '\x1b[33m' : '';
+  const greenCode = options.colors ? '\x1b[32m' : '';
 
   let result = `${boldCode}Notifications:${resetCode}\n`;
 
-  if (nextScheduled !== undefined) {
-    const nextDate = new Date(nextScheduled);
-    const now = new Date();
-    const timeUntil = nextDate.getTime() - now.getTime();
-    const hoursUntil = Math.floor(timeUntil / (1000 * 60 * 60));
-    const minutesUntil = Math.floor((timeUntil % (1000 * 60 * 60)) / (1000 * 60));
+  if (!config.enabled) {
+    result += `${dimCode}Notifications: disabled${resetCode}`;
+    return result;
+  }
 
-    let timeStr = '';
-    if (hoursUntil > 0) {
-      timeStr += `${String(hoursUntil)}h `;
-    }
-    timeStr += `${String(minutesUntil)}m`;
+  const enabledChannels = config.channels?.filter((c) => c.enabled && c.type === 'webhook') ?? [];
+  const totalChannels = config.channels?.filter((c) => c.type === 'webhook').length ?? 0;
 
-    result += `${yellowCode}Next reminder${resetCode}: in ${timeStr}`;
+  if (totalChannels === 0) {
+    result += `${dimCode}Notifications: not configured${resetCode}`;
   } else {
-    result += `${dimCode}Notification system: not configured${resetCode}`;
+    const statusText =
+      enabledChannels.length === totalChannels
+        ? `${greenCode}enabled${resetCode}`
+        : `${yellowCode}partial${resetCode}`;
+    const plural = totalChannels !== 1 ? 's' : '';
+    result += `${String(totalChannels)} webhook${plural} configured (${String(enabledChannels.length)}/${String(totalChannels)} ${statusText})`;
+  }
+
+  if (config.reminder_schedule !== undefined && isBlocked) {
+    result += `\n${yellowCode}Reminder schedule${resetCode}: ${config.reminder_schedule}`;
+
+    if (nextScheduled !== undefined) {
+      const nextDate = new Date(nextScheduled);
+      const now = new Date();
+      const timeUntil = nextDate.getTime() - now.getTime();
+
+      let timeStr = '';
+      const hoursUntil = Math.floor(timeUntil / (1000 * 60 * 60));
+      const minutesUntil = Math.floor((timeUntil % (1000 * 60 * 60)) / (1000 * 60));
+
+      if (hoursUntil > 24) {
+        const daysUntil = Math.floor(hoursUntil / 24);
+        timeStr += `${String(daysUntil)} day${daysUntil !== 1 ? 's' : ''} `;
+      } else if (hoursUntil > 0) {
+        timeStr += `${String(hoursUntil)}h `;
+      }
+      timeStr += `${String(minutesUntil)}m`;
+
+      const nextTime = nextDate.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+      result += ` (next: ${nextTime}, in ${timeStr})`;
+    }
   }
 
   return result;
@@ -355,7 +388,9 @@ async function renderStatus(
   options: StatusDisplayOptions
 ): Promise<void> {
   const statePath = getStatePath();
+  const cliConfig = loadCliConfig();
   const nextScheduled = await checkAndSendReminder(snapshot, statePath);
+  const isBlocked = isBlockingSubstate(snapshot.state.substate);
 
   const hierarchicalState = formatHierarchicalState(
     snapshot.state.phase,
@@ -410,8 +445,12 @@ async function renderStatus(
     console.log(wrapInBox(telemetryText, options));
   }
 
-  // Display notifications status (Phase 4.2 integration point)
-  const notificationsText = formatNotifications(options, nextScheduled);
+  const notificationsText = formatNotifications(
+    options,
+    cliConfig.notifications,
+    nextScheduled,
+    isBlocked
+  );
   console.log();
   console.log(wrapInBox(notificationsText, options));
 
