@@ -511,8 +511,8 @@ export async function safeRm(
 /**
  * Safely creates a symbolic link after validating both paths.
  *
- * @param target - The path to which the symbolic link should point.
- * @param path - The path where the symbolic link will be created.
+ * @param target - The path to which symbolic link should point.
+ * @param linkPath - The path where the symbolic link will be created.
  * @param type - The type of symbolic link (platform-specific).
  * @returns A promise that resolves when the symbolic link is created.
  * @throws {PathValidationError} If either path is invalid.
@@ -520,13 +520,13 @@ export async function safeRm(
  */
 export async function safeSymlink(
   target: string,
-  path: string,
+  linkPath: string,
   type?: string | null
 ): Promise<void> {
   const validatedTarget = validatePath(target);
-  const validatedPath = validatePath(path);
+  const validatedLinkPath = validatePath(linkPath);
   return (
     // eslint-disable-next-line security/detect-non-literal-fs-filename -- paths are validated by validatePath
-    symlink(validatedTarget, validatedPath, type)
+    symlink(validatedTarget, validatedLinkPath, type)
   );
 }

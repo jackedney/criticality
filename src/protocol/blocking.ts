@@ -124,7 +124,9 @@ export type BlockingErrorCode =
   | 'ALREADY_RESOLVED' // Blocking has already been resolved
   | 'INVALID_PHASE' // Cannot block in Complete phase
   | 'INVALID_RESPONSE' // Response not in available options
-  | 'NO_TIMEOUT'; // No timeout configured for this blocking
+  | 'NO_TIMEOUT' // No timeout configured for this blocking
+  | 'TIMEOUT_ESCALATION_NEEDED' // Timeout requires escalation handling
+  | 'LEDGER_REQUIRED_FOR_DEFAULT_STRATEGY'; // Ledger required for default timeout strategy
 
 /**
  * Error information for blocking operations.
@@ -568,7 +570,7 @@ export function handleTimeout(
       return {
         success: false,
         error: createBlockingError(
-          'NOT_BLOCKING', // Reusing code; could define specific TIMEOUT_ESCALATION
+          'TIMEOUT_ESCALATION_NEEDED',
           `Timeout on blocking query '${record.id}' requires escalation`
         ),
       };
@@ -590,7 +592,7 @@ export function handleTimeout(
         return {
           success: false,
           error: createBlockingError(
-            'NOT_BLOCKING', // Reusing code
+            'LEDGER_REQUIRED_FOR_DEFAULT_STRATEGY',
             'Ledger required for "default" timeout strategy'
           ),
         };

@@ -224,8 +224,10 @@ export class TypedMap<K, V> {
    * });
    * ```
    */
-  forEach(callbackfn: (value: V, key: K, map: Map<K, V>) => void, thisArg?: unknown): void {
-    this.map.forEach(callbackfn, thisArg);
+  forEach(callbackfn: (value: V, key: K, map: TypedMap<K, V>) => void, thisArg?: unknown): void {
+    this.map.forEach((value, key) => {
+      callbackfn(value, key, this);
+    }, thisArg);
   }
 
   /**
@@ -273,10 +275,15 @@ export class TypedMap<K, V> {
    * ```
    */
   toObject(): Record<string, V> {
-    const obj: Record<string, V> = {};
+    const obj: Record<string, V> = Object.create(null);
     const entriesArray = Array.from(this.map.entries());
     for (const [key, value] of entriesArray) {
-      obj[String(key)] = value;
+      const stringKey = String(key);
+      if (stringKey !== '__proto__' && stringKey !== 'constructor') {
+        // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
+        // eslint-disable-next-line security/detect-object-injection
+        obj[stringKey] = value as V;
+      }
     }
     return obj;
   }

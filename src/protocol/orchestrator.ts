@@ -327,6 +327,12 @@ export async function executeTick(context: TickContext, statePath: string): Prom
 
   // Check if in blocking state
   if (substate.kind === 'Blocking') {
+    // Warn about unexpected blocking in Complete phase
+    if (snapshot.state.phase === 'Complete') {
+      // eslint-disable-next-line no-console
+      console.warn(`⚠ Unexpected blocking state in Complete phase. Query: "${substate.query}"`);
+    }
+
     // Build a BlockingRecord for timeout checking
     const blockingRecordBase: BlockingRecord = {
       id: `blocking-${snapshot.state.phase}`,
