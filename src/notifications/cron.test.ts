@@ -6,8 +6,8 @@ describe('parseCronExpression', () => {
     const parsed = parseCronExpression('0 9 * * *');
 
     expect(parsed.minute.type).toBe('minute');
-    expect(parsed.minute.values).toContain(0);
-    expect(parsed.hour.values).toContain(9);
+    expect(parsed.minute.values.has(0)).toBe(true);
+    expect(parsed.hour.values.has(9)).toBe(true);
     expect(parsed.day.values.size).toBe(31);
     expect(parsed.month.values.size).toBe(12);
     expect(parsed.weekday.values.size).toBe(7);
@@ -16,47 +16,47 @@ describe('parseCronExpression', () => {
   it('should parse expression with step', () => {
     const parsed = parseCronExpression('0 */4 * * *');
 
-    expect(parsed.minute.values).toContain(0);
-    expect(parsed.hour.values).toContain(0);
-    expect(parsed.hour.values).toContain(4);
-    expect(parsed.hour.values).toContain(8);
-    expect(parsed.hour.values).toContain(12);
-    expect(parsed.hour.values).toContain(16);
-    expect(parsed.hour.values).toContain(20);
+    expect(parsed.minute.values.has(0)).toBe(true);
+    expect(parsed.hour.values.has(0)).toBe(true);
+    expect(parsed.hour.values.has(4)).toBe(true);
+    expect(parsed.hour.values.has(8)).toBe(true);
+    expect(parsed.hour.values.has(12)).toBe(true);
+    expect(parsed.hour.values.has(16)).toBe(true);
+    expect(parsed.hour.values.has(20)).toBe(true);
   });
 
   it('should parse expression with range', () => {
     const parsed = parseCronExpression('30 9-17 * * *');
 
-    expect(parsed.minute.values).toContain(30);
-    expect(parsed.hour.values).toContain(9);
-    expect(parsed.hour.values).toContain(10);
-    expect(parsed.hour.values).toContain(17);
+    expect(parsed.minute.values.has(30)).toBe(true);
+    expect(parsed.hour.values.has(9)).toBe(true);
+    expect(parsed.hour.values.has(10)).toBe(true);
+    expect(parsed.hour.values.has(17)).toBe(true);
   });
 
   it('should parse expression with weekday range', () => {
     const parsed = parseCronExpression('0 9 * * 1-5');
 
     expect(parsed.weekday.values.size).toBe(5);
-    expect(parsed.weekday.values).toContain(1);
-    expect(parsed.weekday.values).toContain(5);
-    expect(parsed.weekday.values).not.toContain(0);
-    expect(parsed.weekday.values).not.toContain(6);
+    expect(parsed.weekday.values.has(1)).toBe(true);
+    expect(parsed.weekday.values.has(5)).toBe(true);
+    expect(parsed.weekday.values.has(0)).toBe(false);
+    expect(parsed.weekday.values.has(6)).toBe(false);
   });
 
   it('should parse expression with list', () => {
     const parsed = parseCronExpression('0 9,12,18 * * *');
 
-    expect(parsed.hour.values).toContain(9);
-    expect(parsed.hour.values).toContain(12);
-    expect(parsed.hour.values).toContain(18);
+    expect(parsed.hour.values.has(9)).toBe(true);
+    expect(parsed.hour.values.has(12)).toBe(true);
+    expect(parsed.hour.values.has(18)).toBe(true);
   });
 
   it('should parse expression with multiple patterns', () => {
     const parsed = parseCronExpression('15,45 9-17 * * 1-5');
 
-    expect(parsed.minute.values).toContain(15);
-    expect(parsed.minute.values).toContain(45);
+    expect(parsed.minute.values.has(15)).toBe(true);
+    expect(parsed.minute.values.has(45)).toBe(true);
     expect(parsed.hour.values.size).toBe(9);
     expect(parsed.weekday.values.size).toBe(5);
   });
@@ -124,8 +124,8 @@ describe('getNextOccurrence', () => {
     const fromDate = new Date('2024-02-07T08:00:00.000Z');
     const next = getNextOccurrence('0 9 * * *', fromDate);
 
-    expect(next.getHours()).toBe(9);
-    expect(next.getMinutes()).toBe(0);
+    expect(next.getUTCHours()).toBe(9);
+    expect(next.getUTCMinutes()).toBe(0);
     expect(next.getTime()).toBeGreaterThan(fromDate.getTime());
   });
 
@@ -133,25 +133,25 @@ describe('getNextOccurrence', () => {
     const fromDate = new Date('2024-02-07T08:30:00.000Z');
     const next = getNextOccurrence('0 * * * *', fromDate);
 
-    expect(next.getHours()).toBe(9);
-    expect(next.getMinutes()).toBe(0);
-    expect(next.getDate()).toBe(fromDate.getDate());
+    expect(next.getUTCHours()).toBe(9);
+    expect(next.getUTCMinutes()).toBe(0);
+    expect(next.getUTCDate()).toBe(fromDate.getUTCDate());
   });
 
   it('should return next occurrence for every 4 hours', () => {
     const fromDate = new Date('2024-02-07T08:00:00.000Z');
     const next = getNextOccurrence('0 */4 * * *', fromDate);
 
-    expect(next.getHours()).toBe(12);
-    expect(next.getMinutes()).toBe(0);
+    expect(next.getUTCHours()).toBe(12);
+    expect(next.getUTCMinutes()).toBe(0);
   });
 
   it('should return next occurrence for weekday schedule', () => {
     const fromDate = new Date('2024-02-07T09:00:00.000Z');
     const next = getNextOccurrence('0 9 * * 1-5', fromDate);
 
-    expect(next.getHours()).toBe(9);
-    expect(next.getMinutes()).toBe(0);
+    expect(next.getUTCHours()).toBe(9);
+    expect(next.getUTCMinutes()).toBe(0);
     expect(next.getTime()).toBeGreaterThan(fromDate.getTime());
   });
 
@@ -159,7 +159,7 @@ describe('getNextOccurrence', () => {
     const fromDate = new Date('2024-02-09T09:00:00.000Z');
     const next = getNextOccurrence('0 9 * * 1-5', fromDate);
 
-    const weekday = next.getDay();
+    const weekday = next.getUTCDay();
     expect(weekday).toBeGreaterThanOrEqual(1);
     expect(weekday).toBeLessThanOrEqual(5);
     expect(next.getTime()).toBeGreaterThan(fromDate.getTime());
@@ -169,72 +169,72 @@ describe('getNextOccurrence', () => {
     const fromDate = new Date('2024-02-07T23:30:00.000Z');
     const next = getNextOccurrence('0 */4 * * *', fromDate);
 
-    expect(next.getHours()).toBe(0);
-    expect(next.getMinutes()).toBe(0);
-    expect(next.getDate()).toBe(8);
+    expect(next.getUTCHours()).toBe(0);
+    expect(next.getUTCMinutes()).toBe(0);
+    expect(next.getUTCDate()).toBe(8);
   });
 
   it('should handle month boundary crossing', () => {
     const fromDate = new Date('2024-02-29T23:59:00.000Z');
     const next = getNextOccurrence('0 9 * * *', fromDate);
 
-    expect(next.getMonth()).toBe(2);
-    expect(next.getHours()).toBe(9);
-    expect(next.getMinutes()).toBe(0);
+    expect(next.getUTCMonth()).toBe(2);
+    expect(next.getUTCHours()).toBe(9);
+    expect(next.getUTCMinutes()).toBe(0);
   });
 
   it('should handle year boundary crossing', () => {
     const fromDate = new Date('2023-12-31T23:59:00.000Z');
     const next = getNextOccurrence('0 9 * * *', fromDate);
 
-    expect(next.getFullYear()).toBe(2024);
-    expect(next.getMonth()).toBe(0);
-    expect(next.getHours()).toBe(9);
-    expect(next.getMinutes()).toBe(0);
+    expect(next.getUTCFullYear()).toBe(2024);
+    expect(next.getUTCMonth()).toBe(0);
+    expect(next.getUTCHours()).toBe(9);
+    expect(next.getUTCMinutes()).toBe(0);
   });
 
   it('should return same day if time is before', () => {
     const fromDate = new Date('2024-02-07T08:00:00.000Z');
     const next = getNextOccurrence('0 9 * * *', fromDate);
 
-    expect(next.getDate()).toBe(fromDate.getDate());
-    expect(next.getMonth()).toBe(fromDate.getMonth());
-    expect(next.getFullYear()).toBe(fromDate.getFullYear());
+    expect(next.getUTCDate()).toBe(fromDate.getUTCDate());
+    expect(next.getUTCMonth()).toBe(fromDate.getUTCMonth());
+    expect(next.getUTCFullYear()).toBe(fromDate.getUTCFullYear());
   });
 
   it('should return next day if time has passed', () => {
     const fromDate = new Date('2024-02-07T10:00:00.000Z');
     const next = getNextOccurrence('0 9 * * *', fromDate);
 
-    expect(next.getDate()).toBe(8);
-    expect(next.getHours()).toBe(9);
-    expect(next.getMinutes()).toBe(0);
+    expect(next.getUTCDate()).toBe(8);
+    expect(next.getUTCHours()).toBe(9);
+    expect(next.getUTCMinutes()).toBe(0);
   });
 
   it('should handle complex expression', () => {
     const fromDate = new Date('2024-02-07T08:00:00.000Z');
     const next = getNextOccurrence('30 9,15 * * 1-5', fromDate);
 
-    expect(next.getMinutes()).toBe(30);
-    expect([9, 15]).toContain(next.getHours());
+    expect(next.getUTCMinutes()).toBe(30);
+    expect([9, 15]).toContain(next.getUTCHours());
   });
 
   it('should handle February 29th for non-leap year', () => {
     const fromDate = new Date('2023-02-28T09:00:00.000Z');
     const next = getNextOccurrence('0 9 29 * *', fromDate);
 
-    expect(next.getDate()).toBe(29);
-    expect(next.getMonth()).toBe(2);
-    expect(next.getHours()).toBe(9);
-    expect(next.getFullYear()).toBe(2023);
+    expect(next.getUTCDate()).toBe(29);
+    expect(next.getUTCMonth()).toBe(2);
+    expect(next.getUTCHours()).toBe(9);
+    expect(next.getUTCFullYear()).toBe(2023);
   });
 
   it('should handle February 29th for leap year', () => {
     const fromDate = new Date('2024-02-28T09:00:00.000Z');
     const next = getNextOccurrence('0 9 29 * *', fromDate);
 
-    expect(next.getDate()).toBe(29);
-    expect(next.getMonth()).toBe(1);
+    expect(next.getUTCDate()).toBe(29);
+    expect(next.getUTCMonth()).toBe(1);
   });
 
   it('should use current time when no date provided', () => {
@@ -248,26 +248,26 @@ describe('getNextOccurrence', () => {
     const fromDate = new Date('2024-02-07T08:15:00.000Z');
     const next = getNextOccurrence('30 * * * *', fromDate);
 
-    expect(next.getMinutes()).toBe(30);
-    expect(next.getHours()).toBe(8);
+    expect(next.getUTCMinutes()).toBe(30);
+    expect(next.getUTCHours()).toBe(8);
   });
 
   it('should handle specific day of month', () => {
     const fromDate = new Date('2024-02-07T09:00:00.000Z');
     const next = getNextOccurrence('0 9 15 * *', fromDate);
 
-    expect(next.getDate()).toBe(15);
-    expect(next.getHours()).toBe(9);
-    expect(next.getMinutes()).toBe(0);
+    expect(next.getUTCDate()).toBe(15);
+    expect(next.getUTCHours()).toBe(9);
+    expect(next.getUTCMinutes()).toBe(0);
   });
 
   it('should handle specific month', () => {
     const fromDate = new Date('2024-02-07T09:00:00.000Z');
     const next = getNextOccurrence('0 9 1 4 *', fromDate);
 
-    expect(next.getMonth()).toBe(3);
-    expect(next.getDate()).toBe(1);
-    expect(next.getHours()).toBe(9);
+    expect(next.getUTCMonth()).toBe(3);
+    expect(next.getUTCDate()).toBe(1);
+    expect(next.getUTCHours()).toBe(9);
   });
 
   it('should throw error for invalid cron expression', () => {
@@ -281,7 +281,7 @@ describe('getNextOccurrence', () => {
     const fromDate = new Date('2024-02-07T08:20:00.000Z');
     const next = getNextOccurrence('0,30 * * * *', fromDate);
 
-    expect([0, 30]).toContain(next.getMinutes());
+    expect([0, 30]).toContain(next.getUTCMinutes());
     expect(next.getTime()).toBeGreaterThan(fromDate.getTime());
   });
 
@@ -289,8 +289,8 @@ describe('getNextOccurrence', () => {
     const fromDate = new Date('2024-02-07T08:00:00.000Z');
     const next = getNextOccurrence('0 9-17/2 * * *', fromDate);
 
-    expect(next.getHours()).toBe(9);
-    expect(next.getMinutes()).toBe(0);
+    expect(next.getUTCHours()).toBe(9);
+    expect(next.getUTCMinutes()).toBe(0);
   });
 
   describe('POSIX OR semantics for day-of-month and day-of-week', () => {
@@ -298,11 +298,11 @@ describe('getNextOccurrence', () => {
       const fromDate = new Date('2024-02-14T08:00:00.000Z');
       const next = getNextOccurrence('0 9 15 * 1', fromDate);
 
-      expect(next.getHours()).toBe(9);
-      expect(next.getMinutes()).toBe(0);
+      expect(next.getUTCHours()).toBe(9);
+      expect(next.getUTCMinutes()).toBe(0);
 
-      const day = next.getDate();
-      const weekday = next.getDay();
+      const day = next.getUTCDate();
+      const weekday = next.getUTCDay();
 
       expect(day === 15 || weekday === 1).toBe(true);
     });
@@ -311,30 +311,30 @@ describe('getNextOccurrence', () => {
       const fromDate = new Date('2024-02-10T08:00:00.000Z');
       const next = getNextOccurrence('0 9 15 * 1', fromDate);
 
-      expect(next.getHours()).toBe(9);
-      expect(next.getMinutes()).toBe(0);
-      expect(next.getDate()).toBe(12);
-      expect(next.getDay()).toBe(1);
+      expect(next.getUTCHours()).toBe(9);
+      expect(next.getUTCMinutes()).toBe(0);
+      expect(next.getUTCDate()).toBe(12);
+      expect(next.getUTCDay()).toBe(1);
     });
 
     it('should trigger on 15th if it comes before Monday', () => {
       const fromDate = new Date('2024-02-14T08:00:00.000Z');
       const next = getNextOccurrence('0 9 15 * 1', fromDate);
 
-      expect(next.getHours()).toBe(9);
-      expect(next.getMinutes()).toBe(0);
-      expect(next.getDate()).toBe(15);
+      expect(next.getUTCHours()).toBe(9);
+      expect(next.getUTCMinutes()).toBe(0);
+      expect(next.getUTCDate()).toBe(15);
     });
 
     it('should trigger on any Friday or the 1st', () => {
       const fromDate = new Date('2024-02-01T09:00:00.000Z');
       const next = getNextOccurrence('0 9 1 * 5', fromDate);
 
-      expect(next.getHours()).toBe(9);
-      expect(next.getMinutes()).toBe(0);
+      expect(next.getUTCHours()).toBe(9);
+      expect(next.getUTCMinutes()).toBe(0);
 
-      const day = next.getDate();
-      const weekday = next.getDay();
+      const day = next.getUTCDate();
+      const weekday = next.getUTCDay();
 
       expect(day === 1 || weekday === 5).toBe(true);
     });
@@ -343,9 +343,9 @@ describe('getNextOccurrence', () => {
       const fromDate = new Date('2024-02-07T08:00:00.000Z');
       const next = getNextOccurrence('0 9 * * *', fromDate);
 
-      expect(next.getHours()).toBe(9);
-      expect(next.getMinutes()).toBe(0);
-      expect(next.getDate()).toBe(7);
+      expect(next.getUTCHours()).toBe(9);
+      expect(next.getUTCMinutes()).toBe(0);
+      expect(next.getUTCDate()).toBe(7);
       expect(next.getTime()).toBeGreaterThan(fromDate.getTime());
     });
 
@@ -353,29 +353,29 @@ describe('getNextOccurrence', () => {
       const fromDate = new Date('2024-02-07T09:00:00.000Z');
       const next = getNextOccurrence('0 9 15 * *', fromDate);
 
-      expect(next.getHours()).toBe(9);
-      expect(next.getMinutes()).toBe(0);
-      expect(next.getDate()).toBe(15);
+      expect(next.getUTCHours()).toBe(9);
+      expect(next.getUTCMinutes()).toBe(0);
+      expect(next.getUTCDate()).toBe(15);
     });
 
     it('should handle only weekday restricted', () => {
       const fromDate = new Date('2024-02-06T09:00:00.000Z');
       const next = getNextOccurrence('0 9 * * 1', fromDate);
 
-      expect(next.getHours()).toBe(9);
-      expect(next.getMinutes()).toBe(0);
-      expect(next.getDay()).toBe(1);
+      expect(next.getUTCHours()).toBe(9);
+      expect(next.getUTCMinutes()).toBe(0);
+      expect(next.getUTCDay()).toBe(1);
     });
 
     it('should handle multiple day-of-month values with weekday', () => {
       const fromDate = new Date('2024-02-01T08:00:00.000Z');
       const next = getNextOccurrence('0 9 1,15 * 3', fromDate);
 
-      expect(next.getHours()).toBe(9);
-      expect(next.getMinutes()).toBe(0);
+      expect(next.getUTCHours()).toBe(9);
+      expect(next.getUTCMinutes()).toBe(0);
 
-      const day = next.getDate();
-      const weekday = next.getDay();
+      const day = next.getUTCDate();
+      const weekday = next.getUTCDay();
 
       expect(day === 1 || day === 15 || weekday === 3).toBe(true);
     });
@@ -384,11 +384,11 @@ describe('getNextOccurrence', () => {
       const fromDate = new Date('2024-02-01T08:00:00.000Z');
       const next = getNextOccurrence('0 9 10-20 * 5', fromDate);
 
-      expect(next.getHours()).toBe(9);
-      expect(next.getMinutes()).toBe(0);
+      expect(next.getUTCHours()).toBe(9);
+      expect(next.getUTCMinutes()).toBe(0);
 
-      const day = next.getDate();
-      const weekday = next.getDay();
+      const day = next.getUTCDate();
+      const weekday = next.getUTCDay();
 
       expect((day >= 10 && day <= 20) || weekday === 5).toBe(true);
     });
@@ -397,11 +397,11 @@ describe('getNextOccurrence', () => {
       const fromDate = new Date('2024-02-01T08:00:00.000Z');
       const next = getNextOccurrence('0 9 1 * 1-5', fromDate);
 
-      expect(next.getHours()).toBe(9);
-      expect(next.getMinutes()).toBe(0);
+      expect(next.getUTCHours()).toBe(9);
+      expect(next.getUTCMinutes()).toBe(0);
 
-      const day = next.getDate();
-      const weekday = next.getDay();
+      const day = next.getUTCDate();
+      const weekday = next.getUTCDay();
 
       expect(day === 1 || (weekday >= 1 && weekday <= 5)).toBe(true);
     });

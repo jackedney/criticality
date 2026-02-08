@@ -198,15 +198,15 @@ export function getNextOccurrence(cronExpr: string, fromDate: Date = new Date())
   while (iterations < searchLimit) {
     iterations++;
 
-    current.setMinutes(current.getMinutes() + 1);
+    current.setUTCMinutes(current.getUTCMinutes() + 1);
 
     if (
-      parsed.minute.values.has(current.getMinutes()) &&
-      parsed.hour.values.has(current.getHours()) &&
-      parsed.month.values.has(current.getMonth() + 1)
+      parsed.minute.values.has(current.getUTCMinutes()) &&
+      parsed.hour.values.has(current.getUTCHours()) &&
+      parsed.month.values.has(current.getUTCMonth() + 1)
     ) {
-      const day = current.getDate();
-      const weekday = current.getDay();
+      const day = current.getUTCDate();
+      const weekday = current.getUTCDay();
 
       let dayMatches = false;
 
@@ -221,7 +221,7 @@ export function getNextOccurrence(cronExpr: string, fromDate: Date = new Date())
       }
 
       if (dayMatches && current.getTime() > fromDate.getTime()) {
-        current.setSeconds(0, 0);
+        current.setUTCSeconds(0, 0);
         return current;
       }
     }
