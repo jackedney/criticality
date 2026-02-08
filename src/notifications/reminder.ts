@@ -12,7 +12,7 @@ import type { BlockingRecord } from '../protocol/blocking.js';
 import type { BlockingSubstate } from '../protocol/types.js';
 import type { NotificationService } from './types.js';
 import { getNextOccurrence } from './cron.js';
-import { writeFile, mkdir, readFile } from 'node:fs/promises';
+import { writeFile, mkdir, readFile, rename } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
 import * as path from 'node:path';
 
@@ -109,10 +109,11 @@ export class ReminderScheduler {
         const data = await readFile(this.statePath, 'utf-8');
         const loaded = JSON.parse(data) as Partial<ReminderState>;
 
+        this.enabled = loaded.enabled ?? this.enabled;
         this.state = {
           last_sent: loaded.last_sent,
           next_scheduled: loaded.next_scheduled,
-          enabled: loaded.enabled ?? this.enabled,
+          enabled: this.enabled,
         };
       } catch (error) {
         const errorMessage = error instanceof Error ? error.message : String(error);
@@ -308,31 +309,44 @@ export class ReminderScheduler {
 
   /**
    * Enables reminders.
+   *
+   * Persists the enabled state to disk.
    */
-  enable(): void {
+  async enable(): Promise<void> {
     this.enabled = true;
     this.state = { ...this.state, enabled: true };
+    await this.saveState();
   }
 
   /**
    * Disables reminders.
+   *
+   * Persists the disabled state to disk.
    */
-  disable(): void {
+  async disable(): Promise<void> {
     this.enabled = false;
     this.state = { ...this.state, enabled: false };
+    await this.saveState();
   }
 
   /**
    * Saves the current reminder state to disk.
    *
+   * Uses atomic write pattern: writes to temp file first,
+   * then renames to actual path. This prevents corruption
+   * if power is lost during write.
+   *
    * @throws Error if state cannot be saved.
    */
   private async saveState(): Promise<void> {
     const serialized = JSON.stringify(this.state, null, 2);
+    const tmpPath = `${this.statePath}.tmp`;
 
     try {
       // eslint-disable-next-line security/detect-non-literal-fs-filename
-      await writeFile(this.statePath, serialized, 'utf-8');
+      await writeFile(tmpPath, serialized, 'utf-8');
+      // eslint-disable-next-line security/detect-non-literal-fs-filename
+      await rename(tmpPath, this.statePath);
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error);
       throw new Error(`Failed to save reminder state: ${errorMessage}`);

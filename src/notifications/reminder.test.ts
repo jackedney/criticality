@@ -254,17 +254,75 @@ describe('ReminderScheduler', () => {
 
       expect(disabledScheduler.isEnabled()).toBe(false);
 
-      disabledScheduler.enable();
+      await disabledScheduler.enable();
 
       expect(disabledScheduler.isEnabled()).toBe(true);
     });
 
-    it('should disable reminders', () => {
+    it('should disable reminders', async () => {
       expect(scheduler.isEnabled()).toBe(true);
 
-      scheduler.disable();
+      await scheduler.disable();
 
       expect(scheduler.isEnabled()).toBe(false);
+    });
+
+    it('should persist enabled state after enable', async () => {
+      const customStateDir = await mkdtemp(path.join(tmpdir(), 'enable-test-'));
+
+      try {
+        const disabledScheduler = new ReminderScheduler({
+          cronExpression: '0 9 * * *',
+          notificationService: mockNotificationService,
+          stateDir: customStateDir,
+          enabled: false,
+        });
+
+        await disabledScheduler.initialize();
+        await disabledScheduler.enable();
+
+        const newScheduler = new ReminderScheduler({
+          cronExpression: '0 9 * * *',
+          notificationService: mockNotificationService,
+          stateDir: customStateDir,
+          enabled: false,
+        });
+
+        await newScheduler.initialize();
+
+        expect(newScheduler.isEnabled()).toBe(true);
+      } finally {
+        await rm(customStateDir, { recursive: true, force: true });
+      }
+    });
+
+    it('should persist disabled state after disable', async () => {
+      const customStateDir = await mkdtemp(path.join(tmpdir(), 'disable-test-'));
+
+      try {
+        const customScheduler = new ReminderScheduler({
+          cronExpression: '0 9 * * *',
+          notificationService: mockNotificationService,
+          stateDir: customStateDir,
+          enabled: true,
+        });
+
+        await customScheduler.initialize();
+        await customScheduler.disable();
+
+        const newScheduler = new ReminderScheduler({
+          cronExpression: '0 9 * * *',
+          notificationService: mockNotificationService,
+          stateDir: customStateDir,
+          enabled: true,
+        });
+
+        await newScheduler.initialize();
+
+        expect(newScheduler.isEnabled()).toBe(false);
+      } finally {
+        await rm(customStateDir, { recursive: true, force: true });
+      }
     });
   });
 
