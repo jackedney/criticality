@@ -28,21 +28,8 @@ import type {
   NotificationService as INotificationService,
   NotificationSendResult,
 } from './types.js';
+import type { ArtifactType } from '../protocol/transitions.js';
 import * as path from 'node:path';
-
-// Artifact type for casts - using correct ArtifactType from transitions.ts
-type ArtifactType =
-  | 'spec'
-  | 'latticeCode'
-  | 'witnesses'
-  | 'contracts'
-  | 'validatedStructure'
-  | 'implementedCode'
-  | 'verifiedCode'
-  | 'finalArtifact'
-  | 'contradictionReport'
-  | 'structuralDefectReport'
-  | 'clusterFailureReport';
 
 // Type for reminder state file
 interface ReminderState {
