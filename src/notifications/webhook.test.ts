@@ -479,25 +479,19 @@ describe('WebhookSender', () => {
     });
 
     it('should send test ping when ping option is enabled', async () => {
-      const originalFetch = global.fetch;
-      const pingMockFetch = vi.fn();
-      global.fetch = pingMockFetch as unknown as typeof fetch;
-
-      pingMockFetch.mockResolvedValueOnce({
+      mockFetch.mockResolvedValueOnce({
         ok: true,
         status: 200,
       });
 
       const result = await validateWebhookEndpoint('https://example.com/webhook', { ping: true });
 
-      global.fetch = originalFetch;
-
       expect(result.success).toBe(true);
       if (result.success) {
         expect(result.message).toContain('validated successfully');
         expect(result.message).toContain('200');
       }
-      expect(pingMockFetch).toHaveBeenCalledWith(
+      expect(mockFetch).toHaveBeenCalledWith(
         'https://example.com/webhook',
         expect.objectContaining({
           method: 'POST',
@@ -507,16 +501,10 @@ describe('WebhookSender', () => {
     });
 
     it('should return failure when ping fails', async () => {
-      const originalFetch = global.fetch;
-      const pingMockFetch = vi.fn();
-      global.fetch = pingMockFetch as unknown as typeof fetch;
-
       const networkError = new Error('ECONNREFUSED');
-      pingMockFetch.mockRejectedValueOnce(networkError);
+      mockFetch.mockRejectedValueOnce(networkError);
 
       const result = await validateWebhookEndpoint('https://example.com/webhook', { ping: true });
-
-      global.fetch = originalFetch;
 
       expect(result.success).toBe(false);
       if (!result.success) {
@@ -526,17 +514,11 @@ describe('WebhookSender', () => {
     });
 
     it('should return failure when ping times out', async () => {
-      const originalFetch = global.fetch;
-      const pingMockFetch = vi.fn();
-      global.fetch = pingMockFetch as unknown as typeof fetch;
-
       const timeoutError = new Error('Request timeout');
       timeoutError.name = 'AbortError';
-      pingMockFetch.mockRejectedValueOnce(timeoutError);
+      mockFetch.mockRejectedValueOnce(timeoutError);
 
       const result = await validateWebhookEndpoint('https://example.com/webhook', { ping: true });
-
-      global.fetch = originalFetch;
 
       expect(result.success).toBe(false);
       if (!result.success) {
