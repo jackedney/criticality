@@ -23,11 +23,12 @@ This guide covers all 46 review comments from the CodeRabbit review, organized b
 The loops use `_a.length` which is `undefined` on Maps, causing all loop conditions to fail silently. Totals remain at zero, `hasData()` returns false, and phase data stays uninitialized.
 
 **Fix:**
+
 ```diff
 -        for (var _i = 0, _a = this.phases; _i < _a.length; _i++) {
 -            var _b = _a[_i], _ = _b[0], phaseData = _b[1];
 +        for (const phaseData of this.phases.values()) {
-             totalModelCalls += phaseData.modelCalls;
+              totalModelCalls += phaseData.modelCalls;
              totalPromptTokens += phaseData.promptTokens;
              totalCompletionTokens += phaseData.completionTokens;
              totalExecutionTimeMs += phaseData.executionTimeMs;
@@ -58,7 +59,9 @@ The loops use `_a.length` which is `undefined` on Maps, causing all loop conditi
 - `src/cli/utils/displayUtils.js`
 
 **Fix:**
+
 1. Update `.gitignore`:
+
 ```gitignore
 # Add these lines
 src/**/*.js
@@ -66,12 +69,14 @@ src/**/*.js.map
 !src/**/*.config.js
 ```
 
-2. Remove tracked compiled files:
+1. Remove tracked compiled files:
+
 ```bash
 git rm --cached src/**/*.js
 ```
 
-3. Ensure build output goes to `dist/`:
+1. Ensure build output goes to `dist/`:
+
 ```bash
 npm run build  # Verify output goes to dist/
 ```
@@ -87,6 +92,7 @@ npm run build  # Verify output goes to dist/
 **Issue:** Schema defines `block`, `complete`, `error`, `phase_change` but examples use `on_block`, `on_complete`, etc.
 
 **Fix:** Update all documentation to use canonical event names (without `on_` prefix):
+
 ```diff
 - events = ["on_block", "on_complete", "on_error"]
 + events = ["block", "complete", "error", "phase_change"]
@@ -99,6 +105,7 @@ npm run build  # Verify output goes to dist/
 **Issue:** `createOrchestrator` is called without `notificationService`, so resume operations won't emit notifications.
 
 **Fix in `src/cli/operations.ts`:**
+
 ```typescript
 // Add public getter
 public get notificationService(): INotificationService | null {
@@ -107,6 +114,7 @@ public get notificationService(): INotificationService | null {
 ```
 
 **Fix in `src/cli/commands/resume.ts`:**
+
 ```typescript
 const orchestrator = createOrchestrator({
   statePath,
@@ -122,6 +130,7 @@ const orchestrator = createOrchestrator({
 **Issue:** `telemetry` and `telemetryCollector` at module scope persist across invocations.
 
 **Fix:** Move into function scope or encapsulate in a class:
+
 ```typescript
 export async function handleResumeCommand(options: ResumeOptions): Promise<void> {
   // Move these inside the function
@@ -152,6 +161,7 @@ export async function handleResumeCommand(options: ResumeOptions): Promise<void>
 **Issue:** Code uses AND semantics when both day-of-month and day-of-week are restricted, but POSIX cron uses OR.
 
 **Fix:**
+
 ```typescript
 let dayMatches: boolean;
 if (dayRestricted && weekdayRestricted) {
@@ -173,13 +183,16 @@ if (dayRestricted && weekdayRestricted) {
 **Issue:** Tests use UTC dates but assert with local time methods, causing failures in non-UTC environments.
 
 **Fix:** Either:
+
 1. Use UTC methods for assertions:
+
 ```typescript
 expect(next.getUTCDate()).toBe(fromDate.getUTCDate());
 expect(next.getUTCHours()).toBe(9);
 ```
 
-2. Or construct dates in local time:
+1. Or construct dates in local time:
+
 ```typescript
 const fromDate = new Date(2024, 1, 7, 8, 0, 0); // Feb 7, 2024, 8:00 AM local
 ```
@@ -191,6 +204,7 @@ const fromDate = new Date(2024, 1, 7, 8, 0, 0); // Feb 7, 2024, 8:00 AM local
 **Issue:** `\x1b` in regex literal violates Biome's `noControlCharactersInRegex`.
 
 **Fix:**
+
 ```typescript
 // Before
 const pattern = /\x1b\[/;
@@ -208,6 +222,7 @@ Apply same fix to `src/cli/utils/displayUtils.js` Line 83.
 **Issue:** Hard-coded `/tmp` path fails on Windows and causes parallel test collisions.
 
 **Fix:**
+
 ```typescript
 import { tmpdir } from 'os';
 import { mkdtemp } from 'fs/promises';
@@ -232,6 +247,7 @@ Apply similar fix to `src/notifications/integration.test.ts` Line 49.
 **Issue:** When blocking is resolved, `snapshot.blockingQueries` persists unchanged.
 
 **Fix:**
+
 ```javascript
 // After resolving blocking state
 if (resolution) {
@@ -248,6 +264,7 @@ if (resolution) {
 **Issue:** `validKinds` duplicates `ERROR_KINDS` constant.
 
 **Fix:**
+
 ```javascript
 // Remove local validKinds and use ERROR_KINDS
 import { ERROR_KINDS } from './constants.js';
@@ -268,6 +285,7 @@ function validateError(error) {
 **Issue:** Example shows `[notifications.hooks]` but parser doesn't support it.
 
 **Fix:**
+
 ```toml
 # NOTE: hooks are not supported in the current notification system.
 # [notifications.hooks]
@@ -281,15 +299,14 @@ function validateError(error) {
 **Issue:** Missing language tags and blank lines around fenced code blocks.
 
 **Fix:** Add language specifier and surrounding blank lines:
-```markdown
-Some text here.
 
-```text
-code block content
-```
+    Some text here.
 
-More text here.
-```
+    ```text
+    code block content
+    ```
+
+    More text here.
 
 ---
 
@@ -298,6 +315,7 @@ More text here.
 **Issue:** `fromPhase` captured after tick, so transitions never show.
 
 **Fix:**
+
 ```javascript
 // Before tick
 const fromPhase = orchestrator.state.snapshot.phase;
@@ -321,6 +339,7 @@ Apply same fix to `src/cli/commands/resume.ts`.
 **Issue:** `void validateWebhookEndpoints(cliConfig)` discards rejections.
 
 **Fix:**
+
 ```typescript
 // Option 1: Await
 await validateWebhookEndpoints(cliConfig);
@@ -338,6 +357,7 @@ validateWebhookEndpoints(cliConfig).catch(err => {
 **Issue:** `currentFrame` is never incremented.
 
 **Fix:**
+
 ```typescript
 this.spinnerInterval = setInterval(() => {
   currentFrame = (currentFrame + 1) % frames.length;
@@ -354,6 +374,7 @@ Apply same fix to `src/cli/components/LiveDisplay.js` Line 66.
 **Issue:** Uses `\x1b[?25l` (hide) instead of `\x1b[?25h` (show) on stop.
 
 **Fix:**
+
 ```typescript
 stop() {
   // Show cursor
@@ -371,6 +392,7 @@ Apply same fix to `src/cli/components/LiveDisplay.js` Line 88.
 **Issue:** `enable()` and `disable()` don't call `saveState()`.
 
 **Fix:**
+
 ```typescript
 async enable(): Promise<void> {
   this.state.enabled = true;
@@ -390,6 +412,7 @@ async disable(): Promise<void> {
 **Issue:** Direct file write may corrupt on crash.
 
 **Fix:** Use atomic write pattern:
+
 ```typescript
 import { writeFile, rename } from 'fs/promises';
 
@@ -407,6 +430,7 @@ async saveState(): Promise<void> {
 **Issue:** `as readonly NotificationEvent[]` bypasses validation.
 
 **Fix:**
+
 ```typescript
 const validEvents: NotificationEvent[] = ['block', 'complete', 'error', 'phase_change'];
 
@@ -422,6 +446,7 @@ const events = channelConfig.events.filter(
 **Issue:** `result.nextScheduled` may be undefined when `result.sent` is true.
 
 **Fix:**
+
 ```typescript
 if (result.sent) {
   logger.info('Reminder sent');
@@ -438,6 +463,7 @@ if (result.sent) {
 **Issue:** Only checks `modelCalls`, ignoring execution times.
 
 **Fix:**
+
 ```typescript
 hasData(): boolean {
   return this.totalModelCalls > 0 ||
@@ -453,6 +479,7 @@ hasData(): boolean {
 **Issue:** Persisted telemetry for 'Complete' phase is ignored.
 
 **Fix:**
+
 ```typescript
 const validPhases: ProtocolPhase[] = ['Decompose', 'Analyze', 'Blueprint', 'Construct', 'Validate', 'Complete'];
 ```
@@ -464,6 +491,7 @@ const validPhases: ProtocolPhase[] = ['Decompose', 'Analyze', 'Blueprint', 'Cons
 **Issue:** forEach callback gets internal Map, not TypedMap wrapper.
 
 **Fix:**
+
 ```typescript
 forEach(callback: (value: V, key: K, map: TypedMap<K, V>) => void): void {
   this._map.forEach((value, key) => {
@@ -479,6 +507,7 @@ forEach(callback: (value: V, key: K, map: TypedMap<K, V>) => void): void {
 **Issue:** Dead code - stale check never executes due to early return.
 
 **Fix:** Either remove the block or restructure:
+
 ```javascript
 // Option 1: Remove dead code
 // Delete lines 571-580
@@ -500,6 +529,7 @@ if (isStale && !options.allowStaleState) {
 **Issue:** `frames[0]` could be undefined with `noUncheckedIndexedAccess`.
 
 **Fix:**
+
 ```typescript
 const frame = frames[this.frameIndex] ?? '⠋';
 ```
@@ -511,6 +541,7 @@ const frame = frames[this.frameIndex] ?? '⠋';
 **Issue:** Changes within same kind don't trigger display update.
 
 **Fix:**
+
 ```typescript
 const substateChanged =
   substate.kind !== this.lastSubstate?.kind ||
@@ -524,6 +555,7 @@ const substateChanged =
 **Issue:** "API test failed" classified as `model_failure` not `test_failure`.
 
 **Fix:** Add comment documenting priority or refine matching:
+
 ```typescript
 // Priority order: more specific matches first
 // "test" before "api" to catch "API test failed" as test_failure
@@ -549,6 +581,7 @@ const patterns = [
 **Issue:** Using array matcher on Set.
 
 **Fix:**
+
 ```typescript
 expect(parsed.minute.values.has(0)).toBe(true);
 expect(parsed.hour.values.has(9)).toBe(true);
@@ -561,6 +594,7 @@ expect(parsed.hour.values.has(9)).toBe(true);
 **Issue:** `existsSync` is synchronous.
 
 **Fix:**
+
 ```typescript
 import { stat } from 'fs/promises';
 
@@ -581,6 +615,7 @@ async fileExists(path: string): Promise<boolean> {
 **Issue:** Internal interface duplicates exported type.
 
 **Fix:**
+
 ```typescript
 import { NotificationChannel } from './types.js';
 // Remove internal interface definition
@@ -593,6 +628,7 @@ import { NotificationChannel } from './types.js';
 **Issue:** Mock persists across test suites.
 
 **Fix:**
+
 ```typescript
 let originalFetch: typeof global.fetch;
 
@@ -613,6 +649,7 @@ afterEach(() => {
 **Issue:** URL validated then constructed again.
 
 **Fix:**
+
 ```typescript
 const url = new URL(endpoint); // Validate
 // Reuse url object instead of reconstructing
@@ -626,6 +663,7 @@ const response = await fetch(url, options);
 **Issue:** Unnecessary assertion in else branch.
 
 **Fix:**
+
 ```typescript
 // Remove the assertion - TypeScript already knows it's failure case
 const error = result.error;
@@ -638,6 +676,7 @@ const error = result.error;
 **Issue:** 'Complete' mapped to 'design' silently.
 
 **Fix:**
+
 ```javascript
 case 'Complete':
   console.warn('Unexpected blocking in Complete phase');
@@ -651,6 +690,7 @@ case 'Complete':
 **Issue:** `NOT_BLOCKING` used for multiple error conditions.
 
 **Fix:**
+
 ```javascript
 // Define specific error codes
 const ErrorCodes = {
@@ -667,6 +707,7 @@ const ErrorCodes = {
 **Issue:** `path` parameter shadows `path` module import.
 
 **Fix:**
+
 ```javascript
 function safeSymlink(target, linkPath) {
   // Renamed from 'path' to 'linkPath'
@@ -680,6 +721,7 @@ function safeSymlink(target, linkPath) {
 **Issue:** Dynamic property assignment risks prototype pollution.
 
 **Fix:**
+
 ```javascript
 toObject() {
   const obj = Object.create(null); // No prototype
@@ -700,6 +742,7 @@ toObject() {
 **Issue:** Interface defined but not included in payload.
 
 **Fix:**
+
 ```typescript
 export interface WebhookPayload {
   readonly event: NotificationEvent;
@@ -726,31 +769,31 @@ Based on patterns in this review, the following issues may be raised in follow-u
 
 ### Testing Related
 
-4. **Test coverage for new notification system**: Integration tests may need expansion.
+1. **Test coverage for new notification system**: Integration tests may need expansion.
 
-5. **Mock cleanup patterns**: Apply `afterEach` restore pattern consistently across all test files.
+2. **Mock cleanup patterns**: Apply `afterEach` restore pattern consistently across all test files.
 
-6. **Timezone-independent testing strategy**: Consider using `Date.now` mocks or fixed timezone in CI.
+3. **Timezone-independent testing strategy**: Consider using `Date.now` mocks or fixed timezone in CI.
 
 ### Type Safety
 
-7. **Stricter TypeScript config**: Enable `noUncheckedIndexedAccess` and fix resulting errors.
+1. **Stricter TypeScript config**: Enable `noUncheckedIndexedAccess` and fix resulting errors.
 
-8. **Runtime validation for JSON parsing**: Add Zod or similar validation for deserialized state.
+2. **Runtime validation for JSON parsing**: Add Zod or similar validation for deserialized state.
 
 ### Error Handling
 
-9. **Consistent error classification**: Create centralized error type detection.
+1. **Consistent error classification**: Create centralized error type detection.
 
-10. **Graceful degradation**: Ensure notification failures don't break core protocol execution.
+2. **Graceful degradation**: Ensure notification failures don't break core protocol execution.
 
 ### Documentation
 
-11. **Update README**: Document notification system setup and configuration.
+1. **Update README**: Document notification system setup and configuration.
 
-12. **Add JSDoc comments**: Public APIs should have documentation.
+2. **Add JSDoc comments**: Public APIs should have documentation.
 
-13. **Migration guide**: If hooks are deprecated, document migration path.
+3. **Migration guide**: If hooks are deprecated, document migration path.
 
 ---
 
