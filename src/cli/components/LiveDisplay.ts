@@ -65,6 +65,7 @@ export class LiveDisplay {
   private isRunning = false;
   private isTty: boolean;
   private lastOutput: string = '';
+  private prevLineCount: number = 0;
 
   /**
    * Create a new LiveDisplay instance.
@@ -119,7 +120,7 @@ export class LiveDisplay {
     }
 
     if (this.isTty) {
-      process.stdout.write('\r\x1b[2K');
+      this.clearPreviousLines();
       process.stdout.write('\x1b[?25h');
     }
   }
@@ -167,9 +168,41 @@ export class LiveDisplay {
 
     const output = this.getDisplay();
     if (output !== this.lastOutput) {
+      this.clearPreviousLines();
       this.lastOutput = output;
-      process.stdout.write('\r\x1b[2K' + output);
+      this.prevLineCount = this.countLines(output);
+      process.stdout.write(output);
     }
+  }
+
+  /**
+   * Clear previously rendered lines.
+   */
+  private clearPreviousLines(): void {
+    if (this.prevLineCount === 0) {
+      return;
+    }
+
+    for (let i = 1; i < this.prevLineCount; i++) {
+      process.stdout.write('\x1b[1A');
+    }
+
+    for (let i = 0; i < this.prevLineCount; i++) {
+      process.stdout.write('\r\x1b[2K');
+      if (i < this.prevLineCount - 1) {
+        process.stdout.write('\n');
+      }
+    }
+  }
+
+  /**
+   * Count the number of lines in a string.
+   */
+  private countLines(str: string): number {
+    if (str === '') {
+      return 0;
+    }
+    return str.split('\n').length;
   }
 
   /**
