@@ -168,8 +168,21 @@ function formatHierarchicalState(
   const dimCode = options.colors ? '\x1b[2m' : '';
   const resetCode = options.colors ? '\x1b[0m' : '';
   const greenCode = options.colors ? '\x1b[32m' : '';
+  const redCode = options.colors ? '\x1b[31m' : '';
 
-  const parts: string[] = [greenCode + phase + resetCode];
+  // Determine the substate label for display
+  let substateLabel = 'Active';
+  if (isBlockingSubstate(substate)) {
+    substateLabel = 'Blocked';
+  } else if (isFailedSubstate(substate)) {
+    substateLabel = 'Failed';
+  }
+
+  // Format as "Phase (Substate)" - e.g., "Lattice (Active)" or "Lattice (Blocked)"
+  const substateColor = substateLabel === 'Blocked' ? redCode : greenCode;
+  const phaseWithSubstate = `${greenCode}${phase}${resetCode} (${substateColor}${substateLabel}${resetCode})`;
+
+  const parts: string[] = [phaseWithSubstate];
 
   if (isActiveSubstate(substate)) {
     if (substate.task !== undefined) {
@@ -435,7 +448,7 @@ async function renderStatus(
     options
   );
 
-  let statusText = `Current: ${hierarchicalState}`;
+  let statusText = `Phase: ${hierarchicalState}`;
   let additionalInfo = '';
 
   if (snapshot.state.phase === 'Complete') {
