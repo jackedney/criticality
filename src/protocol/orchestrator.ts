@@ -600,7 +600,14 @@ export async function createOrchestrator(options: OrchestratorOptions): Promise<
    * Add a blocking resolution.
    */
   function addResolution(response: string): void {
-    const queryId = `blocking-${currentSnapshot.state.phase}`;
+    const currentPhase = currentSnapshot.state.phase;
+
+    const blockingQuery = currentSnapshot.blockingQueries.find(
+      (q) => q.phase === currentPhase && !q.resolved
+    );
+
+    const queryId = blockingQuery?.id ?? `blocking-${currentPhase}`;
+
     pendingResolutions.push({
       queryId,
       response,
