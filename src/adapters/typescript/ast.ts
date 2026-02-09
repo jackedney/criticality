@@ -105,6 +105,11 @@ type FunctionLike = FunctionDeclaration | MethodDeclaration | ArrowFunction | Fu
 const TODO_PATTERNS = [/throw\s+new\s+Error\s*\(\s*['"]TODO['"]\s*\)/, /\/\/\s*todo!\s*\(\s*\)/i];
 
 /**
+ * Regex for checking for todo!() macro call in raw text.
+ */
+export const TODO_MACRO_REGEX = /todo!/i;
+
+/**
  * Singleton project for validation to avoid repeated initialization overhead.
  * Using in-memory file system for speed.
  */
@@ -759,6 +764,14 @@ export function findTodoFunctions(project: Project): TodoFunction[] {
     // Skip node_modules and declaration files
     const filePath = sourceFile.getFilePath();
     if (filePath.includes('node_modules') || filePath.endsWith('.d.ts')) {
+      continue;
+    }
+
+    // Optimization: Skip files that don't contain any TODO markers in their text.
+    // This avoids expensive AST parsing and traversal for the vast majority of completed files.
+    // Matches logic in TODO_PATTERNS: 'TODO' literal or 'todo!' macro.
+    const fileText = sourceFile.getFullText();
+    if (!fileText.includes('TODO') && !TODO_MACRO_REGEX.test(fileText)) {
       continue;
     }
 
