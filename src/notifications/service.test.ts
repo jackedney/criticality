@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { NotificationService } from './service.js';
 import type { BlockingRecord } from '../protocol/blocking.js';
 import type { ProtocolState } from '../protocol/types.js';
@@ -8,10 +8,17 @@ describe('NotificationService', () => {
   let mockFetch: ReturnType<typeof vi.fn>;
   const defaultWebhookUrl1 = 'https://example.com/webhook1';
   const defaultWebhookUrl2 = 'https://example.com/webhook2';
+  let originalFetch: typeof global.fetch;
 
   beforeEach(() => {
+    originalFetch = global.fetch;
     mockFetch = vi.fn();
     global.fetch = mockFetch as unknown as typeof fetch;
+  });
+
+  afterEach(() => {
+    global.fetch = originalFetch;
+    mockFetch.mockRestore();
   });
 
   describe('constructor', () => {
