@@ -1772,19 +1772,6 @@ type ProtocolState =
     | { type: 'blocked'; reason: BlockReason; awaiting: HumanQuery }
     | { type: 'completed'; artifacts: FinalArtifacts };
 ```
-Criticality blocked. Run `criticality status` for details.
-```
-
-Full context is available via CLI, which is the authoritative source.
-
-#### Blocking State
-
-```typescript
-type ProtocolState =
-    | { type: 'active'; currentPhase: Phase; progress: PhaseProgress }
-    | { type: 'blocked'; reason: BlockReason; awaiting: HumanQuery }
-    | { type: 'completed'; artifacts: FinalArtifacts };
-```
 
 #### Human Query Format
 
