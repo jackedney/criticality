@@ -33,6 +33,24 @@ export interface OperationTelemetry {
 }
 
 /**
+ * Finds the .criticality directory in the path ancestry.
+ *
+ * @param filePath - The file path to check.
+ * @returns The .criticality directory path if found, otherwise null.
+ */
+function findCriticalityAncestor(filePath: string): string | null {
+  const pathSegments = filePath.split(path.sep);
+
+  for (let i = pathSegments.length - 1; i >= 0; i--) {
+    if (pathSegments[i] === '.criticality') {
+      return pathSegments.slice(0, i + 1).join(path.sep);
+    }
+  }
+
+  return null;
+}
+
+/**
  * Mapping from protocol phases to model aliases.
  */
 const PHASE_TO_MODEL_ALIAS: ReadonlyMap<ProtocolPhase, ModelAlias> = new Map([
@@ -373,9 +391,17 @@ export class CliOperations implements ExternalOperations {
 
     try {
       const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
-      const stateDir = path.dirname(this.statePath);
       const stateBasename = path.basename(this.statePath);
-      const archiveDir = path.join(stateDir, '.criticality', 'archives');
+
+      const criticalityAncestor = findCriticalityAncestor(this.statePath);
+      let archiveDir: string;
+
+      if (criticalityAncestor) {
+        archiveDir = path.join(criticalityAncestor, 'archives');
+      } else {
+        const stateDir = path.dirname(this.statePath);
+        archiveDir = path.join(stateDir, '.criticality', 'archives');
+      }
 
       await mkdir(archiveDir, { recursive: true });
 
