@@ -165,7 +165,8 @@ describe('Error suggestion system', () => {
       expect(plainResult).toContain('Suggestions:');
       expect(plainResult).toContain('Check the error logs for detailed information');
       expect(plainResult).toContain('Review recent protocol activity');
-      expect(plainResult).toContain('Run verbose mode for more debugging output');
+      expect(plainResult).toContain('Resume protocol execution');
+      expect(plainResult).toContain('Report the issue if it persists');
     });
 
     it('should include retry time for rate limit errors', () => {
