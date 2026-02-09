@@ -192,6 +192,39 @@ describe('TypedMap', () => {
       });
       expect(callCount).toBe(0);
     });
+
+    it('should respect thisArg parameter', () => {
+      const map = TypedMap.fromObject({ a: 1, b: 2 });
+      const accumulator: Record<string, number> = {};
+      const thisArg = { multiplier: 10 };
+      map.forEach(function (this: typeof thisArg, value: number, key: string) {
+        accumulator[key] = value * this.multiplier;
+      }, thisArg);
+      expect(accumulator).toEqual({ a: 10, b: 20 });
+    });
+
+    it('should match native Map forEach behavior with thisArg', () => {
+      const map = TypedMap.fromObject({ a: 1, b: 2 });
+      const nativeMap = new Map([
+        ['a', 1],
+        ['b', 2],
+      ]);
+      const thisArg = { value: 'test' };
+
+      const typedMapThisValues: string[] = [];
+      const nativeMapThisValues: string[] = [];
+
+      map.forEach(function (this: typeof thisArg) {
+        typedMapThisValues.push(this.value);
+      }, thisArg);
+
+      nativeMap.forEach(function (this: typeof thisArg) {
+        nativeMapThisValues.push(this.value);
+      }, thisArg);
+
+      expect(typedMapThisValues).toEqual(nativeMapThisValues);
+      expect(typedMapThisValues).toEqual(['test', 'test']);
+    });
   });
 
   describe('size', () => {

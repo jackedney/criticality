@@ -225,9 +225,9 @@ export class TypedMap<K, V> {
    * ```
    */
   forEach(callbackfn: (value: V, key: K, map: TypedMap<K, V>) => void, thisArg?: unknown): void {
-    this.map.forEach((value, key) => {
-      callbackfn(value, key, this);
-    }, thisArg);
+    this.map.forEach((value: V, key: K) => {
+      callbackfn.call(thisArg, value, key, this);
+    });
   }
 
   /**
