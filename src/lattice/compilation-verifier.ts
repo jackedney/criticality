@@ -18,6 +18,7 @@
 
 import * as path from 'node:path';
 import * as fs from 'node:fs/promises';
+import { Project } from 'ts-morph';
 import type { CompilerError, TypeCheckResult } from '../adapters/typescript/typecheck.js';
 import { runTypeCheck } from '../adapters/typescript/typecheck.js';
 import type { ModelRouter, ModelRouterRequest } from '../router/types.js';
@@ -445,15 +446,28 @@ export function verifyNoLogicLeakage(
   const violations: LogicLeakageViolation[] = [];
   const allInspectedFunctions: InspectedFunction[] = [];
 
+  // Create a shared Project instance to avoid repeated compiler initialization
+  const project = new Project({
+    compilerOptions: {
+      strict: true,
+      target: 99, // ScriptTarget.ESNext
+      module: 199, // ModuleKind.NodeNext
+    },
+  });
+
   for (const file of files) {
     const filePath = path.resolve(projectPath, file);
 
     try {
-      const result = inspectAst(filePath, {
-        checkFunctionBodies: true,
-        checkTodoPattern: true,
-        detectLogicPatterns: true,
-      });
+      const result = inspectAst(
+        filePath,
+        {
+          checkFunctionBodies: true,
+          checkTodoPattern: true,
+          detectLogicPatterns: true,
+        },
+        project
+      );
 
       // Collect all inspected functions
       allInspectedFunctions.push(...result.functions);

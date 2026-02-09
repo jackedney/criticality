@@ -895,7 +895,8 @@ const LOGIC_LEAKAGE_PATTERNS: {
  */
 export function inspectAst(
   filePath: string,
-  options: AstInspectionOptions = {}
+  options: AstInspectionOptions = {},
+  project?: Project
 ): AstInspectionResult {
   const {
     checkFunctionBodies = true,
@@ -903,17 +904,30 @@ export function inspectAst(
     detectLogicPatterns = true,
   } = options;
 
-  // Create a project and add the file
-  const project = new Project({
-    compilerOptions: {
-      strict: true,
-      target: 99, // ScriptTarget.ESNext
-      module: 199, // ModuleKind.NodeNext
-    },
-  });
+  let inspectionProject: Project;
 
-  project.addSourceFilesAtPaths(filePath);
-  const sourceFile = project.getSourceFile(filePath);
+  if (project !== undefined) {
+    inspectionProject = project;
+  } else {
+    // Create a new project if one wasn't provided
+    inspectionProject = new Project({
+      compilerOptions: {
+        strict: true,
+        target: 99, // ScriptTarget.ESNext
+        module: 199, // ModuleKind.NodeNext
+      },
+    });
+  }
+
+  let sourceFile = inspectionProject.getSourceFile(filePath);
+
+  // If the file isn't in the project, try to add it
+  if (!sourceFile) {
+    if (fs.existsSync(filePath)) {
+      inspectionProject.addSourceFilesAtPaths(filePath);
+    }
+    sourceFile = inspectionProject.getSourceFile(filePath);
+  }
 
   if (!sourceFile) {
     return {
