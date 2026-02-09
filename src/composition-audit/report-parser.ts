@@ -459,7 +459,7 @@ This is retry attempt ${String(attemptNumber)} of the maximum allowed retries.`;
  * @param options - Parse options.
  * @returns The parse result with contradictions or error.
  */
-export async function parseContradictionOutput(
+export function parseContradictionOutput(
   content: string,
   options?: ContradictionParseOptions
 ): Promise<ContradictionParseResult> {
@@ -478,10 +478,10 @@ export async function parseContradictionOutput(
     } catch (error) {
       // Re-throw ContradictionReportParseError (e.g., from safeAssign)
       if (error instanceof ContradictionReportParseError) {
-        return {
+        return Promise.resolve({
           success: false,
           error,
-        };
+        });
       }
       // Other parsing errors return null
       parsed = null;
@@ -490,7 +490,7 @@ export async function parseContradictionOutput(
 
   // If both fail, return parse error
   if (parsed === null) {
-    return {
+    return Promise.resolve({
       success: false,
       error: new ContradictionReportParseError(
         'Failed to parse contradiction output - no valid JSON or YAML found',
@@ -501,7 +501,7 @@ export async function parseContradictionOutput(
           retryAttempts: 0,
         }
       ),
-    };
+    });
   }
 
   // Extract data
@@ -509,12 +509,12 @@ export async function parseContradictionOutput(
   const summary = extractSummary(parsed);
   const hasContradictions = hasContradictionsFlag(parsed, contradictions);
 
-  return {
+  return Promise.resolve({
     success: true,
     contradictions,
     summary,
     hasContradictions,
-  };
+  });
 }
 
 /**
