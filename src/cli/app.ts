@@ -10,7 +10,7 @@ import type { CliConfig, CliContext } from './types.js';
  * Creates and initializes CLI application context.
  *
  * @param config - CLI configuration options (overrides config file values).
- * @returns A promise resolving to CLI context.
+ * @returns CLI context.
  */
 export function createCliApp(config: Partial<CliConfig> = {}): CliContext {
   const context: CliContext = {

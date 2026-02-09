@@ -20,12 +20,77 @@ import { loadLedger } from '../../ledger/persistence.js';
 import type { Decision } from '../../ledger/types.js';
 import { loadStateWithRecovery, getDefaultStatePath, getDefaultLedgerPath } from '../state.js';
 import { formatRelativeTime, formatConfidence, wrapInBox } from '../utils/displayUtils.js';
+import { TelemetryCollector } from '../telemetry.js';
+import { NotificationService } from '../../notifications/service.js';
+import { ReminderScheduler } from '../../notifications/reminder.js';
+import { validateWebhookEndpoint } from '../../notifications/index.js';
+import type { Config, NotificationConfig } from '../../config/types.js';
+import { existsSync, readFileSync } from 'node:fs';
+import { parseConfig } from '../../config/index.js';
+import * as path from 'node:path';
 
 interface StatusDisplayOptions {
   colors: boolean;
   unicode: boolean;
   watch?: boolean;
   interval?: number;
+  verbose?: boolean;
+}
+
+/**
+ * Validates configured webhook endpoints at startup.
+ *
+ * Validates URL format and optionally sends test pings.
+ * Displays validation results as console output but does not block startup.
+ *
+ * @param config - The configuration object.
+ */
+async function validateWebhookEndpoints(config: Config): Promise<void> {
+  if (!config.notifications.enabled || config.notifications.channels === undefined) {
+    return;
+  }
+
+  const webhookChannels = config.notifications.channels.filter(
+    (c) => c.type === 'webhook' && c.enabled
+  );
+
+  if (webhookChannels.length === 0) {
+    return;
+  }
+
+  console.log('Validating webhook endpoints...');
+
+  for (const channel of webhookChannels) {
+    const result = await validateWebhookEndpoint(channel.endpoint, { ping: false });
+
+    if (result.success) {
+      console.log(`✓ ${result.message}`);
+    } else {
+      console.warn(`⚠ ${result.error}`);
+    }
+  }
+
+  console.log();
+}
+
+/**
+ * Loads configuration from criticality.toml.
+ *
+ * @returns The loaded configuration or defaults.
+ */
+function loadCliConfig(): Config {
+  const configFilePath = 'criticality.toml';
+
+  if (existsSync(configFilePath)) {
+    try {
+      const tomlContent = readFileSync(configFilePath, 'utf-8');
+      return parseConfig(tomlContent);
+    } catch (_error) {
+      // Use defaults if config loading fails
+    }
+  }
+
+  return parseConfig('');
 }
 
 /**
@@ -41,36 +106,94 @@ function getStatePath(): string {
 }
 
 /**
- * Gets the protocol state type for display.
+ * Checks and sends reminder if protocol is blocked.
  *
- * @param substate - The protocol substate.
- * @returns The state type string (active/blocked/completed/failed).
+ * @param snapshot - The protocol state snapshot.
+ * @param statePath - Path to state file.
+ * @returns Next scheduled reminder time, or undefined if not scheduled.
  */
-function getStateType(substate: ProtocolSubstate): string {
-  if (isFailedSubstate(substate)) {
-    return 'Failed';
+async function checkAndSendReminder(
+  snapshot: ProtocolStateSnapshot,
+  statePath: string
+): Promise<string | undefined> {
+  const cliConfig = loadCliConfig();
+
+  if (!cliConfig.notifications.enabled || cliConfig.notifications.reminder_schedule === undefined) {
+    return undefined;
   }
-  if (isBlockingSubstate(substate)) {
-    return 'Blocked';
+
+  const blockingRecord = snapshot.blockingQueries.find((q) => !q.resolved);
+  if (!blockingRecord) {
+    return undefined;
   }
-  if (isActiveSubstate(substate)) {
-    return 'Active';
+
+  const notificationService = new NotificationService(cliConfig.notifications);
+  const stateDir = path.dirname(statePath);
+  const reminderScheduler = new ReminderScheduler({
+    cronExpression: cliConfig.notifications.reminder_schedule,
+    notificationService,
+    stateDir,
+    enabled: true,
+  });
+
+  await reminderScheduler.initialize();
+
+  const result = await reminderScheduler.checkAndSendReminder(new Date(), blockingRecord);
+
+  if (result.sent) {
+    const nextScheduled = new Date(result.nextScheduled);
+    const timeStr = nextScheduled.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    console.log(`Reminder sent. Next reminder at ${timeStr}`);
   }
-  return 'Unknown';
+
+  return reminderScheduler.getNextScheduled();
 }
 
 /**
- * Formats a phase name with optional state type indicator.
+ * Formats hierarchical state (Phase > Task > Operation).
+ *
+ * Shows available levels of hierarchy with > separator.
+ * If task/operation not available, shows only available levels.
  *
  * @param phase - The protocol phase.
- * @param stateType - The state type.
+ * @param substate - The protocol substate.
  * @param options - Display options.
- * @returns The formatted phase string.
+ * @returns The formatted hierarchical state string.
  */
-function formatPhase(phase: string, stateType: string, options: StatusDisplayOptions): string {
-  const colorCode = options.colors ? '\x1b[36m' : '';
+function formatHierarchicalState(
+  phase: string,
+  substate: ProtocolSubstate,
+  options: StatusDisplayOptions
+): string {
+  const dimCode = options.colors ? '\x1b[2m' : '';
   const resetCode = options.colors ? '\x1b[0m' : '';
-  return `${colorCode}${phase}${resetCode} (${stateType})`;
+  const greenCode = options.colors ? '\x1b[32m' : '';
+  const redCode = options.colors ? '\x1b[31m' : '';
+
+  // Determine the substate label for display
+  let substateLabel = 'Active';
+  if (isBlockingSubstate(substate)) {
+    substateLabel = 'Blocked';
+  } else if (isFailedSubstate(substate)) {
+    substateLabel = 'Failed';
+  }
+
+  // Format as "Phase (Substate)" - e.g., "Lattice (Active)" or "Lattice (Blocked)"
+  const substateColor = substateLabel === 'Blocked' ? redCode : greenCode;
+  const phaseWithSubstate = `${greenCode}${phase}${resetCode} (${substateColor}${substateLabel}${resetCode})`;
+
+  const parts: string[] = [phaseWithSubstate];
+
+  if (isActiveSubstate(substate)) {
+    if (substate.task !== undefined) {
+      parts.push(substate.task);
+    }
+    if (substate.operation !== undefined) {
+      parts.push(substate.operation);
+    }
+  }
+
+  return parts.join(` ${dimCode}>${resetCode} `);
 }
 
 /**
@@ -202,20 +325,104 @@ function formatTimestamp(date: Date): string {
 /**
  * Formats notification status for display.
  *
- * This function is designed to be extended in Phase 4.2 when the
- * notification system is implemented. For now, it shows that the
- * notification system is not configured.
- *
  * @param options - Display options.
+ * @param config - Notification configuration.
+ * @param nextScheduled - Next scheduled reminder time (optional).
+ * @param isBlocked - Whether protocol is currently blocked.
  * @returns The formatted notification status text.
  */
-function formatNotifications(options: StatusDisplayOptions): string {
+function formatNotifications(
+  options: StatusDisplayOptions,
+  config: NotificationConfig,
+  nextScheduled?: string,
+  isBlocked: boolean = false
+): string {
+  const boldCode = options.colors ? '\x1b[1m' : '';
+  const resetCode = options.colors ? '\x1b[0m' : '';
+  const dimCode = options.colors ? '\x1b[2m' : '';
+  const yellowCode = options.colors ? '\x1b[33m' : '';
+  const greenCode = options.colors ? '\x1b[32m' : '';
+
+  let result = `${boldCode}Notifications:${resetCode}\n`;
+
+  if (!config.enabled) {
+    result += `${dimCode}Notifications: disabled${resetCode}`;
+    return result;
+  }
+
+  const enabledChannels = config.channels?.filter((c) => c.enabled && c.type === 'webhook') ?? [];
+  const totalChannels = config.channels?.filter((c) => c.type === 'webhook').length ?? 0;
+
+  if (totalChannels === 0) {
+    result += `${dimCode}Notifications: not configured${resetCode}`;
+  } else {
+    const statusText =
+      enabledChannels.length === totalChannels
+        ? `${greenCode}enabled${resetCode}`
+        : `${yellowCode}partial${resetCode}`;
+    const plural = totalChannels !== 1 ? 's' : '';
+    result += `${String(totalChannels)} webhook${plural} configured (${String(enabledChannels.length)}/${String(totalChannels)} ${statusText})`;
+  }
+
+  if (config.reminder_schedule !== undefined && isBlocked) {
+    result += `\n${yellowCode}Reminder schedule${resetCode}: ${config.reminder_schedule}`;
+
+    if (nextScheduled !== undefined) {
+      const nextDate = new Date(nextScheduled);
+      const now = new Date();
+      const timeUntil = nextDate.getTime() - now.getTime();
+
+      let timeStr = '';
+      const hoursUntil = Math.floor(timeUntil / (1000 * 60 * 60));
+      const minutesUntil = Math.floor((timeUntil % (1000 * 60 * 60)) / (1000 * 60));
+
+      if (hoursUntil > 24) {
+        const daysUntil = Math.floor(hoursUntil / 24);
+        timeStr += `${String(daysUntil)} day${daysUntil !== 1 ? 's' : ''} `;
+      } else if (hoursUntil > 0) {
+        timeStr += `${String(hoursUntil)}h `;
+      }
+      timeStr += `${String(minutesUntil)}m`;
+
+      const nextTime = nextDate.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+      result += ` (next: ${nextTime}, in ${timeStr})`;
+    }
+  }
+
+  return result;
+}
+
+/**
+ * Formats telemetry for display.
+ *
+ * @param telemetry - The telemetry data.
+ * @param options - Display options.
+ * @returns The formatted telemetry text.
+ */
+function formatTelemetry(
+  telemetry: Parameters<typeof TelemetryCollector.formatSummary>[0],
+  options: StatusDisplayOptions
+): string {
+  const telemetryText = TelemetryCollector.formatSummary(telemetry);
+
+  if (!options.verbose) {
+    return telemetryText;
+  }
+
+  const perPhase = TelemetryCollector.formatPerPhase(telemetry);
+  if (perPhase.length === 0) {
+    return telemetryText;
+  }
+
   const boldCode = options.colors ? '\x1b[1m' : '';
   const resetCode = options.colors ? '\x1b[0m' : '';
   const dimCode = options.colors ? '\x1b[2m' : '';
 
-  let result = `${boldCode}Notifications:${resetCode}\n`;
-  result += `${dimCode}Notification system: not configured (see Phase 4.2)${resetCode}`;
+  let result = `${telemetryText}\n\n`;
+  result += `${boldCode}Per-Phase Breakdown:${resetCode}\n`;
+  for (const line of perPhase) {
+    result += `${dimCode}  ${resetCode}${line}\n`;
+  }
 
   return result;
 }
@@ -230,10 +437,18 @@ async function renderStatus(
   snapshot: ProtocolStateSnapshot,
   options: StatusDisplayOptions
 ): Promise<void> {
-  const stateType = getStateType(snapshot.state.substate);
-  const phaseDisplay = formatPhase(snapshot.state.phase, stateType, options);
+  const statePath = getStatePath();
+  const cliConfig = loadCliConfig();
+  const nextScheduled = await checkAndSendReminder(snapshot, statePath);
+  const isBlocked = isBlockingSubstate(snapshot.state.substate);
 
-  let statusText = `Phase: ${phaseDisplay}`;
+  const hierarchicalState = formatHierarchicalState(
+    snapshot.state.phase,
+    snapshot.state.substate,
+    options
+  );
+
+  let statusText = `Phase: ${hierarchicalState}`;
   let additionalInfo = '';
 
   if (snapshot.state.phase === 'Complete') {
@@ -270,8 +485,22 @@ async function renderStatus(
   console.log();
   console.log(wrapInBox(pendingQueries, options));
 
-  // Display notifications status (Phase 4.2 integration point)
-  const notificationsText = formatNotifications(options);
+  const cliSnapshot = snapshot as unknown as { telemetry?: unknown };
+  if (cliSnapshot.telemetry !== undefined) {
+    const telemetryText = formatTelemetry(
+      cliSnapshot.telemetry as Parameters<typeof TelemetryCollector.formatSummary>[0],
+      options
+    );
+    console.log();
+    console.log(wrapInBox(telemetryText, options));
+  }
+
+  const notificationsText = formatNotifications(
+    options,
+    cliConfig.notifications,
+    nextScheduled,
+    isBlocked
+  );
   console.log();
   console.log(wrapInBox(notificationsText, options));
 
@@ -321,14 +550,17 @@ async function renderStatusWithFooter(
  * @param args - Command-line arguments.
  * @returns Parsed options including watch mode settings.
  */
-function parseStatusArgs(args: string[]): { watch: boolean; interval: number } {
+function parseStatusArgs(args: string[]): { watch: boolean; interval: number; verbose: boolean } {
   let watch = false;
   let interval = 2000;
+  let verbose = false;
 
   for (let i = 0; i < args.length; i++) {
     const arg = args[i];
     if (arg === '--watch' || arg === '-w') {
       watch = true;
+    } else if (arg === '--verbose' || arg === '-v') {
+      verbose = true;
     } else if (arg === '--interval' && i + 1 < args.length) {
       const nextArg = args[i + 1];
       if (nextArg !== undefined) {
@@ -347,7 +579,7 @@ function parseStatusArgs(args: string[]): { watch: boolean; interval: number } {
     }
   }
 
-  return { watch, interval };
+  return { watch, interval, verbose };
 }
 
 /**
@@ -357,19 +589,23 @@ function parseStatusArgs(args: string[]): { watch: boolean; interval: number } {
  * @returns A promise resolving to the command result.
  */
 export async function handleStatusCommand(context: CliContext): Promise<CliCommandResult> {
-  const { watch, interval } = parseStatusArgs(context.args);
+  const { watch, interval, verbose } = parseStatusArgs(context.args);
 
   const options: StatusDisplayOptions = {
     colors: context.config.colors,
     unicode: context.config.unicode,
     watch,
     interval,
+    verbose,
   };
 
   const statePath = getStatePath();
 
   try {
     const snapshot = await loadStateWithRecovery(statePath);
+    const cliConfig = loadCliConfig();
+
+    void validateWebhookEndpoints(cliConfig);
 
     if (!watch) {
       await renderStatus(snapshot, options);

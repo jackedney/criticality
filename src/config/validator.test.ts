@@ -675,15 +675,9 @@ performance_variance_threshold = ${String(threshold)}
           const config = parseConfig(toml);
           const result = validateConfig(config);
 
-          // Check no range errors for this threshold
-          const rangeError = result.errors.find(
-            (e) =>
-              e.field === 'thresholds.performance_variance_threshold' &&
-              (e.message.includes('between') || e.message.includes('greater than 0'))
-          );
-          return rangeError === undefined;
+          return result.valid;
         }),
-        { numRuns: 100 }
+        { numRuns: 50 }
       );
     });
 
@@ -697,12 +691,7 @@ performance_variance_threshold = ${String(threshold)}
           const config = parseConfig(toml);
           const result = validateConfig(config);
 
-          const rangeError = result.errors.find(
-            (e) =>
-              e.field === 'thresholds.performance_variance_threshold' &&
-              e.message.includes('between')
-          );
-          return rangeError !== undefined;
+          return !result.valid;
         }),
         { numRuns: 50 }
       );

@@ -49,6 +49,8 @@ export interface BlockingRecord {
  * Resolution of a blocking query.
  */
 export interface BlockingResolution {
+  /** The ID of the blocking query being resolved. */
+  readonly queryId: BlockingQueryId;
   /** The selected option or custom response. */
   readonly response: string;
   /** Timestamp when resolution occurred (ISO 8601). */
@@ -124,7 +126,9 @@ export type BlockingErrorCode =
   | 'ALREADY_RESOLVED' // Blocking has already been resolved
   | 'INVALID_PHASE' // Cannot block in Complete phase
   | 'INVALID_RESPONSE' // Response not in available options
-  | 'NO_TIMEOUT'; // No timeout configured for this blocking
+  | 'NO_TIMEOUT' // No timeout configured for this blocking
+  | 'TIMEOUT_ESCALATION_NEEDED' // Timeout requires escalation handling
+  | 'LEDGER_REQUIRED_FOR_DEFAULT_STRATEGY'; // Ledger required for default timeout strategy
 
 /**
  * Error information for blocking operations.
@@ -389,6 +393,7 @@ export function resolveBlocking(
 
   // Create the resolution
   const resolution: BlockingResolution = {
+    queryId: record.id,
     response: resolveOptions.response,
     resolvedAt: new Date().toISOString(),
   };
@@ -568,7 +573,7 @@ export function handleTimeout(
       return {
         success: false,
         error: createBlockingError(
-          'NOT_BLOCKING', // Reusing code; could define specific TIMEOUT_ESCALATION
+          'TIMEOUT_ESCALATION_NEEDED',
           `Timeout on blocking query '${record.id}' requires escalation`
         ),
       };
@@ -590,7 +595,7 @@ export function handleTimeout(
         return {
           success: false,
           error: createBlockingError(
-            'NOT_BLOCKING', // Reusing code
+            'LEDGER_REQUIRED_FOR_DEFAULT_STRATEGY',
             'Ledger required for "default" timeout strategy'
           ),
         };
@@ -637,6 +642,7 @@ export function handleTimeout(
 
       // Update record as "resolved" (via timeout)
       const resolution: BlockingResolution = {
+        queryId: record.id,
         response: 'TIMEOUT_FAILURE',
         resolvedAt: failedSubstate.failedAt,
       };
@@ -685,10 +691,10 @@ export function handleTimeout(
  */
 export function getRemainingTimeout(record: BlockingRecord, now?: number): number | undefined {
   const result = checkTimeout(record, now);
-  if (result.timedOut) {
-    return undefined;
+  if (!result.timedOut) {
+    return (result as { timedOut: false; remainingMs: number }).remainingMs;
   }
-  return result.remainingMs;
+  return undefined;
 }
 
 /**

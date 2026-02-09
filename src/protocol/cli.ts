@@ -12,6 +12,7 @@
 
 import type { ProtocolPhase } from './types.js';
 import type { ProtocolStateSnapshot } from './persistence.js';
+import type { BlockingRecord } from './blocking.js';
 import { loadState, stateFileExists, saveState } from './persistence.js';
 import { getProtocolStatus, createOrchestrator, type ExternalOperations } from './orchestrator.js';
 import { createActiveSubstate } from './types.js';
@@ -373,13 +374,23 @@ export async function executeResolve(options: CliOptions): Promise<CliResult> {
 
     // Record the resolution and transition to active state
     const activeSubstate = createActiveSubstate();
-    const resolvedRecord = {
-      id: `resolved-${String(Date.now())}`,
+    const recordId = `resolved-${String(Date.now())}`;
+
+    // Find the original blocking query to get its ID for proper resolution tracking
+    const originalBlockingQuery = snapshot.blockingQueries.find(
+      (entry) =>
+        entry.phase === snapshot.state.phase && entry.query === substate.query && !entry.resolved
+    );
+    const originalQueryId = originalBlockingQuery?.id ?? recordId;
+
+    const resolvedRecord: BlockingRecord = {
+      id: recordId,
       phase: snapshot.state.phase,
       query: substate.query,
       blockedAt: substate.blockedAt,
       resolved: true as const,
       resolution: {
+        queryId: originalQueryId,
         response: options.resolution,
         resolvedAt: new Date().toISOString(),
       },

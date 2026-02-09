@@ -55,6 +55,8 @@ export const DEFAULT_THRESHOLDS: ThresholdConfig = {
  */
 export const DEFAULT_NOTIFICATIONS: NotificationConfig = {
   enabled: false,
+  channels: undefined,
+  reminder_schedule: undefined,
 };
 
 /**

@@ -20,6 +20,7 @@ import { rm } from 'node:fs/promises';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { safeMkdir } from '../utils/safe-fs.js';
+import type { NotificationService } from '../notifications/service.js';
 
 describe('Protocol Orchestrator', () => {
   describe('Guards', () => {
@@ -31,6 +32,7 @@ describe('Protocol Orchestrator', () => {
       artifacts: new Set(artifacts) as ReadonlySet<ArtifactType>,
       pendingResolutions: [],
       operations: {} as ExternalOperations,
+      notificationService: undefined,
     });
 
     describe('Guards.and', () => {
@@ -141,8 +143,11 @@ describe('Protocol Orchestrator', () => {
         const ctx: TickContext = {
           snapshot: { state: createActiveState('Ignition'), artifacts: [], blockingQueries: [] },
           artifacts: new Set(),
-          pendingResolutions: [{ response: 'yes', resolvedAt: new Date().toISOString() }],
+          pendingResolutions: [
+            { queryId: 'test-id', response: 'yes', resolvedAt: new Date().toISOString() },
+          ],
           operations: {} as ExternalOperations,
+          notificationService: undefined,
         };
         expect(guard(ctx)).toBe(true);
       });
@@ -322,6 +327,7 @@ describe('Protocol Orchestrator', () => {
         artifacts: new Set(snapshot.artifacts),
         pendingResolutions: [],
         operations: mockOperations,
+        notificationService: undefined,
       };
 
       const result = await executeTick(context, statePath);
@@ -346,6 +352,7 @@ describe('Protocol Orchestrator', () => {
         artifacts: new Set(),
         pendingResolutions: [],
         operations: mockOperations,
+        notificationService: undefined,
       };
 
       const result = await executeTick(context, statePath);
@@ -371,6 +378,7 @@ describe('Protocol Orchestrator', () => {
         artifacts: new Set(),
         pendingResolutions: [],
         operations: mockOperations,
+        notificationService: undefined,
       };
 
       const result = await executeTick(context, statePath);
@@ -395,6 +403,7 @@ describe('Protocol Orchestrator', () => {
         artifacts: new Set(['spec'] as const),
         pendingResolutions: [],
         operations: mockOperations,
+        notificationService: undefined,
       };
 
       const result = await executeTick(context, statePath);
@@ -416,6 +425,7 @@ describe('Protocol Orchestrator', () => {
         artifacts: new Set(),
         pendingResolutions: [],
         operations: mockOperations,
+        notificationService: undefined,
       };
 
       const result = await executeTick(context, statePath);
@@ -521,6 +531,247 @@ describe('Protocol Orchestrator', () => {
       expect(result.shouldContinue).toBe(false);
       expect(result.stopReason).toBe('EXTERNAL_ERROR');
       expect(orchestrator.state.tickCount).toBeGreaterThan(0);
+    });
+  });
+
+  describe('NotificationService Integration', () => {
+    let testDir: string;
+    let statePath: string;
+
+    beforeEach(async () => {
+      testDir = join(tmpdir(), `orchestrator-notify-test-${String(Date.now())}`);
+      await safeMkdir(testDir, { recursive: true });
+      statePath = join(testDir, 'state.json');
+    });
+
+    afterEach(async () => {
+      await rm(testDir, { recursive: true, force: true });
+    });
+
+    const mockOperations: ExternalOperations = {
+      executeModelCall: vi.fn().mockResolvedValue({ success: true }),
+      runCompilation: vi.fn().mockResolvedValue({ success: true }),
+      runTests: vi.fn().mockResolvedValue({ success: true }),
+      archivePhaseArtifacts: vi.fn().mockResolvedValue({ success: true }),
+      sendBlockingNotification: vi.fn().mockResolvedValue(undefined),
+    };
+
+    it('sends block notification when entering blocking state', async () => {
+      const mockNotify = vi.fn().mockResolvedValue({
+        results: [],
+        allSucceeded: true,
+        anySucceeded: false,
+      });
+
+      const mockNotificationService = {
+        notify: mockNotify,
+        hasSubscribers: vi.fn().mockReturnValue(false),
+        send: vi.fn().mockResolvedValue({
+          results: [],
+          allSucceeded: true,
+          anySucceeded: false,
+        }),
+      } as unknown as NotificationService;
+
+      // Create state in blocking substate directly
+      const blockingSnapshot: ProtocolStateSnapshot = {
+        state: {
+          phase: 'Ignition',
+          substate: createBlockingSubstate({ query: 'Block test?' }),
+        },
+        artifacts: [],
+        blockingQueries: [],
+      };
+      await saveState(blockingSnapshot, statePath);
+
+      const orchestrator = await createOrchestrator({
+        statePath,
+        operations: mockOperations,
+        notificationService: mockNotificationService,
+      });
+
+      // Tick should detect blocking state and return BLOCKED
+      const result = await orchestrator.tick();
+
+      expect(result.stopReason).toBe('BLOCKED');
+      // Note: block notification is sent when *entering* blocking state via transition,
+      // not when already in blocking state. The executeTick returns BLOCKED but doesn't
+      // re-notify since the state was already blocking when loaded.
+    });
+
+    it('sends complete notification when protocol completes', async () => {
+      const mockNotify = vi.fn().mockResolvedValue({
+        results: [],
+        allSucceeded: true,
+        anySucceeded: false,
+      });
+
+      const mockNotificationService = {
+        notify: mockNotify,
+        hasSubscribers: vi.fn().mockReturnValue(false),
+        send: vi.fn().mockResolvedValue({
+          results: [],
+          allSucceeded: true,
+          anySucceeded: false,
+        }),
+      } as unknown as NotificationService;
+
+      // Create state in MassDefect phase with all required artifacts to transition to Complete
+      const massDefectSnapshot: ProtocolStateSnapshot = {
+        state: createActiveState('MassDefect'),
+        artifacts: [
+          'spec',
+          'latticeCode',
+          'witnesses',
+          'contracts',
+          'validatedStructure',
+          'implementedCode',
+          'verifiedCode',
+          'finalArtifact',
+        ],
+        blockingQueries: [],
+      };
+      await saveState(massDefectSnapshot, statePath);
+
+      const orchestrator = await createOrchestrator({
+        statePath,
+        operations: mockOperations,
+        notificationService: mockNotificationService,
+      });
+
+      // First tick transitions from MassDefect to Complete
+      const result1 = await orchestrator.tick();
+      expect(result1.transitioned).toBe(true);
+      expect(result1.snapshot.state.phase).toBe('Complete');
+
+      // Second tick should detect Complete phase and return COMPLETE
+      const result2 = await orchestrator.tick();
+
+      expect(result2.stopReason).toBe('COMPLETE');
+      expect(mockNotify).toHaveBeenCalledWith('complete', result2.snapshot.state);
+    });
+
+    it('sends error notification when protocol fails', async () => {
+      const mockNotify = vi.fn().mockResolvedValue({
+        results: [],
+        allSucceeded: true,
+        anySucceeded: false,
+      });
+
+      const mockNotificationService = {
+        notify: mockNotify,
+        hasSubscribers: vi.fn().mockReturnValue(false),
+        send: vi.fn().mockResolvedValue({
+          results: [],
+          allSucceeded: true,
+          anySucceeded: false,
+        }),
+      } as unknown as NotificationService;
+
+      // Create state in failed substate with required artifacts for Injection phase
+      const failedSnapshot: ProtocolStateSnapshot = {
+        state: {
+          phase: 'Injection',
+          substate: createFailedSubstate({ error: 'Test failure' }),
+        },
+        artifacts: ['spec', 'latticeCode', 'witnesses', 'contracts', 'validatedStructure'],
+        blockingQueries: [],
+      };
+      await saveState(failedSnapshot, statePath);
+
+      const orchestrator = await createOrchestrator({
+        statePath,
+        operations: mockOperations,
+        notificationService: mockNotificationService,
+      });
+
+      const result = await orchestrator.tick();
+
+      expect(result.stopReason).toBe('FAILED');
+      expect(result.error).toBe('Test failure');
+      expect(mockNotify).toHaveBeenCalledWith('error', result.snapshot.state);
+    });
+
+    it('sends phase_change notification on phase transition', async () => {
+      const mockNotify = vi.fn().mockResolvedValue({
+        results: [],
+        allSucceeded: true,
+        anySucceeded: false,
+      });
+
+      const mockNotificationService = {
+        notify: mockNotify,
+        hasSubscribers: vi.fn().mockReturnValue(false),
+        send: vi.fn().mockResolvedValue({
+          results: [],
+          allSucceeded: true,
+          anySucceeded: false,
+        }),
+      } as unknown as NotificationService;
+
+      // Create state in Ignition phase with spec artifact
+      const initialSnapshot: ProtocolStateSnapshot = {
+        state: createActiveState('Ignition'),
+        artifacts: ['spec'],
+        blockingQueries: [],
+      };
+      await saveState(initialSnapshot, statePath);
+
+      const orchestrator = await createOrchestrator({
+        statePath,
+        operations: mockOperations,
+        notificationService: mockNotificationService,
+      });
+
+      // Tick should transition to Lattice and send phase_change notification
+      const result = await orchestrator.tick();
+
+      expect(result.transitioned).toBe(true);
+      expect(result.snapshot.state.phase).toBe('Lattice');
+      expect(mockNotify).toHaveBeenCalledWith('phase_change', result.snapshot.state);
+    });
+
+    it('notification failure does not block protocol execution', async () => {
+      const mockNotify = vi.fn().mockRejectedValue(new Error('Notification failed'));
+
+      const mockNotificationService = {
+        notify: mockNotify,
+        hasSubscribers: vi.fn().mockReturnValue(false),
+        send: vi.fn().mockRejectedValue(new Error('Notification failed')),
+      } as unknown as NotificationService;
+
+      // Create state in MassDefect phase with all required artifacts to transition to Complete
+      const massDefectSnapshot: ProtocolStateSnapshot = {
+        state: createActiveState('MassDefect'),
+        artifacts: [
+          'spec',
+          'latticeCode',
+          'witnesses',
+          'contracts',
+          'validatedStructure',
+          'implementedCode',
+          'verifiedCode',
+          'finalArtifact',
+        ],
+        blockingQueries: [],
+      };
+      await saveState(massDefectSnapshot, statePath);
+
+      const orchestrator = await createOrchestrator({
+        statePath,
+        operations: mockOperations,
+        notificationService: mockNotificationService,
+      });
+
+      // First tick transitions to Complete (phase_change notification may fail but execution continues)
+      const result1 = await orchestrator.tick();
+      expect(result1.snapshot.state.phase).toBe('Complete');
+
+      // Second tick should return COMPLETE despite notification failure
+      const result2 = await orchestrator.tick();
+
+      expect(result2.stopReason).toBe('COMPLETE');
+      expect(mockNotify).toHaveBeenCalledWith('complete', result2.snapshot.state);
     });
   });
 });

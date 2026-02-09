@@ -192,6 +192,39 @@ describe('TypedMap', () => {
       });
       expect(callCount).toBe(0);
     });
+
+    it('should respect thisArg parameter', () => {
+      const map = TypedMap.fromObject({ a: 1, b: 2 });
+      const accumulator: Record<string, number> = {};
+      const thisArg = { multiplier: 10 };
+      map.forEach(function (this: typeof thisArg, value: number, key: string) {
+        accumulator[key] = value * this.multiplier;
+      }, thisArg);
+      expect(accumulator).toEqual({ a: 10, b: 20 });
+    });
+
+    it('should match native Map forEach behavior with thisArg', () => {
+      const map = TypedMap.fromObject({ a: 1, b: 2 });
+      const nativeMap = new Map([
+        ['a', 1],
+        ['b', 2],
+      ]);
+      const thisArg = { value: 'test' };
+
+      const typedMapThisValues: string[] = [];
+      const nativeMapThisValues: string[] = [];
+
+      map.forEach(function (this: typeof thisArg) {
+        typedMapThisValues.push(this.value);
+      }, thisArg);
+
+      nativeMap.forEach(function (this: typeof thisArg) {
+        nativeMapThisValues.push(this.value);
+      }, thisArg);
+
+      expect(typedMapThisValues).toEqual(nativeMapThisValues);
+      expect(typedMapThisValues).toEqual(['test', 'test']);
+    });
   });
 
   describe('size', () => {
@@ -287,19 +320,42 @@ describe('TypedMap', () => {
 
   describe('Property-based tests', () => {
     describe('fromObject/toObject round-trip', () => {
+      // Keys that would cause prototype pollution and are rejected by toObject()
+      const FORBIDDEN_KEYS = ['__proto__', 'constructor'];
+
       it('TypedMap.fromObject(obj).toObject() equals original for random objects', () => {
         fc.assert(
-          fc.property(fc.array(fc.tuple(fc.string(), fc.integer())), (entries) => {
-            const obj: Record<string, number> = {};
-            for (const [key, value] of entries) {
-              // eslint-disable-next-line security/detect-object-injection -- safe: keys from fast-check generated values
-              obj[key] = value;
+          fc.property(
+            fc.array(
+              fc.tuple(
+                fc.string().filter((s) => !FORBIDDEN_KEYS.includes(s)),
+                fc.integer()
+              )
+            ),
+            (entries) => {
+              const obj: Record<string, number> = {};
+              for (const [key, value] of entries) {
+                // eslint-disable-next-line security/detect-object-injection -- safe: keys from fast-check generated values
+                obj[key] = value;
+              }
+              const map = TypedMap.fromObject(obj);
+              const result = map.toObject();
+              expect(result).toEqual(obj);
             }
-            const map = TypedMap.fromObject(obj);
-            const result = map.toObject();
-            expect(result).toEqual(obj);
-          })
+          )
         );
+      });
+
+      it('toObject() throws for __proto__ key', () => {
+        const map = new TypedMap<string, number>();
+        map.set('__proto__', 42);
+        expect(() => map.toObject()).toThrow('prototype pollution');
+      });
+
+      it('toObject() throws for constructor key', () => {
+        const map = new TypedMap<string, number>();
+        map.set('constructor', 42);
+        expect(() => map.toObject()).toThrow('prototype pollution');
       });
     });
 

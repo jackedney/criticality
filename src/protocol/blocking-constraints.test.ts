@@ -62,6 +62,7 @@ describe('Blocking Behavior per DECISIONS.toml', () => {
         artifacts: new Set(['spec'] as const),
         pendingResolutions: [],
         operations: mockOperations,
+        notificationService: undefined,
       };
 
       const result = await executeTick(context, statePath);
@@ -87,6 +88,7 @@ describe('Blocking Behavior per DECISIONS.toml', () => {
         artifacts: new Set(snapshot.artifacts),
         pendingResolutions: [],
         operations: mockOperations,
+        notificationService: undefined,
       };
 
       const result = await executeTick(context, statePath);
@@ -121,6 +123,7 @@ describe('Blocking Behavior per DECISIONS.toml', () => {
           artifacts: new Set(),
           pendingResolutions: [],
           operations: mockOperations,
+          notificationService: undefined,
         };
 
         const result = await executeTick(context, statePath);
@@ -277,6 +280,7 @@ describe('Blocking Behavior per DECISIONS.toml', () => {
         timeoutMs: 60000,
         resolved: true,
         resolution: {
+          queryId: 'blocking_test_123',
           response: 'Yes',
           resolvedAt: new Date().toISOString(),
           rationale: 'Approved after review',

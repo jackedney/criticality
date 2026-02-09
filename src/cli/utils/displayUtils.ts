@@ -29,6 +29,8 @@ export interface BorderChars {
   cross?: string;
 }
 
+const ANSI_ESCAPE_PATTERN = new RegExp(String.fromCharCode(27) + '\\[[0-9;]*m', 'g');
+
 export function formatRelativeTime(timestamp: string): string {
   const now = new Date();
   const then = new Date(timestamp);
@@ -103,8 +105,7 @@ export function getBorderChars(options: DisplayOptions): BorderChars {
  * @returns The string with ANSI codes removed.
  */
 function stripAnsi(str: string): string {
-  // eslint-disable-next-line no-control-regex
-  return str.replace(/\x1b\[[0-9;]*m/g, '');
+  return str.replace(ANSI_ESCAPE_PATTERN, '');
 }
 
 export function wrapInBox(text: string, options: DisplayOptions): string {

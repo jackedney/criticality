@@ -224,8 +224,10 @@ export class TypedMap<K, V> {
    * });
    * ```
    */
-  forEach(callbackfn: (value: V, key: K, map: Map<K, V>) => void, thisArg?: unknown): void {
-    this.map.forEach(callbackfn, thisArg);
+  forEach(callbackfn: (value: V, key: K, map: TypedMap<K, V>) => void, thisArg?: unknown): void {
+    this.map.forEach((value: V, key: K) => {
+      callbackfn.call(thisArg, value, key, this);
+    });
   }
 
   /**
@@ -273,10 +275,17 @@ export class TypedMap<K, V> {
    * ```
    */
   toObject(): Record<string, V> {
-    const obj: Record<string, V> = {};
+    const obj: Record<string, V> = Object.create(null) as Record<string, V>;
     const entriesArray = Array.from(this.map.entries());
     for (const [key, value] of entriesArray) {
-      obj[String(key)] = value;
+      const stringKey = String(key);
+      if (stringKey === '__proto__' || stringKey === 'constructor') {
+        throw new Error(
+          `TypedMap.toObject() cannot convert map with key '${stringKey}': this key would cause prototype pollution when converted to a plain object`
+        );
+      }
+      // eslint-disable-next-line security/detect-object-injection
+      obj[stringKey] = value;
     }
     return obj;
   }

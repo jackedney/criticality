@@ -206,17 +206,9 @@ export function isModelRouterError(value: unknown): value is ModelRouterError {
     return false;
   }
   const obj = value as Record<string, unknown>;
-  const validKinds: ModelRouterErrorKind[] = [
-    'RateLimitError',
-    'AuthenticationError',
-    'ModelError',
-    'TimeoutError',
-    'NetworkError',
-    'ValidationError',
-  ];
   return (
     typeof obj.kind === 'string' &&
-    validKinds.includes(obj.kind as ModelRouterErrorKind) &&
+    ERROR_KINDS.includes(obj.kind as ModelRouterErrorKind) &&
     typeof obj.message === 'string'
   );
 }

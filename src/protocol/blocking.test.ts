@@ -12,6 +12,7 @@ import {
   getRemainingTimeout,
   hasTimeout,
   getTimeoutDeadline,
+  type BlockingRecord,
 } from './blocking.js';
 import {
   createActiveState,
@@ -385,13 +386,14 @@ describe('Blocking State Management', () => {
 
     it('returns error if already resolved', () => {
       const state = createProtocolState('Lattice', createBlockingSubstate({ query: 'Test?' }));
-      const record = {
+      const record: BlockingRecord = {
         id: 'test-id',
         phase: 'Lattice' as const,
         query: 'Test?',
         blockedAt: new Date().toISOString(),
         resolved: true,
         resolution: {
+          queryId: 'test-id',
           response: 'Already',
           resolvedAt: new Date().toISOString(),
         },
