@@ -9,7 +9,7 @@ This guide covers all 46 review comments from the CodeRabbit review, organized b
 1. [Critical Issues (Must Fix)](#critical-issues-must-fix)
 2. [Major Issues](#major-issues)
 3. [Minor Issues](#minor-issues)
-4. [Trivial/Nitpick Issues](#trivialnippick-issues)
+4. [Trivial/Nitpick Issues](#trivialnitpick-issues)
 5. [Anticipated Additional Review Comments](#anticipated-additional-review-comments)
 
 ---
