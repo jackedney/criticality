@@ -141,12 +141,12 @@ const ERROR_SUGGESTIONS: Readonly<Record<ErrorType, readonly Suggestion[]>> = {
       action: 'crit status --watch',
     },
     {
-      text: 'Run verbose mode for more debugging output',
-      action: 'crit resume --verbose',
+      text: 'Resume protocol execution',
+      action: 'crit resume',
     },
     {
       text: 'Report the issue if it persists',
-      action: 'https://github.com/anomalyco/criticality/issues',
+      action: 'https://github.com/jackedney/criticality/issues',
     },
   ],
 };
