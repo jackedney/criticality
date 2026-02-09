@@ -74,11 +74,13 @@ interface WebhookPayload {
 
 describe('Notification Integration Tests', () => {
   let mockFetch: ReturnType<typeof vi.fn>;
+  let originalFetch: typeof fetch;
   let testStateDir: string;
   let testStatePath: string;
   let reminderStatePath: string;
 
   beforeEach(async () => {
+    originalFetch = global.fetch;
     mockFetch = vi.fn();
     global.fetch = mockFetch as unknown as typeof fetch;
     testStateDir = await mkdtemp(path.join(tmpdir(), 'integration-test-'));
@@ -92,6 +94,8 @@ describe('Notification Integration Tests', () => {
     } catch {
       // Ignore cleanup errors
     }
+    global.fetch = originalFetch;
+    mockFetch.mockReset();
   });
 
   describe('NotificationService with mocked webhook endpoints', () => {
@@ -378,9 +382,6 @@ describe('Notification Integration Tests', () => {
 
   describe('CLI commands check reminders correctly', () => {
     it('should send reminder when due and blocked', async () => {
-      const mockFetch = vi.fn();
-      global.fetch = mockFetch as unknown as typeof fetch;
-
       mockFetch.mockResolvedValue({
         ok: true,
         status: 200,
@@ -434,9 +435,6 @@ describe('Notification Integration Tests', () => {
     });
 
     it('should not send reminder when not blocked', async () => {
-      const mockFetch = vi.fn();
-      global.fetch = mockFetch as unknown as typeof fetch;
-
       const config: NotificationConfig = {
         enabled: true,
         channels: [
