@@ -66,7 +66,7 @@ export class Spinner {
    */
   constructor(options: SpinnerOptions = { colors: true, unicode: true, interval: 100 }) {
     this.options = options;
-    this.isTty = process.stdout.isTTY;
+    this.isTty = process.stdout.isTTY ?? false; // eslint-disable-line @typescript-eslint/no-unnecessary-condition
     this.currentText = '';
     this.state = {
       phase: 'Ignition',
