@@ -320,19 +320,42 @@ describe('TypedMap', () => {
 
   describe('Property-based tests', () => {
     describe('fromObject/toObject round-trip', () => {
+      // Keys that would cause prototype pollution and are rejected by toObject()
+      const FORBIDDEN_KEYS = ['__proto__', 'constructor'];
+
       it('TypedMap.fromObject(obj).toObject() equals original for random objects', () => {
         fc.assert(
-          fc.property(fc.array(fc.tuple(fc.string(), fc.integer())), (entries) => {
-            const obj: Record<string, number> = {};
-            for (const [key, value] of entries) {
-              // eslint-disable-next-line security/detect-object-injection -- safe: keys from fast-check generated values
-              obj[key] = value;
+          fc.property(
+            fc.array(
+              fc.tuple(
+                fc.string().filter((s) => !FORBIDDEN_KEYS.includes(s)),
+                fc.integer()
+              )
+            ),
+            (entries) => {
+              const obj: Record<string, number> = {};
+              for (const [key, value] of entries) {
+                // eslint-disable-next-line security/detect-object-injection -- safe: keys from fast-check generated values
+                obj[key] = value;
+              }
+              const map = TypedMap.fromObject(obj);
+              const result = map.toObject();
+              expect(result).toEqual(obj);
             }
-            const map = TypedMap.fromObject(obj);
-            const result = map.toObject();
-            expect(result).toEqual(obj);
-          })
+          )
         );
+      });
+
+      it('toObject() throws for __proto__ key', () => {
+        const map = new TypedMap<string, number>();
+        map.set('__proto__', 42);
+        expect(() => map.toObject()).toThrow('prototype pollution');
+      });
+
+      it('toObject() throws for constructor key', () => {
+        const map = new TypedMap<string, number>();
+        map.set('constructor', 42);
+        expect(() => map.toObject()).toThrow('prototype pollution');
       });
     });
 

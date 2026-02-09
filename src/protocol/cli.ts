@@ -375,6 +375,14 @@ export async function executeResolve(options: CliOptions): Promise<CliResult> {
     // Record the resolution and transition to active state
     const activeSubstate = createActiveSubstate();
     const recordId = `resolved-${String(Date.now())}`;
+
+    // Find the original blocking query to get its ID for proper resolution tracking
+    const originalBlockingQuery = snapshot.blockingQueries.find(
+      (entry) =>
+        entry.phase === snapshot.state.phase && entry.query === substate.query && !entry.resolved
+    );
+    const originalQueryId = originalBlockingQuery?.id ?? recordId;
+
     const resolvedRecord: BlockingRecord = {
       id: recordId,
       phase: snapshot.state.phase,
@@ -382,7 +390,7 @@ export async function executeResolve(options: CliOptions): Promise<CliResult> {
       blockedAt: substate.blockedAt,
       resolved: true as const,
       resolution: {
-        queryId: recordId,
+        queryId: originalQueryId,
         response: options.resolution,
         resolvedAt: new Date().toISOString(),
       },

@@ -527,22 +527,18 @@ export async function createOrchestrator(options: OrchestratorOptions): Promise<
       orchestratorState.previousSnapshot.state.substate.kind !== 'Blocking'
     ) {
       try {
+        const { phase } = result.snapshot.state;
+        const substate = result.snapshot.state.substate;
+        const { query, blockedAt, options, timeoutMs } = substate;
         const blockingRecord: BlockingRecord = {
-          id: `blocking-${result.snapshot.state.phase}`,
-          phase: result.snapshot.state.phase,
-          query: result.snapshot.state.substate.query,
-          blockedAt: result.snapshot.state.substate.blockedAt,
+          id: `blocking-${phase}`,
+          phase,
+          query,
+          blockedAt,
           resolved: false,
+          ...(options !== undefined ? { options } : {}),
+          ...(timeoutMs !== undefined ? { timeoutMs } : {}),
         };
-        // Add optional fields if present
-        if (result.snapshot.state.substate.options !== undefined) {
-          (blockingRecord as { options?: readonly string[] }).options =
-            result.snapshot.state.substate.options;
-        }
-        if (result.snapshot.state.substate.timeoutMs !== undefined) {
-          (blockingRecord as { timeoutMs?: number }).timeoutMs =
-            result.snapshot.state.substate.timeoutMs;
-        }
         await notificationService.notify('block', blockingRecord);
       } catch {
         // Notification failure should not block protocol execution

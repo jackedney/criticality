@@ -4,6 +4,9 @@
  * @packageDocumentation
  */
 
+// Force UTC timezone for deterministic cron scheduling tests
+process.env.TZ = 'UTC';
+
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';

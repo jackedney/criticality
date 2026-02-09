@@ -279,10 +279,13 @@ export class TypedMap<K, V> {
     const entriesArray = Array.from(this.map.entries());
     for (const [key, value] of entriesArray) {
       const stringKey = String(key);
-      if (stringKey !== '__proto__' && stringKey !== 'constructor') {
-        // eslint-disable-next-line security/detect-object-injection
-        obj[stringKey] = value;
+      if (stringKey === '__proto__' || stringKey === 'constructor') {
+        throw new Error(
+          `TypedMap.toObject() cannot convert map with key '${stringKey}': this key would cause prototype pollution when converted to a plain object`
+        );
       }
+      // eslint-disable-next-line security/detect-object-injection
+      obj[stringKey] = value;
     }
     return obj;
   }

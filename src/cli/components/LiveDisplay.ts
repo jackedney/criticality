@@ -235,7 +235,7 @@ export class LiveDisplay {
    */
   private getSpinnerLine(): string {
     const frames = this.options.unicode ? SPINNER_FRAMES : ASCII_SPINNER_FRAMES;
-    const frame = String(frames[this.currentFrame % frames.length]);
+    const frame = frames[this.currentFrame % frames.length] ?? frames[0];
     const substateText = this.formatSubstate(this.substate);
 
     return `${frame} ${this.phase}${substateText !== 'active' ? ' > ' + substateText : ''}`;
