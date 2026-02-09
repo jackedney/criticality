@@ -103,14 +103,10 @@ export class NotificationService {
           channel,
         };
       } else {
-        const failureResult = webhookResult as {
-          readonly success: false;
-          readonly error: string;
-        };
         return {
           success: false as const,
           channel,
-          error: failureResult.error,
+          error: webhookResult.error,
         };
       }
     });
