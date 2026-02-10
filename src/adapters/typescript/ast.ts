@@ -126,17 +126,18 @@ const VALIDATION_PROJECT = new Project({
  * Checks if a function body contains a TODO marker.
  *
  * @param functionNode - The function-like node to check.
+ * @param bodyText - Optional pre-extracted body text. If provided, avoids .getText() call.
  * @returns True if the function body contains a TODO marker.
  */
-function hasTodoMarker(functionNode: FunctionLike): boolean {
+function hasTodoMarker(functionNode: FunctionLike, bodyText?: string): boolean {
   const body = functionNode.getBody();
   if (!body) {
     return false;
   }
 
-  const bodyText = body.getText();
+  const text = bodyText ?? body.getText();
 
-  return TODO_PATTERNS.some((pattern) => pattern.test(bodyText));
+  return TODO_PATTERNS.some((pattern) => pattern.test(text));
 }
 
 /**
@@ -778,7 +779,18 @@ export function findTodoFunctions(project: Project): TodoFunction[] {
     const functions = collectFunctions(sourceFile);
 
     for (const func of functions) {
-      if (hasTodoMarker(func)) {
+      // Optimization: Extract body text from already loaded fileText to avoid internal getText() calls
+      // within hasTodoMarker (if we can)
+      const body = func.getBody();
+      if (!body) {
+        continue;
+      }
+
+      // Extract substring directly from source file text using node positions.
+      // This is much faster than body.getText() which allocates a new string from tokens/AST.
+      const bodyText = fileText.substring(body.getStart(), body.getEnd());
+
+      if (hasTodoMarker(func, bodyText)) {
         todoFunctions.push({
           name: getFunctionName(func),
           filePath: sourceFile.getFilePath(),
@@ -967,17 +979,25 @@ export function inspectAst(
   // Collect all functions
   const functions = collectFunctions(sourceFile);
 
+  // Optimization: Get source file text once to extract substrings instead of calling node.getText() repeatedly.
+  // node.getText() is expensive as it may traverse tokens/AST if not cached, and allocates new strings.
+  const sourceFileText = sourceFile.getFullText();
+
   for (const func of functions) {
     const name = getFunctionName(func);
     const line = func.getStartLineNumber();
     const body = func.getBody();
     const hasBody = body !== undefined;
 
+    // Optimization: Extract body text once if body exists
+    let bodyText: string | undefined;
+    if (body) {
+      bodyText = sourceFileText.substring(body.getStart(), body.getEnd());
+    }
+
     // Compute strict isTodoBody: body must ONLY contain TODO patterns (nothing else)
     let isTodoBody = false;
-    if (hasBody) {
-      const bodyText = body.getText();
-
+    if (hasBody && bodyText !== undefined) {
       // TODO-only patterns: entire body must match exactly
       const todoOnlyPatterns = [
         /^\{\s*\}$/, // Empty body {}
@@ -988,7 +1008,8 @@ export function inspectAst(
     }
 
     // hasTodoBody in InspectedFunction indicates presence of TODO marker
-    const hasTodoBody = hasBody && hasTodoMarker(func);
+    // Pass pre-extracted bodyText to avoid internal getText call
+    const hasTodoBody = hasBody && hasTodoMarker(func, bodyText);
 
     inspectedFunctions.push({
       name,
@@ -999,11 +1020,10 @@ export function inspectAst(
 
     // Check for non-TODO bodies when required
     // Run LOGIC_LEAKAGE_PATTERNS scan only when not isTodoBody (strict check)
-    if (checkFunctionBodies && checkTodoPattern && hasBody && !isTodoBody) {
+    if (checkFunctionBodies && checkTodoPattern && hasBody && !isTodoBody && bodyText !== undefined) {
       // This is a function with implementation - check if it's allowed
       // For Lattice output, only TODO bodies should exist
-      // body is guaranteed to exist since hasBody is true
-      const bodyText = body.getText();
+      // bodyText is guaranteed to exist since hasBody is true
 
       if (detectLogicPatterns) {
         // Use unique context key including file path and line number
