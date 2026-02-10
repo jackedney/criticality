@@ -2311,7 +2311,7 @@ Agents are defined with strict MCP access policies to enforce the "Principle of 
 
 ## 9. Orchestrator Specification
 
-### 8.1 Responsibilities
+### 9.1 Responsibilities
 
 The orchestrator is **deterministic** and performs **classification but not reasoning**:
 
@@ -2337,7 +2337,7 @@ The orchestrator is **deterministic** and performs **classification but not reas
 
 **Blocking Behavior**: On block, the orchestrator persists state, sends a one-time notification (Slack/email), and exits. Human runs `criticality status` or `criticality resume` when ready.
 
-### 8.2 State Hierarchy
+### 9.2 State Hierarchy
 
 The orchestrator uses a **hierarchical state machine** with two levels:
 
@@ -2376,7 +2376,7 @@ ProtocolState
             └── VerifyingSemantics
 ```
 
-### 8.3 State Definitions
+### 9.3 State Definitions
 
 #### Top-Level Protocol State
 
@@ -2586,7 +2586,7 @@ interface VerifyingSemanticsData {
 }
 ```
 
-### 8.4 Transition Definitions
+### 9.4 Transition Definitions
 
 #### Transition Structure
 
@@ -2905,7 +2905,7 @@ type Action =
 └─────────────────────────────────────────────────────────────────────────────┘
 ```
 
-### 8.5 Tick Function
+### 9.5 Tick Function
 
 The orchestrator executes as a loop of atomic "ticks". Each tick is deterministic given the current state and artifacts.
 
@@ -3009,7 +3009,7 @@ async function run(orchestrator: Orchestrator): Promise<RunResult> {
 }
 ```
 
-### 8.6 Persistence and Resume
+### 9.6 Persistence and Resume
 
 #### Persisted State Schema
 
@@ -3161,7 +3161,7 @@ Use ↑/↓ to navigate, Enter to select, or type option number
 
 The interactive approach ensures users see the full context and implications of each resolution option before making a decision, which is particularly important for blocking queries that may have far-reaching effects on the protocol state.
 
-### 8.7 Invariants
+### 9.7 Invariants
 
 The orchestrator maintains these invariants:
 
@@ -3174,7 +3174,7 @@ The orchestrator maintains these invariants:
 | **No Reasoning** | Orchestrator never generates solutions | Only classification and dispatch |
 | **Compile Oracle** | From Lattice onward, code must compile | Guard on phase transitions |
 
-### 8.8 AST Operations
+### 9.8 AST Operations
 
 The orchestrator uses language-specific AST libraries for code manipulation:
 
@@ -3206,7 +3206,7 @@ function injectRustImplementation(skeleton: string, fnName: string, body: string
 }
 ```
 
-### 8.9 Configuration
+### 9.9 Configuration
 
 ```toml
 [orchestrator]
