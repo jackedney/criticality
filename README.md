@@ -11,9 +11,10 @@
 ```text
                     ┌─────────────────────────────────────────┐
                     │                                         │
-  intent ──────────>│  ignition -> lattice -> injection ->   │──────────> code
-                    │              audit        mesoscopic    │
-                    │                           mass-defect   │
+  intent ──────────>│  Ignition -> Lattice -> Composition   │──────────> code
+                    │    Audit -> Injection -> Mesoscopic      │
+                    │         -> Mass Defect                  │
+                    │         Decision Ledger ◀───────┘       │
                     │                                         │
                     └─────────────────────────────────────────┘
 ```
@@ -21,8 +22,8 @@
 ## status
 
 ```text
-phase 3: protocol phases ................................. complete
-phase 4: human interface ................................. pending
+phase 4.1, 4.3: CLI interface & web dashboard ........... complete
+phase 4.2: notification system .......................... partial
 ```
 
 ## quickstart
@@ -38,12 +39,12 @@ npm test
 
 ```text
 src/
-├── interview/        # phase I: ignition
-├── lattice/          # phase II: type lattice construction
-├── composition-audit/# contradiction detection
-├── injection/        # phase III: ralph loop
-├── mesoscopic/       # phase III.5: cluster verification
-├── mass-defect/      # phase IV: complexity reduction
+├── interview/        # Ignition: specification interrogation
+├── lattice/          # Lattice: structure-first diffusion
+├── composition-audit/# Composition Audit: contradiction detection
+├── injection/        # Injection: atomic stateless implementation
+├── mesoscopic/       # Mesoscopic: integration verification
+├── mass-defect/      # Mass Defect: complexity reduction
 ├── adapters/         # language-specific implementations
 ├── protocol/         # state machine & orchestration
 ├── router/           # model routing & cost optimization
