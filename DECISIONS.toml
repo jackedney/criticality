@@ -150,7 +150,7 @@ dependencies = ["inject_001"]
 id = "inject_003"
 timestamp = "2025-01-23T00:00:00Z"
 category = "injection"
-constraint = "Escalation chain: MiniMax M2 -> Sonnet 4.5 -> Opus 4.5 -> Human"
+constraint = "Escalation chain: worker_model -> structurer_model -> architect_model -> Human"
 rationale = """
 Start with cheapest capable model. Escalate on failure. This optimizes
 cost while ensuring capability is available when needed.
@@ -286,7 +286,7 @@ dependencies = ["contract_001"]
 id = "model_001"
 timestamp = "2025-01-23T00:00:00Z"
 category = "models"
-constraint = "Claude Opus 4.5 for high-level architecture and complex reasoning"
+constraint = "architect_model assigned to high-level architecture and complex reasoning"
 rationale = """
 Opus has the strongest reasoning capabilities. Used for Ignition (user
 interaction, spec synthesis) and as final fallback in Injection.
@@ -300,7 +300,7 @@ dependencies = []
 id = "model_002"
 timestamp = "2025-01-23T00:00:00Z"
 category = "models"
-constraint = "Kimi K2 on Groq for fast logical consistency auditing"
+constraint = "auditor_model assigned to fast logical consistency auditing"
 rationale = """
 Kimi K2 has strong formal reasoning capabilities. Running on Groq provides
 the speed needed for rapid audit loops.
@@ -314,7 +314,7 @@ dependencies = []
 id = "model_003"
 timestamp = "2025-01-23T00:00:00Z"
 category = "models"
-constraint = "MiniMax M2 on Cerebras as primary Injection worker"
+constraint = "worker_model assigned as primary Injection worker"
 rationale = """
 Most function implementations are straightforward. MiniMax provides
 sufficient capability at much lower cost and higher speed than Sonnet/Opus.
@@ -328,7 +328,7 @@ dependencies = []
 id = "model_004"
 timestamp = "2025-01-23T00:00:00Z"
 category = "models"
-constraint = "Claude Sonnet 4.5 for structure generation and as first fallback"
+constraint = "structurer_model assigned to structure generation and as first fallback"
 rationale = """
 Sonnet balances capability and cost. Good for Lattice generation and
 as intermediate escalation target between MiniMax and Opus.
