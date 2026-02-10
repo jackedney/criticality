@@ -115,17 +115,17 @@ All decisions, constraints, and assumptions must be captured in machine-readable
 │           │                                                                  │
 │           ▼                                                                  │
 │  ┌──────────────────┐     ┌─────────────────┐                               │
-│  │  PHASE I:        │     │  Decision       │                               │
-│  │  IGNITION        │────▶│  Ledger         │◀─── Persists across phases    │
-│  │  (Specification) │     │  (append-only)  │                               │
+│  │  IGNITION         │     │  Decision       │                               │
+│  │  (Specification) │────▶│  Ledger         │◀─── Persists across phases    │
+│  │                  │     │  (append-only)  │                               │
 │  └────────┬─────────┘     └─────────────────┘                               │
 │           │                        ▲                                         │
 │           │ spec.toml              │ decisions                               │
 │           ▼                        │                                         │
 │  ┌──────────────────┐              │                                         │
-│  │  PHASE II:       │              │                                         │
-│  │  LATTICE         │──────────────┤                                         │
-│  │  (Structure)     │              │                                         │
+│  │  LATTICE         │              │                                         │
+│  │  (Structure)     │──────────────┤                                         │
+│  │                  │              │                                         │
 │  └────────┬─────────┘              │                                         │
 │           │                        │                                         │
 │           │ skeleton + witnesses   │                                         │
@@ -139,25 +139,25 @@ All decisions, constraints, and assumptions must be captured in machine-readable
 │           │ validated structure    │                                         │
 │           ▼                        │                                         │
 │  ┌──────────────────┐              │                                         │
-│  │  PHASE III:      │              │                                         │
-│  │  INJECTION       │──────────────┤                                         │
-│  │  (Implementation)│              │                                         │
+│  │  INJECTION       │              │                                         │
+│  │  (Implementation)│──────────────┤                                         │
+│  │                  │              │                                         │
 │  └────────┬─────────┘              │                                         │
 │           │                        │                                         │
 │           │ implemented code       │                                         │
 │           ▼                        │                                         │
 │  ┌──────────────────┐              │                                         │
-│  │  PHASE III.5:    │              │                                         │
-│  │  MESOSCOPIC      │──────────────┤                                         │
-│  │  (Integration)   │              │                                         │
+│  │  MESOSCOPIC      │              │                                         │
+│  │  (Integration)   │──────────────┤                                         │
+│  │                  │              │                                         │
 │  └────────┬─────────┘              │                                         │
 │           │                        │                                         │
 │           │ verified code          │                                         │
 │           ▼                        │                                         │
 │  ┌──────────────────┐              │                                         │
-│  │  PHASE IV:       │              │                                         │
-│  │  MASS DEFECT     │──────────────┘                                         │
-│  │  (Refinement)    │                                                        │
+│  │  MASS DEFECT    │              │                                         │
+│  │  (Refinement)    │──────────────┘                                         │
+│  │                  │                                                        │
 │  └────────┬─────────┘                                                        │
 │           │                                                                  │
 │           │ final artifact                                                   │
@@ -2202,7 +2202,7 @@ The protocol defines success metrics across four categories with specific target
 interface SuccessMetrics {
     // Correctness (hard requirements)
     correctness: {
-        compilationRate: number;         // Target: 1.0 (100% from Phase II)
+        compilationRate: number;         // Target: 1.0 (100% from Lattice)
         testPassRate: number;            // Target: 0.95 (95%+)
         securityVulnerabilities: number; // Target: 0
     };
@@ -2234,7 +2234,7 @@ interface SuccessMetrics {
 
 | Category | Metric | Target | Notes |
 |----------|--------|--------|-------|
-| Correctness | Compilation rate | 100% | Hard requirement from Phase II |
+| Correctness | Compilation rate | 100% | Hard requirement from Lattice |
 | Correctness | Test pass rate | ≥ 95% | After Injection complete |
 | Correctness | Security vulns | 0 | No known vulnerabilities |
 | Efficiency | Escalation to Sonnet | < 10% | Of total functions |
@@ -3307,14 +3307,14 @@ class GoAdapter implements LanguageAdapter { /* ... */ }
 
 | Term | Definition |
 |------|------------|
-| **Criticality** | The property of being compilable; the system maintains criticality from Phase II onward |
+| **Criticality** | The property of being compilable; the system maintains criticality from Lattice onward |
 | **Context Shedding** | Deliberate destruction of conversation history at phase boundaries |
 | **Decision Ledger** | Append-only log of validated decisions that survives phase transitions |
-| **Lattice** | The compilable skeleton produced by Phase II; contains structure but no logic |
+| **Lattice** | The compilable skeleton produced by Lattice; contains structure but no logic |
 | **Micro-Contract** | Formal constraints attached to a function signature |
-| **Ralph Loop** | The stateless implementation loop in Phase III, named after the "Ralph Wiggum Loop" pattern from [awesomeclaude.ai](https://awesomeclaude.ai/ralph-wiggum). Embodies "persistent iteration despite setbacks"—a while loop that repeatedly feeds prompts until completion. Named after The Simpsons character representing relentless determination. |
+| **Ralph Loop** | The stateless implementation loop in Injection, named after the "Ralph Wiggum Loop" pattern from [awesomeclaude.ai](https://awesomeclaude.ai/ralph-wiggum). Embodies "persistent iteration despite setbacks"—a while loop that repeatedly feeds prompts until completion. Named after The Simpsons character representing relentless determination. |
 | **Type Witness** | A type-level encoding of a runtime invariant |
-| **Mass Defect** | The reduction in code size/complexity during Phase IV (physics analogy) |
+| **Mass Defect** | The reduction in code size/complexity during Mass Defect (physics analogy) |
 
 ### Appendix B: File Structure
 
