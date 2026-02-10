@@ -5,9 +5,9 @@
 
 ---
 
-## Current Status: Phase 3 Complete
+## Current Status: Phase 4.1, 4.3 Complete, Phase 4.2 Partial
 
-Phase 0 (Design), Phase 1 (Core Infrastructure), Phase 2 (TypeScript Adapter), and Phase 3 (Protocol Phase Implementation) are complete. The codebase includes:
+Phase 0 (Design), Phase 1 (Core Infrastructure), Phase 2 (TypeScript Adapter), and Phase 3 (Protocol Phase Implementation) are complete. Phase 4.1 (CLI Interface) is complete. Phase 4.3 (Web Dashboard) is deferred/optional. Phase 4.2 (Notification System) is partially complete with webhook integration and reminder scheduling implemented, while Slack and email integrations are deferred. The codebase includes:
 - Full configuration system with TOML parsing and environment overrides
 - Append-only decision ledger with dependency tracking and cascade invalidation
 - Protocol state machine with blocking, persistence, and checkpoint/resume
@@ -23,6 +23,8 @@ Phase 0 (Design), Phase 1 (Core Infrastructure), Phase 2 (TypeScript Adapter), a
 - **Phase III (Injection)**: Ralph Loop with context extraction, minimal prompt generation, AST injection, test execution, escalation logic, circuit breaker, security scanning
 - **Phase III.5 (Mesoscopic)**: Cluster definition, spec-driven test generation, cluster execution, verdict handling
 - **Phase IV (Mass Defect)**: Complexity analysis with ESLint integration, TOML-based transformation catalog (14 patterns), transformation application via LLM, semantic verification per risk level, iteration until convergence
+- **Phase 4.1 (CLI Interface)**: Complete CLI with status display, blocking query resolution with arrow-key navigation, clarification input, resume command with graceful shutdown, live progress display, telemetry collection, and error suggestions
+- **Phase 4.2 (Notification System)**: Notification trait and service implemented, webhook integration complete with validation, reminder scheduling with cron support (Slack and email deferred)
 
 ---
 
@@ -202,25 +204,25 @@ Phase 0 (Design), Phase 1 (Core Infrastructure), Phase 2 (TypeScript Adapter), a
 ### Milestones
 
 #### 4.1 CLI Interface
-- [ ] Implement blocking query display
-- [ ] Implement option selection
-- [ ] Implement clarification input
-- [ ] Implement status display
-- [ ] Implement resume command
+- [x] Implement blocking query display
+- [x] Implement option selection
+- [x] Implement clarification input
+- [x] Implement status display
+- [x] Implement resume command
 
 #### 4.2 Notification System
-- [ ] Implement notification trait
+- [x] Implement notification trait
 - [x] Add webhook integration
 - [ ] Add Slack integration (deferred to future phase)
 - [ ] Add email integration (deferred to future phase)
-- [ ] Implement reminder scheduling
+- [x] Implement reminder scheduling
 
 #### 4.3 Web Dashboard (Optional)
-- [ ] Design dashboard UI
-- [ ] Implement protocol state visualization
-- [ ] Implement ledger browser
-- [ ] Implement blocking query UI
-- [ ] Implement real-time updates
+- [ ] Design dashboard UI (deferred - optional)
+- [ ] Implement protocol state visualization (deferred - optional)
+- [ ] Implement ledger browser (deferred - optional)
+- [ ] Implement blocking query UI (deferred - optional)
+- [ ] Implement real-time updates (deferred - optional)
 
 ---
 
