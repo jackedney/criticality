@@ -302,7 +302,7 @@
     {
       "id": "US-010",
       "title": "Deep verify Lattice phase implementation vs spec",
-      "status": "in_progress",
+      "status": "done",
       "dependsOn": [
         "US-004",
         "US-005"
@@ -324,13 +324,13 @@
         "Negative case: If the sanitization step (AST inspection for logic leakage) is not implemented, document as warning discrepancy"
       ],
       "startedAt": "2026-02-11T00:41:43.711961+00:00",
-      "completedAt": null,
-      "updatedAt": "2026-02-11T00:41:43.712145+00:00"
+      "completedAt": "2026-02-11T00:46:05.448651+00:00",
+      "updatedAt": "2026-02-11T00:46:05.448457+00:00"
     },
     {
       "id": "US-011",
       "title": "Deep verify Composition Audit implementation vs spec",
-      "status": "open",
+      "status": "done",
       "dependsOn": [
         "US-004",
         "US-005"
@@ -350,12 +350,15 @@
         "Verify delegated decision downgrade per decision ledger_007: delegated decisions downgrade to 'inferred' when Composition Audit finds contradictions involving the decision",
         "Example: If parseContradictionOutput produces objects matching the spec YAML structure with all required fields, mark conformant",
         "Negative case: If 'Postcondition Conflict' contradiction type is missing from the implementation, document as critical discrepancy"
-      ]
+      ],
+      "startedAt": "2026-02-11T00:46:07.519207+00:00",
+      "completedAt": "2026-02-11T00:51:52.170126+00:00",
+      "updatedAt": "2026-02-11T00:51:52.169672+00:00"
     },
     {
       "id": "US-012",
       "title": "Deep verify Injection phase implementation vs spec",
-      "status": "open",
+      "status": "in_progress",
       "dependsOn": [
         "US-004",
         "US-005"
@@ -377,7 +380,10 @@
         "Verify security scanner integration runs after Injection per decision security_001",
         "Example: If circuit breaker checks require_opus_attempt before tripping per inject_004, mark conformant",
         "Negative case: If injection order is not topological (e.g., functions injected alphabetically), document as critical discrepancy"
-      ]
+      ],
+      "startedAt": "2026-02-11T00:51:54.246778+00:00",
+      "completedAt": null,
+      "updatedAt": "2026-02-11T00:51:54.246963+00:00"
     },
     {
       "id": "US-013",
