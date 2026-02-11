@@ -25,6 +25,7 @@ describe('WebhookSender', () => {
         timestamp: '2024-02-07T12:00:00Z',
         protocol_state: {
           phase: 'Lattice',
+          state_kind: 'Active',
           substate: { kind: 'Active' },
         },
       };
@@ -53,6 +54,7 @@ describe('WebhookSender', () => {
         timestamp: '2024-02-07T12:00:00Z',
         protocol_state: {
           phase: 'Complete',
+          state_kind: 'Complete',
           substate: { kind: 'Active' },
         },
       };
@@ -77,6 +79,7 @@ describe('WebhookSender', () => {
         timestamp: '2024-02-07T12:00:00Z',
         protocol_state: {
           phase: 'Injection',
+          state_kind: 'Failed',
           substate: {
             kind: 'Failed',
             error: 'Test error',
@@ -110,6 +113,7 @@ describe('WebhookSender', () => {
         timestamp: '2024-02-07T12:00:00Z',
         protocol_state: {
           phase: 'Lattice',
+          state_kind: 'Active',
           substate: { kind: 'Active' },
         },
       };
@@ -135,6 +139,7 @@ describe('WebhookSender', () => {
         timestamp: '2024-02-07T12:00:00Z',
         protocol_state: {
           phase: 'Injection',
+          state_kind: 'Failed',
           substate: {
             kind: 'Failed',
             error: 'Test error',
@@ -164,6 +169,7 @@ describe('WebhookSender', () => {
         timestamp: '2024-02-07T12:00:00Z',
         protocol_state: {
           phase: 'Lattice',
+          state_kind: 'Active',
           substate: { kind: 'Active' },
         },
       };
@@ -193,6 +199,7 @@ describe('WebhookSender', () => {
         timestamp: '2024-02-07T12:00:00Z',
         protocol_state: {
           phase: 'Lattice',
+          state_kind: 'Active',
           substate: { kind: 'Active' },
         },
       };
@@ -216,6 +223,7 @@ describe('WebhookSender', () => {
         timestamp: '2024-02-07T12:00:00Z',
         protocol_state: {
           phase: 'Lattice',
+          state_kind: 'Active',
           substate: { kind: 'Active' },
         },
       };
@@ -237,6 +245,7 @@ describe('WebhookSender', () => {
         timestamp: '2024-02-07T12:00:00Z',
         protocol_state: {
           phase: 'Lattice',
+          state_kind: 'Active',
           substate: { kind: 'Active' },
         },
       };
@@ -266,6 +275,7 @@ describe('WebhookSender', () => {
         },
         protocol_state: {
           phase: 'Lattice',
+          state_kind: 'Blocked',
           substate: {
             kind: 'Blocking',
             query: 'Approve architecture?',
@@ -298,6 +308,7 @@ describe('WebhookSender', () => {
         timestamp: '2024-02-07T12:00:00Z',
         protocol_state: {
           phase: 'Lattice',
+          state_kind: 'Active',
           substate: { kind: 'Active' },
         },
       };
@@ -320,6 +331,7 @@ describe('WebhookSender', () => {
         timestamp: '2024-02-07T12:00:00Z',
         protocol_state: {
           phase: 'Lattice',
+          state_kind: 'Active',
           substate: { kind: 'Active' },
         },
       };
@@ -338,6 +350,7 @@ describe('WebhookSender', () => {
         timestamp: '2024-02-07T12:00:00Z',
         protocol_state: {
           phase: 'Lattice',
+          state_kind: 'Active',
           substate: { kind: 'Active' },
         },
       };
@@ -360,6 +373,7 @@ describe('WebhookSender', () => {
         timestamp: '2024-02-07T12:00:00Z',
         protocol_state: {
           phase: 'Lattice',
+          state_kind: 'Active',
           substate: { kind: 'Active' },
         },
       };
@@ -382,6 +396,7 @@ describe('WebhookSender', () => {
         timestamp: '2024-02-07T12:00:00Z',
         protocol_state: {
           phase: 'Lattice',
+          state_kind: 'Active',
           substate: { kind: 'Active' },
         },
       };
@@ -406,6 +421,7 @@ describe('WebhookSender', () => {
         timestamp: '2024-02-07T12:00:00Z',
         protocol_state: {
           phase: 'Lattice',
+          state_kind: 'Active',
           substate: { kind: 'Active' },
         },
       };

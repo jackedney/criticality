@@ -50,11 +50,18 @@ export interface NotificationChannel {
  * This is the external representation sent to webhook consumers.
  * It differs from the internal ProtocolState discriminated union
  * by using a flat `{ phase, substate }` structure for backwards
- * compatibility with external consumers.
+ * compatibility with external consumers, enriched with 3-tier
+ * metadata: `state_kind`, `block_reason`, and `step`.
  */
 export interface WebhookProtocolState {
   /** The current protocol phase. */
   readonly phase: string;
+  /** The Tier-1 state kind (Active, Blocked, Failed, Complete). */
+  readonly state_kind: string;
+  /** The BlockReason when state_kind is 'Blocked'. */
+  readonly block_reason?: string;
+  /** The current step name when state_kind is 'Active'. */
+  readonly step?: string;
   /** The substate within the current phase. */
   readonly substate: {
     readonly kind: string;

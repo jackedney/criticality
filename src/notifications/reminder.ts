@@ -185,6 +185,7 @@ export class ReminderScheduler {
 
     const protocolState: WebhookProtocolState = {
       phase: blockingRecord.phase,
+      state_kind: 'Blocked',
       substate: {
         kind: 'Blocking',
         query: blockingRecord.query,

@@ -25,32 +25,39 @@ import { WebhookSender } from './webhook.js';
  * Converts an internal ProtocolState to the webhook wire format.
  *
  * Maps the 3-tier discriminated union to the flat `{ phase, substate }`
- * structure expected by external webhook consumers.
+ * structure expected by external webhook consumers, enriched with
+ * `state_kind`, `block_reason` (when blocked), and `step` (when active).
  */
 function toWebhookProtocolState(state: ProtocolState): WebhookProtocolState {
   if (isActiveState(state)) {
     return {
       phase: state.phase.phase,
+      state_kind: 'Active',
+      step: state.phase.substate.step,
       substate: { kind: 'Active', ...state.phase.substate },
     };
   }
   if (isBlockedState(state)) {
-    const { kind, phase, reason, query, blockedAt, ...rest } = state;
+    const { kind: _kind, phase, reason, query, blockedAt, ...rest } = state;
     return {
       phase,
+      state_kind: 'Blocked',
+      block_reason: reason,
       substate: { kind: 'Blocking', query, blockedAt, ...rest },
     };
   }
   if (isFailedState(state)) {
-    const { kind, phase, ...rest } = state;
+    const { kind: _kind, phase, ...rest } = state;
     return {
       phase,
+      state_kind: 'Failed',
       substate: { kind: 'Failed', ...rest },
     };
   }
   // CompleteState
   return {
     phase: 'Complete',
+    state_kind: 'Complete',
     substate: { kind: 'Active' },
   };
 }
@@ -181,6 +188,7 @@ export class NotificationService {
       const record = data as BlockingRecord;
       const protocolState: WebhookProtocolState = {
         phase: record.phase,
+        state_kind: 'Blocked',
         substate: {
           kind: 'Blocking',
           query: record.query,
