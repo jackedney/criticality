@@ -23,6 +23,64 @@ import {
 } from './types.js';
 
 /**
+ * Creates a default PhaseState for a given target phase.
+ *
+ * Each phase gets its initial default substate, used when creating
+ * new ActiveState instances during transitions or resolution.
+ *
+ * @param phase - The target protocol phase.
+ * @returns A PhaseState with the default substate for that phase.
+ */
+function createDefaultPhaseState(phase: ProtocolPhase): PhaseState {
+  switch (phase) {
+    case 'Ignition':
+      return {
+        phase: 'Ignition',
+        substate: {
+          step: 'interviewing' as const,
+          interviewPhase: 'Discovery' as const,
+          questionIndex: 0,
+        },
+      };
+    case 'Lattice':
+      return {
+        phase: 'Lattice',
+        substate: { step: 'generatingStructure' as const },
+      };
+    case 'CompositionAudit':
+      return {
+        phase: 'CompositionAudit',
+        substate: { step: 'auditing' as const, auditorsCompleted: 0 },
+      };
+    case 'Injection':
+      return {
+        phase: 'Injection',
+        substate: { step: 'selectingFunction' as const },
+      };
+    case 'Mesoscopic':
+      return {
+        phase: 'Mesoscopic',
+        substate: { step: 'generatingTests' as const },
+      };
+    case 'MassDefect':
+      return {
+        phase: 'MassDefect',
+        substate: { step: 'analyzingComplexity' as const },
+      };
+    case 'Complete':
+      // Complete is not a valid phase for ActiveState, default to Ignition
+      return {
+        phase: 'Ignition',
+        substate: {
+          step: 'interviewing' as const,
+          interviewPhase: 'Discovery' as const,
+          questionIndex: 0,
+        },
+      };
+  }
+}
+
+/**
  * Valid forward transitions as defined in SPECIFICATION.md.
  *
  * Each entry maps a source phase to its valid next phase in the
@@ -477,15 +535,8 @@ export function transition(
   // Perform context shedding
   const contextShed = shedContext(fromPhase, targetPhase);
 
-  // Create new state with a default substate for the target phase
-  // Note: In a full implementation, the phase substate would be more context-aware
-  // For now, we use a default Ignition substate as a placeholder
-  const defaultSubstate = {
-    step: 'interviewing' as const,
-    interviewPhase: 'Discovery' as const,
-    questionIndex: 0,
-  };
-  const phaseState: PhaseState = { phase: targetPhase as any, substate: defaultSubstate };
+  // Create new state with the default substate for the target phase
+  const phaseState = createDefaultPhaseState(targetPhase);
   const newState = createActiveState(phaseState);
 
   return successResult(newState, contextShed);

@@ -263,6 +263,60 @@ export const Actions = {
 };
 
 /**
+ * Creates a default PhaseState for a given phase, used when resolving blocked states.
+ *
+ * @param phase - The protocol phase.
+ * @returns A PhaseState with the default substate for that phase.
+ */
+function createDefaultPhaseStateForResolution(phase: ProtocolPhase): PhaseState {
+  switch (phase) {
+    case 'Ignition':
+      return {
+        phase: 'Ignition',
+        substate: {
+          step: 'interviewing' as const,
+          interviewPhase: 'Discovery' as const,
+          questionIndex: 0,
+        },
+      };
+    case 'Lattice':
+      return {
+        phase: 'Lattice',
+        substate: { step: 'generatingStructure' as const },
+      };
+    case 'CompositionAudit':
+      return {
+        phase: 'CompositionAudit',
+        substate: { step: 'auditing' as const, auditorsCompleted: 0 },
+      };
+    case 'Injection':
+      return {
+        phase: 'Injection',
+        substate: { step: 'selectingFunction' as const },
+      };
+    case 'Mesoscopic':
+      return {
+        phase: 'Mesoscopic',
+        substate: { step: 'generatingTests' as const },
+      };
+    case 'MassDefect':
+      return {
+        phase: 'MassDefect',
+        substate: { step: 'analyzingComplexity' as const },
+      };
+    case 'Complete':
+      return {
+        phase: 'Ignition',
+        substate: {
+          step: 'interviewing' as const,
+          interviewPhase: 'Discovery' as const,
+          questionIndex: 0,
+        },
+      };
+  }
+}
+
+/**
  * Get required artifacts for transitioning to a phase.
  *
  * @param toPhase - The target phase.
@@ -331,7 +385,7 @@ export async function executeTick(context: TickContext, statePath: string): Prom
       snapshot,
       shouldContinue: false,
       stopReason: 'FAILED',
-      error: (state as any).error,
+      error: state.error,
     };
   }
 
@@ -401,14 +455,9 @@ export async function executeTick(context: TickContext, statePath: string): Prom
     if (context.pendingResolutions.length > 0) {
       const resolution = context.pendingResolutions[0];
       if (resolution !== undefined) {
-        // Create active state with default Ignition substate as placeholder
-        // In a real implementation, the actual phase substate would be restored
-        const defaultSubstate = {
-          step: 'interviewing' as const,
-          interviewPhase: 'Discovery' as const,
-          questionIndex: 0,
-        };
-        const phaseState: PhaseState = { phase: 'Ignition', substate: defaultSubstate };
+        // Create active state with the default substate for the blocked phase
+        const blockedPhase = blockedState.phase;
+        const phaseState = createDefaultPhaseStateForResolution(blockedPhase);
         const activeState = createActiveState(phaseState);
 
         const newSnapshot: ProtocolStateSnapshot = {
@@ -533,7 +582,9 @@ export async function createOrchestrator(options: OrchestratorOptions): Promise<
   };
 
   // Mutable state for collected artifacts and resolutions
-  const collectedArtifacts = new Set<ArtifactType>(currentSnapshot.artifacts);
+  const collectedArtifacts = new Set<ArtifactType>(
+    currentSnapshot.artifacts as readonly ArtifactType[]
+  );
   const pendingResolutions: BlockingResolution[] = [];
 
   /**
@@ -661,7 +712,7 @@ export async function createOrchestrator(options: OrchestratorOptions): Promise<
 export function getProtocolStatus(snapshot: ProtocolStateSnapshot): {
   phase: ProtocolPhase | undefined;
   substate: string;
-  artifacts: readonly ArtifactType[];
+  artifacts: readonly string[];
   blocking: { query: string; blockedAt: string } | undefined;
   failed: { error: string; recoverable: boolean } | undefined;
 } {
@@ -679,7 +730,7 @@ export function getProtocolStatus(snapshot: ProtocolStateSnapshot): {
       blockedAt: blockedState.blockedAt,
     };
   } else if (isFailedState(state)) {
-    const failedState = state as any; // Type assertion since we know it's failed
+    const failedState = state;
     failed = {
       error: failedState.error,
       recoverable: failedState.recoverable,

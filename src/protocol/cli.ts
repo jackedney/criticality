@@ -384,7 +384,7 @@ export async function executeResolve(options: CliOptions): Promise<CliResult> {
     }
 
     // Record the resolution and transition to active state
-    const blockedState = state as any; // Type assertion since we know it's blocked
+    const blockedState = state;
     const phase = getPhase(state);
     if (phase === undefined) {
       return {

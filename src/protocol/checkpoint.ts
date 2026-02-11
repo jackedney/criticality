@@ -24,8 +24,6 @@ import {
   getPhase,
   isFailedState,
   isBlockedState,
-  type BlockedState,
-  type FailedState,
 } from './types.js';
 import type { ArtifactType } from './transitions.js';
 
@@ -350,7 +348,7 @@ export function validateStateIntegrity(
 
   // 3. Validate blocked state has required fields
   if (isBlockedState(state)) {
-    const blockedState = state as BlockedState;
+    const blockedState = state;
     if (typeof blockedState.query !== 'string' || blockedState.query.length === 0) {
       errors.push({
         code: 'CORRUPTED_STRUCTURE',
@@ -380,7 +378,7 @@ export function validateStateIntegrity(
 
   // 4. Validate failed state has required fields
   if (isFailedState(state)) {
-    const failedState = state as FailedState;
+    const failedState = state;
     if (typeof failedState.error !== 'string') {
       errors.push({
         code: 'CORRUPTED_STRUCTURE',

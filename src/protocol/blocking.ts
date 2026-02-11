@@ -210,6 +210,60 @@ function protocolPhaseToDecisionPhase(
 }
 
 /**
+ * Creates a default PhaseState for a given phase, used when resolving blocked states.
+ *
+ * @param phase - The protocol phase.
+ * @returns A PhaseState with the default substate for that phase.
+ */
+function createDefaultPhaseStateForBlocking(phase: ProtocolPhase): PhaseState {
+  switch (phase) {
+    case 'Ignition':
+      return {
+        phase: 'Ignition',
+        substate: {
+          step: 'interviewing' as const,
+          interviewPhase: 'Discovery' as const,
+          questionIndex: 0,
+        },
+      };
+    case 'Lattice':
+      return {
+        phase: 'Lattice',
+        substate: { step: 'generatingStructure' as const },
+      };
+    case 'CompositionAudit':
+      return {
+        phase: 'CompositionAudit',
+        substate: { step: 'auditing' as const, auditorsCompleted: 0 },
+      };
+    case 'Injection':
+      return {
+        phase: 'Injection',
+        substate: { step: 'selectingFunction' as const },
+      };
+    case 'Mesoscopic':
+      return {
+        phase: 'Mesoscopic',
+        substate: { step: 'generatingTests' as const },
+      };
+    case 'MassDefect':
+      return {
+        phase: 'MassDefect',
+        substate: { step: 'analyzingComplexity' as const },
+      };
+    case 'Complete':
+      return {
+        phase: 'Ignition',
+        substate: {
+          step: 'interviewing' as const,
+          interviewPhase: 'Discovery' as const,
+          questionIndex: 0,
+        },
+      };
+  }
+}
+
+/**
  * Generates a unique blocking query ID.
  *
  * @param phase - The phase in which blocking is occurring.
@@ -421,16 +475,8 @@ export function resolveBlocking(
 
   const decision = ledger.append(decisionInput);
 
-  // Create an active state (with a default Ignition substate as placeholder)
-  // Note: The actual phase substate should be restored from before-blocking state
-  // This is handled by the caller which maintains the pre-blocked state
-  const defaultSubstate = {
-    step: 'interviewing' as const,
-    interviewPhase: 'Discovery' as const,
-    questionIndex: 0,
-  };
-  const phaseState: PhaseState = { phase: 'Ignition', substate: defaultSubstate };
-
+  // Create an active state restoring the phase from the blocked state
+  const phaseState = createDefaultPhaseStateForBlocking(record.phase);
   const newState = createActiveState(phaseState);
 
   // Update the blocking record
