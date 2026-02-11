@@ -358,7 +358,7 @@
     {
       "id": "US-012",
       "title": "Deep verify Injection phase implementation vs spec",
-      "status": "in_progress",
+      "status": "done",
       "dependsOn": [
         "US-004",
         "US-005"
@@ -382,13 +382,13 @@
         "Negative case: If injection order is not topological (e.g., functions injected alphabetically), document as critical discrepancy"
       ],
       "startedAt": "2026-02-11T00:51:54.246778+00:00",
-      "completedAt": null,
-      "updatedAt": "2026-02-11T00:51:54.246963+00:00"
+      "completedAt": "2026-02-11T00:58:32.639955+00:00",
+      "updatedAt": "2026-02-11T00:58:32.639483+00:00"
     },
     {
       "id": "US-013",
       "title": "Deep verify Mesoscopic phase implementation vs spec",
-      "status": "open",
+      "status": "in_progress",
       "dependsOn": [
         "US-004",
         "US-005"
@@ -408,7 +408,10 @@
         "Verify context shedding at phase transition to Mass Defect",
         "Example: If ClusterVerdict type has 'pass' and 'fail' variants with violatedClaims matching spec, mark conformant",
         "Negative case: If re-injection targets entire cluster instead of only CLAIM_REF-linked functions, document as critical discrepancy"
-      ]
+      ],
+      "startedAt": "2026-02-11T00:58:34.721003+00:00",
+      "completedAt": null,
+      "updatedAt": "2026-02-11T00:58:34.721196+00:00"
     },
     {
       "id": "US-014",
