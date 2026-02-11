@@ -1,0 +1,72 @@
+# OS files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# Editor directories and files
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+*.bak
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+venv/
+.venv/
+.env
+
+# Node
+node_modules/
+npm-debug.log*
+
+# Build outputs
+dist/
+build/
+docs/
+coverage/
+*.egg-info/
+
+# Compiled JavaScript in src/
+src/**/*.js
+src/**/*.js.map
+!src/**/*.config.js
+
+# Local configuration
+.env.local
+.env.*.local
+*.local
+
+# Logs
+*.log
+logs/
+# Local agent and AI tool metadata
+.agents/
+.ralph/
+.serena/
+.claude/
+.jules/
+.opencode/
+
+# Archive
+archive/
+
+# Temporary files (may contain sensitive data)
+tmp/
+temp/
+*.tmp
+*.temp
+.cache/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
