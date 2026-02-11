@@ -17,7 +17,9 @@ import {
   getPhase,
   isFailedState,
   isBlockedState,
+  isCompleteState,
   createActiveState,
+  createCompleteState,
   getPhaseIndex,
   type PhaseState,
 } from './types.js';
@@ -435,9 +437,21 @@ export function transition(
   targetPhase: ProtocolPhase,
   options?: TransitionOptions
 ): TransitionResult {
+  // CompleteState has no phase field accessible via getPhase, handle it first
+  if (isCompleteState(currentState)) {
+    return errorResult(
+      createTransitionError(
+        'ALREADY_COMPLETE',
+        'Protocol execution is already complete; no further transitions allowed',
+        'Complete',
+        targetPhase
+      )
+    );
+  }
+
   const fromPhase = getPhase(currentState);
 
-  // If current state is complete or has no phase, we can't transition
+  // If current state has no phase, we can't transition
   if (fromPhase === undefined) {
     return errorResult(
       createTransitionError(
@@ -535,7 +549,14 @@ export function transition(
   // Perform context shedding
   const contextShed = shedContext(fromPhase, targetPhase);
 
-  // Create new state with the default substate for the target phase
+  // Create new state: CompleteState for Complete phase, ActiveState for all others
+  if (targetPhase === 'Complete') {
+    const availableArtifacts = options?.artifacts?.available;
+    const artifactList = availableArtifacts !== undefined ? [...availableArtifacts] : [];
+    const newState = createCompleteState(artifactList);
+    return successResult(newState, contextShed);
+  }
+
   const phaseState = createDefaultPhaseState(targetPhase);
   const newState = createActiveState(phaseState);
 

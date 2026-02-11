@@ -18,7 +18,16 @@ import {
 } from './cli.js';
 import type { ProtocolStateSnapshot } from './persistence.js';
 import { saveState } from './persistence.js';
-import { createActiveState, createBlockingSubstate, createFailedSubstate } from './types.js';
+import {
+  createActiveState,
+  createBlockedState,
+  createFailedState,
+  createIgnitionPhaseState,
+  createIgnitionInterviewing,
+  createLatticePhaseState,
+  createLatticeGeneratingStructure,
+  createCompleteState,
+} from './types.js';
 
 describe('Protocol CLI', () => {
   describe('parseArgs', () => {
@@ -128,7 +137,7 @@ describe('Protocol CLI', () => {
 
     it('displays active state correctly', async () => {
       const snapshot: ProtocolStateSnapshot = {
-        state: createActiveState('Lattice'),
+        state: createActiveState(createLatticePhaseState(createLatticeGeneratingStructure())),
         artifacts: ['spec'],
         blockingQueries: [],
       };
@@ -148,10 +157,11 @@ describe('Protocol CLI', () => {
 
     it('displays blocking state with query', async () => {
       const snapshot: ProtocolStateSnapshot = {
-        state: {
+        state: createBlockedState({
+          reason: 'user_requested',
           phase: 'Ignition',
-          substate: createBlockingSubstate({ query: 'What auth method?' }),
-        },
+          query: 'What auth method?',
+        }),
         artifacts: [],
         blockingQueries: [],
       };
@@ -171,10 +181,11 @@ describe('Protocol CLI', () => {
 
     it('displays failed state with error', async () => {
       const snapshot: ProtocolStateSnapshot = {
-        state: {
+        state: createFailedState({
           phase: 'Injection',
-          substate: createFailedSubstate({ error: 'Compilation failed', recoverable: true }),
-        },
+          error: 'Compilation failed',
+          recoverable: true,
+        }),
         artifacts: [],
         blockingQueries: [],
       };
@@ -194,7 +205,7 @@ describe('Protocol CLI', () => {
 
     it('shows verbose details when requested', async () => {
       const snapshot: ProtocolStateSnapshot = {
-        state: createActiveState('Lattice'),
+        state: createActiveState(createLatticePhaseState(createLatticeGeneratingStructure())),
         artifacts: ['spec'],
         blockingQueries: [
           {
@@ -261,7 +272,9 @@ describe('Protocol CLI', () => {
 
     it('fails when not in blocking state', async () => {
       const snapshot: ProtocolStateSnapshot = {
-        state: createActiveState('Ignition'),
+        state: createActiveState(
+          createIgnitionPhaseState(createIgnitionInterviewing('Discovery', 0))
+        ),
         artifacts: [],
         blockingQueries: [],
       };
@@ -280,10 +293,11 @@ describe('Protocol CLI', () => {
 
     it('records resolution and transitions to active', async () => {
       const snapshot: ProtocolStateSnapshot = {
-        state: {
+        state: createBlockedState({
+          reason: 'user_requested',
           phase: 'Ignition',
-          substate: createBlockingSubstate({ query: 'Question?' }),
-        },
+          query: 'Question?',
+        }),
         artifacts: [],
         blockingQueries: [],
       };
@@ -330,10 +344,11 @@ describe('Protocol CLI', () => {
 
     it('reports blocked status when blocked', async () => {
       const snapshot: ProtocolStateSnapshot = {
-        state: {
+        state: createBlockedState({
+          reason: 'user_requested',
           phase: 'Ignition',
-          substate: createBlockingSubstate({ query: 'What to do?' }),
-        },
+          query: 'What to do?',
+        }),
         artifacts: [],
         blockingQueries: [],
       };
@@ -352,7 +367,16 @@ describe('Protocol CLI', () => {
 
     it('reports complete when in complete phase', async () => {
       const snapshot: ProtocolStateSnapshot = {
-        state: createActiveState('Complete'),
+        state: createCompleteState([
+          'spec',
+          'latticeCode',
+          'witnesses',
+          'contracts',
+          'validatedStructure',
+          'implementedCode',
+          'verifiedCode',
+          'finalArtifact',
+        ]),
         artifacts: [
           'spec',
           'latticeCode',

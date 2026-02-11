@@ -32,6 +32,7 @@ import { NotificationService } from '../../notifications/service.js';
 import { ReminderScheduler } from '../../notifications/reminder.js';
 import { validateWebhookEndpoint } from '../../notifications/index.js';
 import * as path from 'node:path';
+import { getPhase, isBlockedState, isFailedState } from '../../protocol/types.js';
 
 interface ResumeDisplayOptions {
   colors: boolean;
@@ -76,9 +77,9 @@ async function validateWebhookEndpoints(
     const result = await validateWebhookEndpoint(channel.endpoint, { ping: false });
 
     if (result.success) {
-      console.log(`✓ ${result.message}`);
+      console.log(`\u2713 ${result.message}`);
     } else {
-      console.warn(`⚠ ${result.error}`);
+      console.warn(`\u26A0 ${result.error}`);
     }
   }
 
@@ -249,7 +250,7 @@ async function displayResumeSummary(
   console.log(wrapInBox(decisionsSummary, options));
 
   console.log();
-  console.log(`Resuming protocol from ${snapshot.state.phase}...`);
+  console.log(`Resuming protocol from ${getPhase(snapshot.state) ?? 'Unknown'}...`);
 }
 
 /**
@@ -312,7 +313,7 @@ function formatCompactSummary(
     if (data.phasesCompleted.length > 1) {
       const lastPhase = data.phasesCompleted[data.phasesCompleted.length - 1];
       if (lastPhase !== undefined) {
-        phaseStr = `${phaseStr} → ${lastPhase}`;
+        phaseStr = `${phaseStr} \u2192 ${lastPhase}`;
       }
     }
     const completedStr = greenCode + 'Completed: ' + phaseStr + resetCode;
@@ -369,7 +370,7 @@ async function displayExecutionSummary(
   const redCode = options.colors ? '\x1b[31m' : '';
 
   const phasesCompleted = getPhasesCompleted(snapshot.artifacts);
-  const { substate } = snapshot.state;
+  const state = snapshot.state;
 
   let decisionsMade = 0;
   if (initialSnapshot.resolvedQueries.length > 0) {
@@ -397,7 +398,7 @@ async function displayExecutionSummary(
   const summaryData: ExecutionSummaryData = {
     tickCount,
     elapsedSec,
-    currentPhase: snapshot.state.phase,
+    currentPhase: getPhase(state) ?? 'Complete',
     phasesCompleted,
     decisionsMade,
     stopReason,
@@ -409,7 +410,7 @@ async function displayExecutionSummary(
     console.log(`${yellowCode}Already blocked, no ticks executed${resetCode}`);
     console.log();
     console.log(
-      `${boldCode}Blocking Query:${resetCode} ${substate.kind === 'Blocking' ? substate.query : 'Unknown'}`
+      `${boldCode}Blocking Query:${resetCode} ${isBlockedState(state) ? state.query : 'Unknown'}`
     );
     console.log();
     console.log(`Run ${greenCode}crit resolve${resetCode} to continue.`);
@@ -428,17 +429,15 @@ async function displayExecutionSummary(
     console.log();
   }
 
-  if (substate.kind === 'Blocking') {
+  if (isBlockedState(state)) {
     console.log(`${yellowCode}Status: Blocked${resetCode}`);
-    console.log(
-      `  Query: ${substate.query.substring(0, 80)}${substate.query.length > 80 ? '...' : ''}`
-    );
+    console.log(`  Query: ${state.query.substring(0, 80)}${state.query.length > 80 ? '...' : ''}`);
     console.log();
     console.log(`Run ${greenCode}crit resolve${resetCode} to continue.`);
-  } else if (substate.kind === 'Failed') {
+  } else if (isFailedState(state)) {
     console.log(`${redCode}Status: Failed${resetCode}`);
-    console.log(`  Error: ${substate.error}`);
-    if (substate.recoverable) {
+    console.log(`  Error: ${state.error}`);
+    if (state.recoverable) {
       console.log();
       console.log(`${yellowCode}This error is recoverable.${resetCode}`);
     }
@@ -538,10 +537,7 @@ export async function handleResumeCommand(context: CliContext): Promise<CliComma
       maxLogEntries: 5,
     });
 
-    liveDisplay.updatePhase(
-      orchestrator.state.snapshot.state.phase,
-      orchestrator.state.snapshot.state.substate
-    );
+    liveDisplay.updatePhase(orchestrator.state.snapshot.state);
     liveDisplay.start();
 
     // Set up SIGINT handler for graceful shutdown
@@ -584,25 +580,27 @@ export async function handleResumeCommand(context: CliContext): Promise<CliComma
     let shouldContinueLoop = true;
 
     // Capture phase before first tick
-    let fromPhase = orchestrator.state.snapshot.state.phase;
+    let fromPhase = getPhase(orchestrator.state.snapshot.state);
     let result: TickResult = await orchestrator.tick();
 
     do {
       tickCount++;
 
-      // Update display with new phase/substate
-      liveDisplay.updatePhase(result.snapshot.state.phase, result.snapshot.state.substate);
+      // Update display with new state
+      liveDisplay.updatePhase(result.snapshot.state);
 
       // Add log entries for significant events
       if (result.transitioned) {
-        const toPhase = result.snapshot.state.phase;
+        const toPhase = getPhase(result.snapshot.state);
         if (fromPhase !== toPhase) {
-          liveDisplay.addLog(`Transitioned: ${fromPhase} → ${toPhase}`);
+          liveDisplay.addLog(
+            `Transitioned: ${fromPhase ?? 'unknown'} \u2192 ${toPhase ?? 'unknown'}`
+          );
         }
       }
 
       // Update fromPhase for next iteration
-      fromPhase = result.snapshot.state.phase;
+      fromPhase = getPhase(result.snapshot.state);
 
       // Check for graceful shutdown after processing tick
       // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition
@@ -649,7 +647,7 @@ export async function handleResumeCommand(context: CliContext): Promise<CliComma
       }
 
       if (shouldContinueLoop) {
-        fromPhase = orchestrator.state.snapshot.state.phase;
+        fromPhase = getPhase(orchestrator.state.snapshot.state);
         result = await orchestrator.tick();
       }
     } while (shouldContinueLoop);
@@ -689,7 +687,7 @@ export async function handleResumeCommand(context: CliContext): Promise<CliComma
         result.error,
         {
           errorType,
-          phase: snapshot.state.phase,
+          phase: getPhase(snapshot.state) ?? 'Unknown',
           details: {
             recoverable: true,
           },

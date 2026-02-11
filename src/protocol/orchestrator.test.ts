@@ -2,7 +2,7 @@
  * Tests for Protocol Orchestrator tick loop.
  */
 
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import {
   Guards,
   Actions,
@@ -14,13 +14,35 @@ import {
 } from './orchestrator.js';
 import type { ProtocolStateSnapshot } from './persistence.js';
 import type { ArtifactType } from './transitions.js';
-import { createActiveState, createBlockingSubstate, createFailedSubstate } from './types.js';
+import {
+  type ProtocolState,
+  createActiveState,
+  createBlockedState,
+  createFailedState,
+  createCompleteState,
+  isActiveState,
+  isCompleteState,
+  getPhase,
+  createIgnitionPhaseState,
+  createIgnitionInterviewing,
+  createLatticePhaseState,
+  createLatticeGeneratingStructure,
+  createMassDefectPhaseState,
+  createMassDefectAnalyzingComplexity,
+} from './types.js';
 import { saveState } from './persistence.js';
 import { rm } from 'node:fs/promises';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { safeMkdir } from '../utils/safe-fs.js';
 import type { NotificationService } from '../notifications/service.js';
+
+/**
+ * Helper to create a default Ignition ActiveState for use in tests.
+ */
+function createDefaultIgnitionState(): ProtocolState {
+  return createActiveState(createIgnitionPhaseState(createIgnitionInterviewing('Discovery', 0)));
+}
 
 describe('Protocol Orchestrator', () => {
   describe('Guards', () => {
@@ -39,7 +61,7 @@ describe('Protocol Orchestrator', () => {
       it('returns true when all guards pass', () => {
         const guard = Guards.and(Guards.always(), Guards.always());
         const ctx = createContext({
-          state: createActiveState('Ignition'),
+          state: createDefaultIgnitionState(),
           artifacts: [],
           blockingQueries: [],
         });
@@ -49,7 +71,7 @@ describe('Protocol Orchestrator', () => {
       it('returns false when any guard fails', () => {
         const guard = Guards.and(Guards.always(), Guards.never());
         const ctx = createContext({
-          state: createActiveState('Ignition'),
+          state: createDefaultIgnitionState(),
           artifacts: [],
           blockingQueries: [],
         });
@@ -61,7 +83,7 @@ describe('Protocol Orchestrator', () => {
       it('returns true when any guard passes', () => {
         const guard = Guards.or(Guards.never(), Guards.always());
         const ctx = createContext({
-          state: createActiveState('Ignition'),
+          state: createDefaultIgnitionState(),
           artifacts: [],
           blockingQueries: [],
         });
@@ -71,7 +93,7 @@ describe('Protocol Orchestrator', () => {
       it('returns false when all guards fail', () => {
         const guard = Guards.or(Guards.never(), Guards.never());
         const ctx = createContext({
-          state: createActiveState('Ignition'),
+          state: createDefaultIgnitionState(),
           artifacts: [],
           blockingQueries: [],
         });
@@ -83,7 +105,7 @@ describe('Protocol Orchestrator', () => {
       it('inverts guard result', () => {
         const guard = Guards.not(Guards.always());
         const ctx = createContext({
-          state: createActiveState('Ignition'),
+          state: createDefaultIgnitionState(),
           artifacts: [],
           blockingQueries: [],
         });
@@ -95,7 +117,7 @@ describe('Protocol Orchestrator', () => {
       it('returns true when all artifacts present', () => {
         const guard = Guards.hasArtifacts('spec' as never);
         const ctx = createContext(
-          { state: createActiveState('Ignition'), artifacts: [], blockingQueries: [] },
+          { state: createDefaultIgnitionState(), artifacts: [], blockingQueries: [] },
           ['spec']
         );
         expect(guard(ctx)).toBe(true);
@@ -104,7 +126,7 @@ describe('Protocol Orchestrator', () => {
       it('returns false when artifact missing', () => {
         const guard = Guards.hasArtifacts('spec' as never);
         const ctx = createContext({
-          state: createActiveState('Ignition'),
+          state: createDefaultIgnitionState(),
           artifacts: [],
           blockingQueries: [],
         });
@@ -116,7 +138,7 @@ describe('Protocol Orchestrator', () => {
       it('returns true for active substate', () => {
         const guard = Guards.isActive();
         const ctx = createContext({
-          state: createActiveState('Ignition'),
+          state: createDefaultIgnitionState(),
           artifacts: [],
           blockingQueries: [],
         });
@@ -126,10 +148,11 @@ describe('Protocol Orchestrator', () => {
       it('returns false for blocking substate', () => {
         const guard = Guards.isActive();
         const ctx = createContext({
-          state: {
+          state: createBlockedState({
+            reason: 'user_requested',
             phase: 'Ignition',
-            substate: createBlockingSubstate({ query: 'Test?' }),
-          },
+            query: 'Test?',
+          }),
           artifacts: [],
           blockingQueries: [],
         });
@@ -141,7 +164,7 @@ describe('Protocol Orchestrator', () => {
       it('returns true when resolutions pending', () => {
         const guard = Guards.blockingResolved();
         const ctx: TickContext = {
-          snapshot: { state: createActiveState('Ignition'), artifacts: [], blockingQueries: [] },
+          snapshot: { state: createDefaultIgnitionState(), artifacts: [], blockingQueries: [] },
           artifacts: new Set(),
           pendingResolutions: [
             { queryId: 'test-id', response: 'yes', resolvedAt: new Date().toISOString() },
@@ -155,7 +178,7 @@ describe('Protocol Orchestrator', () => {
       it('returns false when no resolutions', () => {
         const guard = Guards.blockingResolved();
         const ctx = createContext({
-          state: createActiveState('Ignition'),
+          state: createDefaultIgnitionState(),
           artifacts: [],
           blockingQueries: [],
         });
@@ -241,7 +264,7 @@ describe('Protocol Orchestrator', () => {
   describe('getProtocolStatus', () => {
     it('returns active status correctly', () => {
       const snapshot: ProtocolStateSnapshot = {
-        state: createActiveState('Lattice'),
+        state: createActiveState(createLatticePhaseState(createLatticeGeneratingStructure())),
         artifacts: ['spec'],
         blockingQueries: [],
       };
@@ -257,10 +280,11 @@ describe('Protocol Orchestrator', () => {
 
     it('returns blocking status correctly', () => {
       const snapshot: ProtocolStateSnapshot = {
-        state: {
+        state: createBlockedState({
+          reason: 'user_requested',
           phase: 'Ignition',
-          substate: createBlockingSubstate({ query: 'How should auth work?' }),
-        },
+          query: 'How should auth work?',
+        }),
         artifacts: [],
         blockingQueries: [],
       };
@@ -268,17 +292,18 @@ describe('Protocol Orchestrator', () => {
       const status = getProtocolStatus(snapshot);
 
       expect(status.phase).toBe('Ignition');
-      expect(status.substate).toBe('Blocking');
+      expect(status.substate).toBe('Blocked');
       expect(status.blocking).toBeDefined();
       expect(status.blocking?.query).toBe('How should auth work?');
     });
 
     it('returns failed status correctly', () => {
       const snapshot: ProtocolStateSnapshot = {
-        state: {
+        state: createFailedState({
           phase: 'Injection',
-          substate: createFailedSubstate({ error: 'Compilation failed', recoverable: true }),
-        },
+          error: 'Compilation failed',
+          recoverable: true,
+        }),
         artifacts: ['spec', 'latticeCode'],
         blockingQueries: [],
       };
@@ -317,14 +342,20 @@ describe('Protocol Orchestrator', () => {
 
     it('returns COMPLETE when in Complete phase', async () => {
       const snapshot: ProtocolStateSnapshot = {
-        state: createActiveState('Complete'),
+        state: createCompleteState([
+          'spec',
+          'latticeCode',
+          'witnesses',
+          'contracts',
+          'finalArtifact',
+        ]),
         artifacts: ['spec', 'latticeCode', 'witnesses', 'contracts', 'finalArtifact'],
         blockingQueries: [],
       };
 
       const context: TickContext = {
         snapshot,
-        artifacts: new Set(snapshot.artifacts),
+        artifacts: new Set(snapshot.artifacts as ArtifactType[]),
         pendingResolutions: [],
         operations: mockOperations,
         notificationService: undefined,
@@ -339,10 +370,7 @@ describe('Protocol Orchestrator', () => {
 
     it('returns FAILED when in failed state', async () => {
       const snapshot: ProtocolStateSnapshot = {
-        state: {
-          phase: 'Injection',
-          substate: createFailedSubstate({ error: 'Test failure' }),
-        },
+        state: createFailedState({ phase: 'Injection', error: 'Test failure' }),
         artifacts: [],
         blockingQueries: [],
       };
@@ -365,10 +393,11 @@ describe('Protocol Orchestrator', () => {
 
     it('returns BLOCKED when in blocking state without resolution', async () => {
       const snapshot: ProtocolStateSnapshot = {
-        state: {
+        state: createBlockedState({
+          reason: 'user_requested',
           phase: 'Ignition',
-          substate: createBlockingSubstate({ query: 'Question?' }),
-        },
+          query: 'Question?',
+        }),
         artifacts: [],
         blockingQueries: [],
       };
@@ -390,7 +419,7 @@ describe('Protocol Orchestrator', () => {
 
     it('transitions from Ignition to Lattice when spec artifact available', async () => {
       const snapshot: ProtocolStateSnapshot = {
-        state: createActiveState('Ignition'),
+        state: createDefaultIgnitionState(),
         artifacts: ['spec'],
         blockingQueries: [],
       };
@@ -409,13 +438,13 @@ describe('Protocol Orchestrator', () => {
       const result = await executeTick(context, statePath);
 
       expect(result.transitioned).toBe(true);
-      expect(result.snapshot.state.phase).toBe('Lattice');
+      expect(getPhase(result.snapshot.state)).toBe('Lattice');
       expect(result.shouldContinue).toBe(true);
     });
 
     it('does not transition without required artifacts', async () => {
       const snapshot: ProtocolStateSnapshot = {
-        state: createActiveState('Ignition'),
+        state: createDefaultIgnitionState(),
         artifacts: [],
         blockingQueries: [],
       };
@@ -431,7 +460,7 @@ describe('Protocol Orchestrator', () => {
       const result = await executeTick(context, statePath);
 
       expect(result.transitioned).toBe(false);
-      expect(result.snapshot.state.phase).toBe('Ignition');
+      expect(getPhase(result.snapshot.state)).toBe('Ignition');
       expect(result.shouldContinue).toBe(true); // Still waiting for artifacts
     });
   });
@@ -464,7 +493,7 @@ describe('Protocol Orchestrator', () => {
         operations: mockOperations,
       });
 
-      expect(orchestrator.state.snapshot.state.phase).toBe('Ignition');
+      expect(getPhase(orchestrator.state.snapshot.state)).toBe('Ignition');
       expect(orchestrator.state.tickCount).toBe(0);
       expect(orchestrator.state.running).toBe(false);
     });
@@ -490,16 +519,17 @@ describe('Protocol Orchestrator', () => {
       const result = await orchestrator.tick();
 
       // Should transition from Ignition to Lattice with spec artifact
-      expect(result.snapshot.state.phase).toBe('Lattice');
+      expect(getPhase(result.snapshot.state)).toBe('Lattice');
     });
 
     it('resolveBlocking enables transition from blocked state', async () => {
       // Create state file with blocking state
       const blockingSnapshot: ProtocolStateSnapshot = {
-        state: {
+        state: createBlockedState({
+          reason: 'user_requested',
           phase: 'Ignition',
-          substate: createBlockingSubstate({ query: 'Question?' }),
-        },
+          query: 'Question?',
+        }),
         artifacts: [],
         blockingQueries: [],
       };
@@ -515,7 +545,7 @@ describe('Protocol Orchestrator', () => {
       const result = await orchestrator.tick();
 
       // Should be back to active state
-      expect(result.snapshot.state.substate.kind).toBe('Active');
+      expect(isActiveState(result.snapshot.state)).toBe(true);
     });
 
     it('run executes until completion or stop condition', async () => {
@@ -575,10 +605,11 @@ describe('Protocol Orchestrator', () => {
 
       // Create state in blocking substate directly
       const blockingSnapshot: ProtocolStateSnapshot = {
-        state: {
+        state: createBlockedState({
+          reason: 'user_requested',
           phase: 'Ignition',
-          substate: createBlockingSubstate({ query: 'Block test?' }),
-        },
+          query: 'Block test?',
+        }),
         artifacts: [],
         blockingQueries: [],
       };
@@ -618,7 +649,7 @@ describe('Protocol Orchestrator', () => {
 
       // Create state in MassDefect phase with all required artifacts to transition to Complete
       const massDefectSnapshot: ProtocolStateSnapshot = {
-        state: createActiveState('MassDefect'),
+        state: createActiveState(createMassDefectPhaseState(createMassDefectAnalyzingComplexity())),
         artifacts: [
           'spec',
           'latticeCode',
@@ -642,7 +673,7 @@ describe('Protocol Orchestrator', () => {
       // First tick transitions from MassDefect to Complete
       const result1 = await orchestrator.tick();
       expect(result1.transitioned).toBe(true);
-      expect(result1.snapshot.state.phase).toBe('Complete');
+      expect(isCompleteState(result1.snapshot.state)).toBe(true);
 
       // Second tick should detect Complete phase and return COMPLETE
       const result2 = await orchestrator.tick();
@@ -670,10 +701,7 @@ describe('Protocol Orchestrator', () => {
 
       // Create state in failed substate with required artifacts for Injection phase
       const failedSnapshot: ProtocolStateSnapshot = {
-        state: {
-          phase: 'Injection',
-          substate: createFailedSubstate({ error: 'Test failure' }),
-        },
+        state: createFailedState({ phase: 'Injection', error: 'Test failure' }),
         artifacts: ['spec', 'latticeCode', 'witnesses', 'contracts', 'validatedStructure'],
         blockingQueries: [],
       };
@@ -711,7 +739,7 @@ describe('Protocol Orchestrator', () => {
 
       // Create state in Ignition phase with spec artifact
       const initialSnapshot: ProtocolStateSnapshot = {
-        state: createActiveState('Ignition'),
+        state: createDefaultIgnitionState(),
         artifacts: ['spec'],
         blockingQueries: [],
       };
@@ -727,7 +755,7 @@ describe('Protocol Orchestrator', () => {
       const result = await orchestrator.tick();
 
       expect(result.transitioned).toBe(true);
-      expect(result.snapshot.state.phase).toBe('Lattice');
+      expect(getPhase(result.snapshot.state)).toBe('Lattice');
       expect(mockNotify).toHaveBeenCalledWith('phase_change', result.snapshot.state);
     });
 
@@ -742,7 +770,7 @@ describe('Protocol Orchestrator', () => {
 
       // Create state in MassDefect phase with all required artifacts to transition to Complete
       const massDefectSnapshot: ProtocolStateSnapshot = {
-        state: createActiveState('MassDefect'),
+        state: createActiveState(createMassDefectPhaseState(createMassDefectAnalyzingComplexity())),
         artifacts: [
           'spec',
           'latticeCode',
@@ -765,7 +793,7 @@ describe('Protocol Orchestrator', () => {
 
       // First tick transitions to Complete (phase_change notification may fail but execution continues)
       const result1 = await orchestrator.tick();
-      expect(result1.snapshot.state.phase).toBe('Complete');
+      expect(isCompleteState(result1.snapshot.state)).toBe(true);
 
       // Second tick should return COMPLETE despite notification failure
       const result2 = await orchestrator.tick();
@@ -775,6 +803,3 @@ describe('Protocol Orchestrator', () => {
     });
   });
 });
-
-// Import afterEach from vitest
-import { afterEach } from 'vitest';

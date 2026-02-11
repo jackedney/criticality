@@ -22,7 +22,8 @@ import type { BlockingRecord } from './blocking.js';
 import { saveState, loadState, serializeState, deserializeState } from './persistence.js';
 import { executeTick, createOrchestrator, getProtocolStatus } from './orchestrator.js';
 import { executeStatus, executeResume, executeResolve } from './cli.js';
-import { createBlockingSubstate, createFailedSubstate, type BlockingSubstate } from './types.js';
+import { createBlockedState, createFailedState, getPhase, type BlockedState } from './types.js';
+import type { ArtifactType } from './transitions.js';
 
 describe('Blocking Behavior per DECISIONS.toml', () => {
   let testDir: string;
@@ -49,11 +50,12 @@ describe('Blocking Behavior per DECISIONS.toml', () => {
   describe('block_001: BLOCKED state halts all phases', () => {
     it('BLOCKED state in Ignition prevents phase transition', async () => {
       const snapshot: ProtocolStateSnapshot = {
-        state: {
+        state: createBlockedState({
+          reason: 'user_requested',
           phase: 'Ignition',
-          substate: createBlockingSubstate({ query: 'Approve spec?' }),
-        },
-        artifacts: ['spec'], // Has artifact to transition
+          query: 'Approve spec?',
+        }),
+        artifacts: ['spec'],
         blockingQueries: [],
       };
 
@@ -70,22 +72,23 @@ describe('Blocking Behavior per DECISIONS.toml', () => {
       expect(result.transitioned).toBe(false);
       expect(result.shouldContinue).toBe(false);
       expect(result.stopReason).toBe('BLOCKED');
-      expect(result.snapshot.state.phase).toBe('Ignition');
+      expect(getPhase(result.snapshot.state)).toBe('Ignition');
     });
 
     it('BLOCKED state in Lattice prevents phase transition', async () => {
       const snapshot: ProtocolStateSnapshot = {
-        state: {
+        state: createBlockedState({
+          reason: 'user_requested',
           phase: 'Lattice',
-          substate: createBlockingSubstate({ query: 'Approve lattice?' }),
-        },
+          query: 'Approve lattice?',
+        }),
         artifacts: ['spec', 'latticeCode', 'witnesses', 'contracts'],
         blockingQueries: [],
       };
 
       const context: TickContext = {
         snapshot,
-        artifacts: new Set(snapshot.artifacts),
+        artifacts: new Set(snapshot.artifacts as ArtifactType[]),
         pendingResolutions: [],
         operations: mockOperations,
         notificationService: undefined,
@@ -110,10 +113,11 @@ describe('Blocking Behavior per DECISIONS.toml', () => {
 
       for (const phase of phases) {
         const snapshot: ProtocolStateSnapshot = {
-          state: {
+          state: createBlockedState({
+            reason: 'user_requested',
             phase,
-            substate: createBlockingSubstate({ query: `Blocked in ${phase}` }),
-          },
+            query: `Blocked in ${phase}`,
+          }),
           artifacts: [],
           blockingQueries: [],
         };
@@ -135,15 +139,17 @@ describe('Blocking Behavior per DECISIONS.toml', () => {
   });
 
   describe('block_002: blocked state is persistable and resumable', () => {
-    it('BlockingSubstate can be serialized and deserialized', () => {
-      const blockingSubstate = createBlockingSubstate({
+    it('BlockedState can be serialized and deserialized', () => {
+      const blockedState = createBlockedState({
+        reason: 'user_requested',
+        phase: 'Lattice',
         query: 'Approve architecture?',
         options: ['Yes', 'No', 'Revise'],
         timeoutMs: 300000,
       });
 
       const snapshot: ProtocolStateSnapshot = {
-        state: { phase: 'Lattice', substate: blockingSubstate },
+        state: blockedState,
         artifacts: ['spec'],
         blockingQueries: [],
       };
@@ -151,22 +157,24 @@ describe('Blocking Behavior per DECISIONS.toml', () => {
       const json = serializeState(snapshot);
       const restored = deserializeState(json);
 
-      expect(restored.state.phase).toBe('Lattice');
-      expect(restored.state.substate.kind).toBe('Blocking');
-      const restoredSubstate = restored.state.substate as BlockingSubstate;
-      expect(restoredSubstate.query).toBe('Approve architecture?');
-      expect(restoredSubstate.options).toEqual(['Yes', 'No', 'Revise']);
-      expect(restoredSubstate.timeoutMs).toBe(300000);
-      expect(restoredSubstate.blockedAt).toBeDefined();
+      expect(getPhase(restored.state)).toBe('Lattice');
+      expect(restored.state.kind).toBe('Blocked');
+      const restoredState = restored.state as BlockedState;
+      expect(restoredState.query).toBe('Approve architecture?');
+      expect(restoredState.options).toEqual(['Yes', 'No', 'Revise']);
+      expect(restoredState.timeoutMs).toBe(300000);
+      expect(restoredState.blockedAt).toBeDefined();
     });
 
     it('blocked state can be saved and loaded from file', async () => {
-      const blockingSubstate = createBlockingSubstate({
+      const blockedState = createBlockedState({
+        reason: 'user_requested',
+        phase: 'Injection',
         query: 'Human intervention needed',
       });
 
       const snapshot: ProtocolStateSnapshot = {
-        state: { phase: 'Injection', substate: blockingSubstate },
+        state: blockedState,
         artifacts: ['spec', 'latticeCode'],
         blockingQueries: [],
       };
@@ -174,18 +182,20 @@ describe('Blocking Behavior per DECISIONS.toml', () => {
       await saveState(snapshot, statePath);
       const loaded = await loadState(statePath);
 
-      expect(loaded.state.phase).toBe('Injection');
-      expect(loaded.state.substate.kind).toBe('Blocking');
+      expect(getPhase(loaded.state)).toBe('Injection');
+      expect(loaded.state.kind).toBe('Blocked');
       expect(loaded.artifacts).toEqual(['spec', 'latticeCode']);
     });
 
     it('orchestrator can resume from persisted blocked state', async () => {
-      const blockingSubstate = createBlockingSubstate({
+      const blockedState = createBlockedState({
+        reason: 'user_requested',
+        phase: 'Lattice',
         query: 'Pending approval',
       });
 
       const snapshot: ProtocolStateSnapshot = {
-        state: { phase: 'Lattice', substate: blockingSubstate },
+        state: blockedState,
         artifacts: ['spec'],
         blockingQueries: [],
       };
@@ -197,29 +207,33 @@ describe('Blocking Behavior per DECISIONS.toml', () => {
         operations: mockOperations,
       });
 
-      expect(orchestrator.state.snapshot.state.phase).toBe('Lattice');
-      expect(orchestrator.state.snapshot.state.substate.kind).toBe('Blocking');
+      expect(getPhase(orchestrator.state.snapshot.state)).toBe('Lattice');
+      expect(orchestrator.state.snapshot.state.kind).toBe('Blocked');
 
       // Can resolve and resume
       orchestrator.resolveBlocking('Approved');
       const result = await orchestrator.tick();
 
-      expect(result.snapshot.state.substate.kind).toBe('Active');
+      expect(result.snapshot.state.kind).toBe('Active');
     });
   });
 
   describe('block_003: only ledger decisions persist when resuming, not prior context', () => {
-    it('BlockingSubstate does not contain conversation history fields', () => {
-      const substate = createBlockingSubstate({
+    it('BlockedState does not contain conversation history fields', () => {
+      const blockedState = createBlockedState({
+        reason: 'user_requested',
+        phase: 'Lattice',
         query: 'Test query',
         options: ['A', 'B'],
         timeoutMs: 60000,
       });
 
-      // Verify BlockingSubstate only contains allowed fields
-      const keys = Object.keys(substate) as (keyof BlockingSubstate)[];
-      const allowedKeys: (keyof BlockingSubstate)[] = [
+      // Verify BlockedState only contains allowed fields
+      const keys = Object.keys(blockedState) as (keyof BlockedState)[];
+      const allowedKeys: (keyof BlockedState)[] = [
         'kind',
+        'reason',
+        'phase',
         'query',
         'options',
         'blockedAt',
@@ -231,18 +245,15 @@ describe('Blocking Behavior per DECISIONS.toml', () => {
       }
 
       // Explicitly verify no conversation/context fields
-      expect('conversationHistory' in substate).toBe(false);
-      expect('context' in substate).toBe(false);
-      expect('messages' in substate).toBe(false);
-      expect('priorContext' in substate).toBe(false);
+      expect('conversationHistory' in blockedState).toBe(false);
+      expect('context' in blockedState).toBe(false);
+      expect('messages' in blockedState).toBe(false);
+      expect('priorContext' in blockedState).toBe(false);
     });
 
     it('ProtocolStateSnapshot does not contain conversation history', () => {
       const snapshot: ProtocolStateSnapshot = {
-        state: {
-          phase: 'Lattice',
-          substate: createBlockingSubstate({ query: 'Test' }),
-        },
+        state: createBlockedState({ reason: 'user_requested', phase: 'Lattice', query: 'Test' }),
         artifacts: ['spec'],
         blockingQueries: [],
       };
@@ -260,8 +271,7 @@ describe('Blocking Behavior per DECISIONS.toml', () => {
       const allowedTopLevelKeys = [
         'version',
         'persistedAt',
-        'phase',
-        'substate',
+        'state',
         'artifacts',
         'blockingQueries',
       ];
@@ -313,26 +323,32 @@ describe('Blocking Behavior per DECISIONS.toml', () => {
       // This test documents what WOULD be a violation
       // The actual implementation correctly does NOT store conversation history
 
-      const blockingSubstate = createBlockingSubstate({ query: 'Test' });
+      const blockedState = createBlockedState({
+        reason: 'user_requested',
+        phase: 'Lattice',
+        query: 'Test',
+      });
 
       // Use Record<string, unknown> to check for forbidden fields (should not exist)
-      const substateAsRecord = blockingSubstate as unknown as Record<string, unknown>;
+      const stateAsRecord = blockedState as unknown as Record<string, unknown>;
 
-      // These fields should NOT exist on BlockingSubstate
-      expect(substateAsRecord.conversationHistory).toBeUndefined();
-      expect(substateAsRecord.messages).toBeUndefined();
-      expect(substateAsRecord.priorContext).toBeUndefined();
+      // These fields should NOT exist on BlockedState
+      expect(stateAsRecord.conversationHistory).toBeUndefined();
+      expect(stateAsRecord.messages).toBeUndefined();
+      expect(stateAsRecord.priorContext).toBeUndefined();
     });
   });
 
   describe('block_004: CLI resume model - persist state, notify, exit process', () => {
     it('CLI status command reads persisted blocking state', async () => {
-      const blockingSubstate = createBlockingSubstate({
+      const blockedState = createBlockedState({
+        reason: 'user_requested',
+        phase: 'Injection',
         query: 'Awaiting human decision',
       });
 
       const snapshot: ProtocolStateSnapshot = {
-        state: { phase: 'Injection', substate: blockingSubstate },
+        state: blockedState,
         artifacts: ['spec', 'latticeCode'],
         blockingQueries: [],
       };
@@ -351,12 +367,14 @@ describe('Blocking Behavior per DECISIONS.toml', () => {
     });
 
     it('CLI resume command reports blocked status and exits', async () => {
-      const blockingSubstate = createBlockingSubstate({
+      const blockedState = createBlockedState({
+        reason: 'user_requested',
+        phase: 'Lattice',
         query: 'Need human approval',
       });
 
       const snapshot: ProtocolStateSnapshot = {
-        state: { phase: 'Lattice', substate: blockingSubstate },
+        state: blockedState,
         artifacts: ['spec'],
         blockingQueries: [],
       };
@@ -376,12 +394,14 @@ describe('Blocking Behavior per DECISIONS.toml', () => {
     });
 
     it('CLI resolve command stores response and transitions to active', async () => {
-      const blockingSubstate = createBlockingSubstate({
+      const blockedState = createBlockedState({
+        reason: 'user_requested',
+        phase: 'Injection',
         query: 'Approve implementation?',
       });
 
       const snapshot: ProtocolStateSnapshot = {
-        state: { phase: 'Injection', substate: blockingSubstate },
+        state: blockedState,
         artifacts: ['spec', 'latticeCode'],
         blockingQueries: [],
       };
@@ -401,17 +421,14 @@ describe('Blocking Behavior per DECISIONS.toml', () => {
 
       // Verify state was updated
       const updatedSnapshot = await loadState(statePath);
-      expect(updatedSnapshot.state.substate.kind).toBe('Active');
+      expect(updatedSnapshot.state.kind).toBe('Active');
       expect(updatedSnapshot.blockingQueries.length).toBe(1);
       expect(updatedSnapshot.blockingQueries[0]?.resolution?.response).toBe('Approved');
     });
 
     it('CLI commands follow persist state, notify, exit model', async () => {
       const snapshot: ProtocolStateSnapshot = {
-        state: {
-          phase: 'Lattice',
-          substate: createBlockingSubstate({ query: 'Pending' }),
-        },
+        state: createBlockedState({ reason: 'user_requested', phase: 'Lattice', query: 'Pending' }),
         artifacts: ['spec'],
         blockingQueries: [],
       };
@@ -420,7 +437,7 @@ describe('Blocking Behavior per DECISIONS.toml', () => {
 
       // 1. State is persisted (verified by loading)
       const loaded = await loadState(statePath);
-      expect(loaded.state.substate.kind).toBe('Blocking');
+      expect(loaded.state.kind).toBe('Blocked');
 
       // 2. CLI notifies about blocking status
       const statusResult = await executeStatus({
@@ -448,10 +465,11 @@ describe('Blocking Behavior per DECISIONS.toml', () => {
   describe('block_005: minimal notification message format', () => {
     it('blocking status message is minimal and actionable', async () => {
       const snapshot: ProtocolStateSnapshot = {
-        state: {
+        state: createBlockedState({
+          reason: 'user_requested',
           phase: 'Lattice',
-          substate: createBlockingSubstate({ query: 'Approval needed' }),
-        },
+          query: 'Approval needed',
+        }),
         artifacts: ['spec'],
         blockingQueries: [],
       };
@@ -477,10 +495,11 @@ describe('Blocking Behavior per DECISIONS.toml', () => {
     it('resume command output indicates blocking with minimal message', async () => {
       // Injection phase requires all prior artifacts per getRequiredArtifactsForPhase
       const snapshot: ProtocolStateSnapshot = {
-        state: {
+        state: createBlockedState({
+          reason: 'user_requested',
           phase: 'Injection',
-          substate: createBlockingSubstate({ query: 'Review required' }),
-        },
+          query: 'Review required',
+        }),
         artifacts: ['spec', 'latticeCode', 'witnesses', 'contracts', 'validatedStructure'],
         blockingQueries: [],
       };
@@ -500,24 +519,32 @@ describe('Blocking Behavior per DECISIONS.toml', () => {
     });
   });
 
-  describe('Example: BlockingSubstate should include blockedAt timestamp', () => {
+  describe('Example: BlockedState should include blockedAt timestamp', () => {
     it('blockedAt is set when entering blocking state', () => {
       const before = Date.now();
-      const substate = createBlockingSubstate({ query: 'Test' });
+      const blockedState = createBlockedState({
+        reason: 'user_requested',
+        phase: 'Lattice',
+        query: 'Test',
+      });
       const after = Date.now();
 
-      expect(substate.blockedAt).toBeDefined();
-      const blockedAtTime = new Date(substate.blockedAt).getTime();
+      expect(blockedState.blockedAt).toBeDefined();
+      const blockedAtTime = new Date(blockedState.blockedAt).getTime();
       expect(blockedAtTime).toBeGreaterThanOrEqual(before);
       expect(blockedAtTime).toBeLessThanOrEqual(after);
     });
 
     it('blockedAt is preserved through serialization', () => {
-      const substate = createBlockingSubstate({ query: 'Test' });
-      const originalBlockedAt = substate.blockedAt;
+      const blockedState = createBlockedState({
+        reason: 'user_requested',
+        phase: 'Lattice',
+        query: 'Test',
+      });
+      const originalBlockedAt = blockedState.blockedAt;
 
       const snapshot: ProtocolStateSnapshot = {
-        state: { phase: 'Lattice', substate },
+        state: blockedState,
         artifacts: [],
         blockingQueries: [],
       };
@@ -525,27 +552,33 @@ describe('Blocking Behavior per DECISIONS.toml', () => {
       const json = serializeState(snapshot);
       const restored = deserializeState(json);
 
-      const restoredSubstate = restored.state.substate as BlockingSubstate;
-      expect(restoredSubstate.blockedAt).toBe(originalBlockedAt);
+      const restoredState = restored.state as BlockedState;
+      expect(restoredState.blockedAt).toBe(originalBlockedAt);
     });
 
     it('blockedAt is in ISO 8601 format', () => {
-      const substate = createBlockingSubstate({ query: 'Test' });
+      const blockedState = createBlockedState({
+        reason: 'user_requested',
+        phase: 'Lattice',
+        query: 'Test',
+      });
 
       // ISO 8601 format validation
       const isoRegex = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/;
-      expect(substate.blockedAt).toMatch(isoRegex);
+      expect(blockedState.blockedAt).toMatch(isoRegex);
     });
   });
 
   describe('getProtocolStatus correctly reports blocking state', () => {
     it('returns blocking info from snapshot', () => {
-      const blockingSubstate = createBlockingSubstate({
+      const blockedState = createBlockedState({
+        reason: 'user_requested',
+        phase: 'Lattice',
         query: 'What approach to use?',
       });
 
       const snapshot: ProtocolStateSnapshot = {
-        state: { phase: 'Lattice', substate: blockingSubstate },
+        state: blockedState,
         artifacts: ['spec'],
         blockingQueries: [],
       };
@@ -553,22 +586,20 @@ describe('Blocking Behavior per DECISIONS.toml', () => {
       const status = getProtocolStatus(snapshot);
 
       expect(status.phase).toBe('Lattice');
-      expect(status.substate).toBe('Blocking');
+      expect(status.substate).toBe('Blocked');
       expect(status.blocking).toBeDefined();
       expect(status.blocking?.query).toBe('What approach to use?');
-      expect(status.blocking?.blockedAt).toBe(blockingSubstate.blockedAt);
+      expect(status.blocking?.blockedAt).toBe(blockedState.blockedAt);
       expect(status.failed).toBeUndefined();
     });
 
     it('returns failed info when in failed state', () => {
       const snapshot: ProtocolStateSnapshot = {
-        state: {
+        state: createFailedState({
           phase: 'Injection',
-          substate: createFailedSubstate({
-            error: 'Compilation error',
-            recoverable: true,
-          }),
-        },
+          error: 'Compilation error',
+          recoverable: true,
+        }),
         artifacts: ['spec', 'latticeCode'],
         blockingQueries: [],
       };

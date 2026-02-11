@@ -21,11 +21,7 @@ import { mkdtemp } from 'node:fs/promises';
 import { NotificationService as NotificationServiceImpl } from './service.js';
 import { ReminderScheduler } from './reminder.js';
 import { createOrchestrator, type ExternalOperations } from '../protocol/orchestrator.js';
-import {
-  createActiveSubstate,
-  createBlockingSubstate,
-  type ProtocolPhase,
-} from '../protocol/types.js';
+import { createBlockedState, createCompleteState } from '../protocol/types.js';
 import { saveState, type ProtocolStateSnapshot } from '../protocol/persistence.js';
 import type { BlockingRecord } from '../protocol/blocking.js';
 import type { NotificationConfig } from '../config/types.js';
@@ -172,10 +168,7 @@ describe('Notification Integration Tests', () => {
 
       const service = new NotificationServiceImpl(config);
 
-      const protocolState = {
-        phase: 'Complete' as ProtocolPhase,
-        substate: createActiveSubstate(),
-      };
+      const protocolState = createCompleteState([]);
 
       const result = await service.notify('complete', protocolState);
 
@@ -316,12 +309,13 @@ describe('Notification Integration Tests', () => {
         },
       };
 
-      // Save state in Ignition phase, then load with blocking substate directly
+      // Save state in Ignition phase, then load with blocked state directly
       const blockingSnapshot: ProtocolStateSnapshot = {
-        state: {
+        state: createBlockedState({
+          reason: 'user_requested',
           phase: 'Ignition',
-          substate: createBlockingSubstate({ query: 'Test blocking query?' }),
-        },
+          query: 'Test blocking query?',
+        }),
         artifacts: [],
         blockingQueries: [],
       };
@@ -336,7 +330,7 @@ describe('Notification Integration Tests', () => {
       // Tick should detect blocking state and return BLOCKED
       const result = await orchestrator.tick();
 
-      expect(result.snapshot.state.substate.kind).toBe('Blocking');
+      expect(result.snapshot.state.kind).toBe('Blocked');
       expect(result.stopReason).toBe('BLOCKED');
       // Note: block notification is sent when *entering* blocking state via transition,
       // not when already in blocking state on load. To test the notification being sent,
@@ -693,10 +687,11 @@ describe('Notification Integration Tests', () => {
 
       // Save blocking state to file to load via orchestrator
       const blockingSnapshot: ProtocolStateSnapshot = {
-        state: {
+        state: createBlockedState({
+          reason: 'user_requested',
           phase: 'Ignition',
-          substate: createBlockingSubstate({ query: 'Test blocking query?' }),
-        },
+          query: 'Test blocking query?',
+        }),
         artifacts: [],
         blockingQueries: [],
       };
@@ -711,7 +706,7 @@ describe('Notification Integration Tests', () => {
       // Tick detects blocking state - protocol continues execution even with failing webhook
       const tickResult = await orchestrator.tick();
 
-      expect(tickResult.snapshot.state.substate.kind).toBe('Blocking');
+      expect(tickResult.snapshot.state.kind).toBe('Blocked');
       expect(tickResult.stopReason).toBe('BLOCKED');
       expect(tickResult.shouldContinue).toBe(false);
     });

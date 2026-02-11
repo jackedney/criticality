@@ -16,7 +16,23 @@ import {
   type ProtocolStateSnapshot,
   type PersistedStateData,
 } from './persistence.js';
-import { createActiveState, createBlockingSubstate, createFailedSubstate } from './types.js';
+import {
+  createActiveState,
+  createBlockedState,
+  createFailedState,
+  isActiveState,
+  isBlockedState,
+  isFailedState,
+  getPhase,
+  createIgnitionPhaseState,
+  createIgnitionInterviewing,
+  createLatticePhaseState,
+  createLatticeGeneratingStructure,
+  createCompositionAuditPhaseState,
+  createCompositionAuditAuditing,
+  createMesoscopicPhaseState,
+  createMesoscopicGeneratingTests,
+} from './types.js';
 import type { BlockingRecord } from './blocking.js';
 import type { ArtifactType } from './transitions.js';
 
@@ -24,7 +40,7 @@ describe('Protocol State Persistence', () => {
   const createTestSnapshot = (
     overrides: Partial<ProtocolStateSnapshot> = {}
   ): ProtocolStateSnapshot => ({
-    state: createActiveState('Ignition'),
+    state: createActiveState(createIgnitionPhaseState(createIgnitionInterviewing('Discovery', 0))),
     artifacts: [],
     blockingQueries: [],
     ...overrides,
@@ -38,8 +54,10 @@ describe('Protocol State Persistence', () => {
 
       expect(typeof json).toBe('string');
       const parsed = JSON.parse(json) as PersistedStateData;
-      expect(parsed.phase).toBe('Ignition');
-      expect(parsed.substate.kind).toBe('Active');
+      expect(parsed.state.kind).toBe('Active');
+      if (parsed.state.kind === 'Active') {
+        expect(parsed.state.phase.phase).toBe('Ignition');
+      }
       expect(parsed.artifacts).toEqual([]);
       expect(parsed.blockingQueries).toEqual([]);
     });
@@ -83,7 +101,9 @@ describe('Protocol State Persistence', () => {
     it('should serialize state with artifacts', () => {
       const artifacts: ArtifactType[] = ['spec', 'latticeCode', 'witnesses'];
       const snapshot = createTestSnapshot({
-        state: createActiveState('CompositionAudit'),
+        state: createActiveState(
+          createCompositionAuditPhaseState(createCompositionAuditAuditing(0))
+        ),
         artifacts,
       });
 
@@ -91,52 +111,54 @@ describe('Protocol State Persistence', () => {
       const parsed = JSON.parse(json) as PersistedStateData;
 
       expect(parsed.artifacts).toEqual(artifacts);
-      expect(parsed.phase).toBe('CompositionAudit');
+      expect(parsed.state.kind).toBe('Active');
+      if (parsed.state.kind === 'Active') {
+        expect(parsed.state.phase.phase).toBe('CompositionAudit');
+      }
     });
 
-    it('should serialize blocking substate', () => {
-      const blockingSubstate = createBlockingSubstate({
+    it('should serialize blocked state', () => {
+      const blockedState = createBlockedState({
+        reason: 'user_requested',
+        phase: 'Lattice',
         query: 'Approve architecture?',
         options: ['Yes', 'No', 'Revise'],
         timeoutMs: 300000,
       });
-      const snapshot = createTestSnapshot({
-        state: { phase: 'Lattice', substate: blockingSubstate },
-      });
+      const snapshot = createTestSnapshot({ state: blockedState });
 
       const json = serializeState(snapshot);
       const parsed = JSON.parse(json) as PersistedStateData;
 
-      expect(parsed.substate.kind).toBe('Blocking');
-      if (parsed.substate.kind === 'Blocking') {
-        expect(parsed.substate.query).toBe('Approve architecture?');
-        expect(parsed.substate.options).toEqual(['Yes', 'No', 'Revise']);
-        expect(parsed.substate.timeoutMs).toBe(300000);
-        expect(parsed.substate.blockedAt).toBeDefined();
+      expect(parsed.state.kind).toBe('Blocked');
+      if (parsed.state.kind === 'Blocked') {
+        expect(parsed.state.query).toBe('Approve architecture?');
+        expect(parsed.state.options).toEqual(['Yes', 'No', 'Revise']);
+        expect(parsed.state.timeoutMs).toBe(300000);
+        expect(parsed.state.blockedAt).toBeDefined();
       }
     });
 
-    it('should serialize failed substate', () => {
-      const failedSubstate = createFailedSubstate({
+    it('should serialize failed state', () => {
+      const failedState = createFailedState({
+        phase: 'Injection',
         error: 'Type checking failed',
         code: 'TYPE_ERROR',
         recoverable: true,
         context: 'Additional context',
       });
-      const snapshot = createTestSnapshot({
-        state: { phase: 'Injection', substate: failedSubstate },
-      });
+      const snapshot = createTestSnapshot({ state: failedState });
 
       const json = serializeState(snapshot);
       const parsed = JSON.parse(json) as PersistedStateData;
 
-      expect(parsed.substate.kind).toBe('Failed');
-      if (parsed.substate.kind === 'Failed') {
-        expect(parsed.substate.error).toBe('Type checking failed');
-        expect(parsed.substate.code).toBe('TYPE_ERROR');
-        expect(parsed.substate.recoverable).toBe(true);
-        expect(parsed.substate.context).toBe('Additional context');
-        expect(parsed.substate.failedAt).toBeDefined();
+      expect(parsed.state.kind).toBe('Failed');
+      if (parsed.state.kind === 'Failed') {
+        expect(parsed.state.error).toBe('Type checking failed');
+        expect(parsed.state.code).toBe('TYPE_ERROR');
+        expect(parsed.state.recoverable).toBe(true);
+        expect(parsed.state.context).toBe('Additional context');
+        expect(parsed.state.failedAt).toBeDefined();
       }
     });
 
@@ -161,42 +183,41 @@ describe('Protocol State Persistence', () => {
       expect(parsed.blockingQueries[0]?.id).toBe('blocking_lattice_123');
     });
 
-    it('should handle blocking substate without optional fields', () => {
-      const blockingSubstate = createBlockingSubstate({
+    it('should handle blocked state without optional fields', () => {
+      const blockedState = createBlockedState({
+        reason: 'user_requested',
+        phase: 'Lattice',
         query: 'Simple query',
       });
-      const snapshot = createTestSnapshot({
-        state: { phase: 'Lattice', substate: blockingSubstate },
-      });
+      const snapshot = createTestSnapshot({ state: blockedState });
 
       const json = serializeState(snapshot);
       const parsed = JSON.parse(json) as PersistedStateData;
 
-      expect(parsed.substate.kind).toBe('Blocking');
-      if (parsed.substate.kind === 'Blocking') {
-        expect(parsed.substate.query).toBe('Simple query');
-        expect(parsed.substate.options).toBeUndefined();
-        expect(parsed.substate.timeoutMs).toBeUndefined();
+      expect(parsed.state.kind).toBe('Blocked');
+      if (parsed.state.kind === 'Blocked') {
+        expect(parsed.state.query).toBe('Simple query');
+        expect(parsed.state.options).toBeUndefined();
+        expect(parsed.state.timeoutMs).toBeUndefined();
       }
     });
 
-    it('should handle failed substate without optional fields', () => {
-      const failedSubstate = createFailedSubstate({
+    it('should handle failed state without optional fields', () => {
+      const failedState = createFailedState({
+        phase: 'Injection',
         error: 'Simple error',
         recoverable: false,
       });
-      const snapshot = createTestSnapshot({
-        state: { phase: 'Injection', substate: failedSubstate },
-      });
+      const snapshot = createTestSnapshot({ state: failedState });
 
       const json = serializeState(snapshot);
       const parsed = JSON.parse(json) as PersistedStateData;
 
-      expect(parsed.substate.kind).toBe('Failed');
-      if (parsed.substate.kind === 'Failed') {
-        expect(parsed.substate.error).toBe('Simple error');
-        expect(parsed.substate.code).toBeUndefined();
-        expect(parsed.substate.context).toBeUndefined();
+      expect(parsed.state.kind).toBe('Failed');
+      if (parsed.state.kind === 'Failed') {
+        expect(parsed.state.error).toBe('Simple error');
+        expect(parsed.state.code).toBeUndefined();
+        expect(parsed.state.context).toBeUndefined();
       }
     });
   });
@@ -204,18 +225,23 @@ describe('Protocol State Persistence', () => {
   describe('deserializeState', () => {
     it('should deserialize valid JSON to state snapshot', () => {
       const json = JSON.stringify({
-        version: '1.0.0',
+        version: '2.0.0',
         persistedAt: '2024-01-20T12:00:00.000Z',
-        phase: 'Lattice',
-        substate: { kind: 'Active' },
+        state: {
+          kind: 'Active',
+          phase: {
+            phase: 'Lattice',
+            substate: { step: 'generatingStructure' },
+          },
+        },
         artifacts: ['spec'],
         blockingQueries: [],
       });
 
       const snapshot = deserializeState(json);
 
-      expect(snapshot.state.phase).toBe('Lattice');
-      expect(snapshot.state.substate.kind).toBe('Active');
+      expect(getPhase(snapshot.state)).toBe('Lattice');
+      expect(snapshot.state.kind).toBe('Active');
       expect(snapshot.artifacts).toEqual(['spec']);
       expect(snapshot.blockingQueries).toEqual([]);
     });
@@ -248,7 +274,7 @@ describe('Protocol State Persistence', () => {
     });
 
     it('should throw StatePersistenceError for missing required fields', () => {
-      const json = JSON.stringify({ version: '1.0.0' });
+      const json = JSON.stringify({ version: '2.0.0' });
 
       expect(() => deserializeState(json)).toThrow(StatePersistenceError);
 
@@ -265,8 +291,13 @@ describe('Protocol State Persistence', () => {
       const json = JSON.stringify({
         version: 'invalid',
         persistedAt: '2024-01-20T12:00:00.000Z',
-        phase: 'Ignition',
-        substate: { kind: 'Active' },
+        state: {
+          kind: 'Active',
+          phase: {
+            phase: 'Ignition',
+            substate: { step: 'interviewing', interviewPhase: 'Discovery', questionIndex: 0 },
+          },
+        },
         artifacts: [],
         blockingQueries: [],
       });
@@ -282,12 +313,11 @@ describe('Protocol State Persistence', () => {
       }
     });
 
-    it('should throw StatePersistenceError for invalid phase', () => {
+    it('should throw StatePersistenceError for invalid state kind', () => {
       const json = JSON.stringify({
-        version: '1.0.0',
+        version: '2.0.0',
         persistedAt: '2024-01-20T12:00:00.000Z',
-        phase: 'InvalidPhase',
-        substate: { kind: 'Active' },
+        state: { kind: 'InvalidKind' },
         artifacts: [],
         blockingQueries: [],
       });
@@ -299,38 +329,18 @@ describe('Protocol State Persistence', () => {
       } catch (error) {
         const persistError = error as StatePersistenceError;
         expect(persistError.errorType).toBe('validation_error');
-        expect(persistError.message).toContain('not a valid protocol phase');
+        expect(persistError.message).toContain('not valid');
       }
     });
 
-    it('should throw StatePersistenceError for invalid substate kind', () => {
+    it('should deserialize blocked state', () => {
       const json = JSON.stringify({
-        version: '1.0.0',
+        version: '2.0.0',
         persistedAt: '2024-01-20T12:00:00.000Z',
-        phase: 'Ignition',
-        substate: { kind: 'Invalid' },
-        artifacts: [],
-        blockingQueries: [],
-      });
-
-      expect(() => deserializeState(json)).toThrow(StatePersistenceError);
-
-      try {
-        deserializeState(json);
-      } catch (error) {
-        const persistError = error as StatePersistenceError;
-        expect(persistError.errorType).toBe('validation_error');
-        expect(persistError.message).toContain('substate kind');
-      }
-    });
-
-    it('should deserialize blocking substate', () => {
-      const json = JSON.stringify({
-        version: '1.0.0',
-        persistedAt: '2024-01-20T12:00:00.000Z',
-        phase: 'Lattice',
-        substate: {
-          kind: 'Blocking',
+        state: {
+          kind: 'Blocked',
+          reason: 'user_requested',
+          phase: 'Lattice',
           query: 'Approve?',
           options: ['Yes', 'No'],
           blockedAt: '2024-01-20T12:00:00.000Z',
@@ -342,21 +352,21 @@ describe('Protocol State Persistence', () => {
 
       const snapshot = deserializeState(json);
 
-      expect(snapshot.state.substate.kind).toBe('Blocking');
-      if (snapshot.state.substate.kind === 'Blocking') {
-        expect(snapshot.state.substate.query).toBe('Approve?');
-        expect(snapshot.state.substate.options).toEqual(['Yes', 'No']);
-        expect(snapshot.state.substate.timeoutMs).toBe(60000);
+      expect(isBlockedState(snapshot.state)).toBe(true);
+      if (isBlockedState(snapshot.state)) {
+        expect(snapshot.state.query).toBe('Approve?');
+        expect(snapshot.state.options).toEqual(['Yes', 'No']);
+        expect(snapshot.state.timeoutMs).toBe(60000);
       }
     });
 
-    it('should deserialize failed substate', () => {
+    it('should deserialize failed state', () => {
       const json = JSON.stringify({
-        version: '1.0.0',
+        version: '2.0.0',
         persistedAt: '2024-01-20T12:00:00.000Z',
-        phase: 'Injection',
-        substate: {
+        state: {
           kind: 'Failed',
+          phase: 'Injection',
           error: 'Something went wrong',
           code: 'ERR_001',
           failedAt: '2024-01-20T12:00:00.000Z',
@@ -369,54 +379,12 @@ describe('Protocol State Persistence', () => {
 
       const snapshot = deserializeState(json);
 
-      expect(snapshot.state.substate.kind).toBe('Failed');
-      if (snapshot.state.substate.kind === 'Failed') {
-        expect(snapshot.state.substate.error).toBe('Something went wrong');
-        expect(snapshot.state.substate.code).toBe('ERR_001');
-        expect(snapshot.state.substate.recoverable).toBe(true);
-        expect(snapshot.state.substate.context).toBe('Extra info');
-      }
-    });
-
-    it('should throw StatePersistenceError for Blocking substate missing required fields', () => {
-      const json = JSON.stringify({
-        version: '1.0.0',
-        persistedAt: '2024-01-20T12:00:00.000Z',
-        phase: 'Lattice',
-        substate: { kind: 'Blocking' }, // Missing query and blockedAt
-        artifacts: [],
-        blockingQueries: [],
-      });
-
-      expect(() => deserializeState(json)).toThrow(StatePersistenceError);
-
-      try {
-        deserializeState(json);
-      } catch (error) {
-        const persistError = error as StatePersistenceError;
-        expect(persistError.errorType).toBe('schema_error');
-        expect(persistError.message).toContain('Blocking substate must have');
-      }
-    });
-
-    it('should throw StatePersistenceError for Failed substate missing required fields', () => {
-      const json = JSON.stringify({
-        version: '1.0.0',
-        persistedAt: '2024-01-20T12:00:00.000Z',
-        phase: 'Injection',
-        substate: { kind: 'Failed' }, // Missing required fields
-        artifacts: [],
-        blockingQueries: [],
-      });
-
-      expect(() => deserializeState(json)).toThrow(StatePersistenceError);
-
-      try {
-        deserializeState(json);
-      } catch (error) {
-        const persistError = error as StatePersistenceError;
-        expect(persistError.errorType).toBe('schema_error');
-        expect(persistError.message).toContain('Failed substate must have');
+      expect(isFailedState(snapshot.state)).toBe(true);
+      if (isFailedState(snapshot.state)) {
+        expect(snapshot.state.error).toBe('Something went wrong');
+        expect(snapshot.state.code).toBe('ERR_001');
+        expect(snapshot.state.recoverable).toBe(true);
+        expect(snapshot.state.context).toBe('Extra info');
       }
     });
 
@@ -429,10 +397,15 @@ describe('Protocol State Persistence', () => {
         resolved: false,
       };
       const json = JSON.stringify({
-        version: '1.0.0',
+        version: '2.0.0',
         persistedAt: '2024-01-20T12:00:00.000Z',
-        phase: 'Lattice',
-        substate: { kind: 'Active' },
+        state: {
+          kind: 'Active',
+          phase: {
+            phase: 'Lattice',
+            substate: { step: 'generatingStructure' },
+          },
+        },
         artifacts: [],
         blockingQueries: [blockingRecord],
       });
@@ -445,10 +418,15 @@ describe('Protocol State Persistence', () => {
 
     it('should throw StatePersistenceError for invalid blocking query', () => {
       const json = JSON.stringify({
-        version: '1.0.0',
+        version: '2.0.0',
         persistedAt: '2024-01-20T12:00:00.000Z',
-        phase: 'Lattice',
-        substate: { kind: 'Active' },
+        state: {
+          kind: 'Active',
+          phase: {
+            phase: 'Lattice',
+            substate: { step: 'generatingStructure' },
+          },
+        },
         artifacts: [],
         blockingQueries: [{ invalid: 'query' }],
       });
@@ -463,12 +441,33 @@ describe('Protocol State Persistence', () => {
         expect(persistError.message).toContain('blocking query must have');
       }
     });
+
+    it('should throw StatePersistenceError for v1 format state (negative case)', () => {
+      const json = JSON.stringify({
+        version: '1.0.0',
+        persistedAt: '2024-01-20T12:00:00.000Z',
+        phase: 'Ignition',
+        substate: { kind: 'Active' },
+        artifacts: [],
+        blockingQueries: [],
+      });
+
+      expect(() => deserializeState(json)).toThrow(StatePersistenceError);
+
+      try {
+        deserializeState(json);
+      } catch (error) {
+        const persistError = error as StatePersistenceError;
+        expect(persistError.errorType).toBe('schema_error');
+        expect(persistError.message).toContain('missing required field');
+      }
+    });
   });
 
   describe('serialize/deserialize roundtrip', () => {
     it('should preserve active state through roundtrip', () => {
       const snapshot = createTestSnapshot({
-        state: createActiveState('Mesoscopic'),
+        state: createActiveState(createMesoscopicPhaseState(createMesoscopicGeneratingTests())),
         artifacts: [
           'spec',
           'latticeCode',
@@ -482,56 +481,59 @@ describe('Protocol State Persistence', () => {
       const json = serializeState(snapshot);
       const restored = deserializeState(json);
 
-      expect(restored.state.phase).toBe('Mesoscopic');
-      expect(restored.state.substate.kind).toBe('Active');
+      expect(getPhase(restored.state)).toBe('Mesoscopic');
+      expect(isActiveState(restored.state)).toBe(true);
       expect(restored.artifacts).toEqual(snapshot.artifacts);
     });
 
     it('should preserve blocking state through roundtrip', () => {
-      const blockingSubstate = createBlockingSubstate({
+      const blockedState = createBlockedState({
+        reason: 'user_requested',
+        phase: 'Lattice',
         query: 'Approve architecture?',
         options: ['Yes', 'No', 'Revise'],
         timeoutMs: 300000,
       });
       const snapshot = createTestSnapshot({
-        state: { phase: 'Lattice', substate: blockingSubstate },
+        state: blockedState,
         artifacts: ['spec'],
       });
 
       const json = serializeState(snapshot);
       const restored = deserializeState(json);
 
-      expect(restored.state.phase).toBe('Lattice');
-      expect(restored.state.substate.kind).toBe('Blocking');
-      if (restored.state.substate.kind === 'Blocking') {
-        expect(restored.state.substate.query).toBe('Approve architecture?');
-        expect(restored.state.substate.options).toEqual(['Yes', 'No', 'Revise']);
-        expect(restored.state.substate.timeoutMs).toBe(300000);
+      expect(getPhase(restored.state)).toBe('Lattice');
+      expect(isBlockedState(restored.state)).toBe(true);
+      if (isBlockedState(restored.state)) {
+        expect(restored.state.query).toBe('Approve architecture?');
+        expect(restored.state.options).toEqual(['Yes', 'No', 'Revise']);
+        expect(restored.state.timeoutMs).toBe(300000);
       }
     });
 
     it('should preserve failed state through roundtrip', () => {
-      const failedSubstate = createFailedSubstate({
+      const failedState = createFailedState({
+        phase: 'Injection',
         error: 'Type checking failed',
         code: 'TYPE_ERROR',
         recoverable: true,
         context: 'Line 42: type mismatch',
       });
       const snapshot = createTestSnapshot({
-        state: { phase: 'Injection', substate: failedSubstate },
+        state: failedState,
         artifacts: ['spec', 'latticeCode'],
       });
 
       const json = serializeState(snapshot);
       const restored = deserializeState(json);
 
-      expect(restored.state.phase).toBe('Injection');
-      expect(restored.state.substate.kind).toBe('Failed');
-      if (restored.state.substate.kind === 'Failed') {
-        expect(restored.state.substate.error).toBe('Type checking failed');
-        expect(restored.state.substate.code).toBe('TYPE_ERROR');
-        expect(restored.state.substate.recoverable).toBe(true);
-        expect(restored.state.substate.context).toBe('Line 42: type mismatch');
+      expect(getPhase(restored.state)).toBe('Injection');
+      expect(isFailedState(restored.state)).toBe(true);
+      if (isFailedState(restored.state)) {
+        expect(restored.state.error).toBe('Type checking failed');
+        expect(restored.state.code).toBe('TYPE_ERROR');
+        expect(restored.state.recoverable).toBe(true);
+        expect(restored.state.context).toBe('Line 42: type mismatch');
       }
     });
 
@@ -576,7 +578,7 @@ describe('Protocol State Persistence', () => {
     describe('saveState', () => {
       it('should save state to file', async () => {
         const snapshot = createTestSnapshot({
-          state: createActiveState('Lattice'),
+          state: createActiveState(createLatticePhaseState(createLatticeGeneratingStructure())),
           artifacts: ['spec'],
         });
 
@@ -585,7 +587,10 @@ describe('Protocol State Persistence', () => {
 
         const content = await safeReadFile(filePath, 'utf-8');
         const parsed = JSON.parse(content) as PersistedStateData;
-        expect(parsed.phase).toBe('Lattice');
+        expect(parsed.state.kind).toBe('Active');
+        if (parsed.state.kind === 'Active') {
+          expect(parsed.state.phase.phase).toBe('Lattice');
+        }
         expect(parsed.artifacts).toEqual(['spec']);
       });
 
@@ -611,7 +616,7 @@ describe('Protocol State Persistence', () => {
 
       it('should perform atomic write (temp file then rename)', async () => {
         const snapshot = createTestSnapshot({
-          state: createActiveState('Lattice'),
+          state: createActiveState(createLatticePhaseState(createLatticeGeneratingStructure())),
         });
 
         const filePath = join(testDir, 'state.json');
@@ -628,10 +633,12 @@ describe('Protocol State Persistence', () => {
 
       it('should overwrite existing file', async () => {
         const snapshot1 = createTestSnapshot({
-          state: createActiveState('Ignition'),
+          state: createActiveState(
+            createIgnitionPhaseState(createIgnitionInterviewing('Discovery', 0))
+          ),
         });
         const snapshot2 = createTestSnapshot({
-          state: createActiveState('Lattice'),
+          state: createActiveState(createLatticePhaseState(createLatticeGeneratingStructure())),
         });
 
         const filePath = join(testDir, 'state.json');
@@ -663,7 +670,7 @@ describe('Protocol State Persistence', () => {
     describe('loadState', () => {
       it('should load state from file', async () => {
         const snapshot = createTestSnapshot({
-          state: createActiveState('Lattice'),
+          state: createActiveState(createLatticePhaseState(createLatticeGeneratingStructure())),
           artifacts: ['spec'],
         });
 
@@ -672,7 +679,7 @@ describe('Protocol State Persistence', () => {
 
         const loaded = await loadState(filePath);
 
-        expect(loaded.state.phase).toBe('Lattice');
+        expect(getPhase(loaded.state)).toBe('Lattice');
         expect(loaded.artifacts).toEqual(['spec']);
       });
 
@@ -721,8 +728,7 @@ describe('Protocol State Persistence', () => {
 
       it('should throw StatePersistenceError for truncated file', async () => {
         const filePath = join(testDir, 'truncated.json');
-        // Simulate a partially written file
-        await safeWriteFile(filePath, '{"version": "1.0.0", "persistedAt": "2024', 'utf-8');
+        await safeWriteFile(filePath, '{"version": "2.0.0", "persistedAt": "2024', 'utf-8');
 
         await expect(loadState(filePath)).rejects.toThrow(StatePersistenceError);
       });
@@ -731,7 +737,7 @@ describe('Protocol State Persistence', () => {
     describe('save/load roundtrip', () => {
       it('should preserve state after transition to Lattice phase', async () => {
         const snapshot = createTestSnapshot({
-          state: createActiveState('Lattice'),
+          state: createActiveState(createLatticePhaseState(createLatticeGeneratingStructure())),
           artifacts: ['spec'],
           blockingQueries: [],
         });
@@ -740,8 +746,8 @@ describe('Protocol State Persistence', () => {
         await saveState(snapshot, filePath);
         const loaded = await loadState(filePath);
 
-        expect(loaded.state.phase).toBe('Lattice');
-        expect(loaded.state.substate.kind).toBe('Active');
+        expect(getPhase(loaded.state)).toBe('Lattice');
+        expect(isActiveState(loaded.state)).toBe(true);
         expect(loaded.artifacts).toEqual(['spec']);
       });
 
@@ -750,33 +756,39 @@ describe('Protocol State Persistence', () => {
 
         // Save after Ignition
         const snapshot1 = createTestSnapshot({
-          state: createActiveState('Ignition'),
+          state: createActiveState(
+            createIgnitionPhaseState(createIgnitionInterviewing('Discovery', 0))
+          ),
           artifacts: [],
         });
         await saveState(snapshot1, filePath);
 
         // Transition to Lattice and save
         const snapshot2 = createTestSnapshot({
-          state: createActiveState('Lattice'),
+          state: createActiveState(createLatticePhaseState(createLatticeGeneratingStructure())),
           artifacts: ['spec'],
         });
         await saveState(snapshot2, filePath);
 
         // Transition to CompositionAudit and save
         const snapshot3 = createTestSnapshot({
-          state: createActiveState('CompositionAudit'),
+          state: createActiveState(
+            createCompositionAuditPhaseState(createCompositionAuditAuditing(0))
+          ),
           artifacts: ['spec', 'latticeCode', 'witnesses', 'contracts'],
         });
         await saveState(snapshot3, filePath);
 
         const loaded = await loadState(filePath);
 
-        expect(loaded.state.phase).toBe('CompositionAudit');
+        expect(getPhase(loaded.state)).toBe('CompositionAudit');
         expect(loaded.artifacts).toEqual(['spec', 'latticeCode', 'witnesses', 'contracts']);
       });
 
       it('should preserve blocking state with all fields', async () => {
-        const blockingSubstate = createBlockingSubstate({
+        const blockedState = createBlockedState({
+          reason: 'user_requested',
+          phase: 'Lattice',
           query: 'Approve architecture?',
           options: ['Yes', 'No', 'Revise'],
           timeoutMs: 300000,
@@ -786,12 +798,12 @@ describe('Protocol State Persistence', () => {
           phase: 'Lattice',
           query: 'Approve architecture?',
           options: ['Yes', 'No', 'Revise'],
-          blockedAt: blockingSubstate.blockedAt,
+          blockedAt: blockedState.blockedAt,
           timeoutMs: 300000,
           resolved: false,
         };
         const snapshot = createTestSnapshot({
-          state: { phase: 'Lattice', substate: blockingSubstate },
+          state: blockedState,
           artifacts: ['spec'],
           blockingQueries: [blockingRecord],
         });
@@ -800,7 +812,7 @@ describe('Protocol State Persistence', () => {
         await saveState(snapshot, filePath);
         const loaded = await loadState(filePath);
 
-        expect(loaded.state.substate.kind).toBe('Blocking');
+        expect(isBlockedState(loaded.state)).toBe(true);
         expect(loaded.blockingQueries).toHaveLength(1);
         expect(loaded.blockingQueries[0]?.query).toBe('Approve architecture?');
       });
@@ -810,7 +822,7 @@ describe('Protocol State Persistence', () => {
       it('should not corrupt file on save failure', async () => {
         // First, save valid state
         const validSnapshot = createTestSnapshot({
-          state: createActiveState('Lattice'),
+          state: createActiveState(createLatticePhaseState(createLatticeGeneratingStructure())),
           artifacts: ['spec'],
         });
         const filePath = join(testDir, 'state.json');
@@ -822,7 +834,9 @@ describe('Protocol State Persistence', () => {
 
         // Try to save to a non-existent directory (will fail)
         const invalidSnapshot = createTestSnapshot({
-          state: createActiveState('CompositionAudit'),
+          state: createActiveState(
+            createCompositionAuditPhaseState(createCompositionAuditAuditing(0))
+          ),
         });
         const invalidPath = join(testDir, 'nonexistent', 'state.json');
 
@@ -878,8 +892,8 @@ describe('Protocol State Persistence', () => {
     it('should create initial snapshot at Ignition phase', () => {
       const snapshot = createInitialStateSnapshot();
 
-      expect(snapshot.state.phase).toBe('Ignition');
-      expect(snapshot.state.substate.kind).toBe('Active');
+      expect(getPhase(snapshot.state)).toBe('Ignition');
+      expect(isActiveState(snapshot.state)).toBe(true);
       expect(snapshot.artifacts).toEqual([]);
       expect(snapshot.blockingQueries).toEqual([]);
     });

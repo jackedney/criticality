@@ -9,8 +9,7 @@
  */
 
 import type { BlockingRecord } from '../protocol/blocking.js';
-import type { BlockingSubstate } from '../protocol/types.js';
-import type { NotificationService } from './types.js';
+import type { NotificationService, WebhookProtocolState } from './types.js';
 import { getNextOccurrence } from './cron.js';
 import { writeFile, mkdir, readFile, rename, stat } from 'node:fs/promises';
 import * as path from 'node:path';
@@ -184,45 +183,22 @@ export class ReminderScheduler {
 
     const timestamp = currentTime.toISOString();
 
-    let blockingSubstate: BlockingSubstate;
-    if (blockingRecord.options !== undefined && blockingRecord.timeoutMs !== undefined) {
-      blockingSubstate = {
+    const protocolState: WebhookProtocolState = {
+      phase: blockingRecord.phase,
+      substate: {
         kind: 'Blocking',
         query: blockingRecord.query,
         blockedAt: blockingRecord.blockedAt,
-        options: blockingRecord.options,
-        timeoutMs: blockingRecord.timeoutMs,
-      };
-    } else if (blockingRecord.options !== undefined) {
-      blockingSubstate = {
-        kind: 'Blocking',
-        query: blockingRecord.query,
-        blockedAt: blockingRecord.blockedAt,
-        options: blockingRecord.options,
-      };
-    } else if (blockingRecord.timeoutMs !== undefined) {
-      blockingSubstate = {
-        kind: 'Blocking',
-        query: blockingRecord.query,
-        blockedAt: blockingRecord.blockedAt,
-        timeoutMs: blockingRecord.timeoutMs,
-      };
-    } else {
-      blockingSubstate = {
-        kind: 'Blocking',
-        query: blockingRecord.query,
-        blockedAt: blockingRecord.blockedAt,
-      };
-    }
+        ...(blockingRecord.options !== undefined ? { options: blockingRecord.options } : {}),
+        ...(blockingRecord.timeoutMs !== undefined ? { timeoutMs: blockingRecord.timeoutMs } : {}),
+      },
+    };
 
     await this.notificationService.send('block', {
       event: 'block',
       timestamp,
       blocking_record: blockingRecord,
-      protocol_state: {
-        phase: blockingRecord.phase,
-        substate: blockingSubstate,
-      },
+      protocol_state: protocolState,
     });
 
     const lastSent = timestamp;

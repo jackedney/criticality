@@ -12,8 +12,8 @@
 
 import type { Ledger, Decision } from '../ledger/index.js';
 import type { InterviewPhase } from '../interview/types.js';
-import type { ProtocolState, BlockingOptions } from '../protocol/types.js';
-import { createBlockingSubstate, createProtocolState } from '../protocol/types.js';
+import type { ProtocolState } from '../protocol/types.js';
+import { createBlockedState } from '../protocol/types.js';
 import type { Contradiction, InvolvedElement, ContradictionType } from './types.js';
 
 /**
@@ -582,15 +582,12 @@ export function handlePhaseRegression(
     const resolutionOptions = buildResolutionOptions(analysis.suggestedResolutions);
 
     // Create BLOCKED protocol state
-    const blockingOpts: BlockingOptions = {
+    const blockedState = createBlockedState({
+      reason: 'canonical_conflict',
+      phase: 'CompositionAudit',
       query,
-    };
-    if (resolutionOptions.length > 0) {
-      blockingOpts.options = resolutionOptions;
-    }
-
-    const blockingSubstate = createBlockingSubstate(blockingOpts);
-    const blockedState = createProtocolState('CompositionAudit', blockingSubstate);
+      ...(resolutionOptions.length > 0 ? { options: resolutionOptions } : {}),
+    });
 
     return {
       success: true,
@@ -723,8 +720,11 @@ export function handleAllResolutionsRejected(
 
   const query = `All suggested resolutions for the following contradiction have been rejected:\n\n${contradiction.description}\n\nPlease provide guidance on how to proceed.`;
 
-  const blockingSubstate = createBlockingSubstate({ query });
-  const blockedState = createProtocolState('CompositionAudit', blockingSubstate);
+  const blockedState = createBlockedState({
+    reason: 'canonical_conflict',
+    phase: 'CompositionAudit',
+    query,
+  });
 
   return {
     success: true,

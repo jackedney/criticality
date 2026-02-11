@@ -8,7 +8,7 @@
  */
 
 import type { BlockingRecord } from '../protocol/blocking.js';
-import type { ProtocolPhase, ProtocolState } from '../protocol/types.js';
+import type { ProtocolPhase } from '../protocol/types.js';
 
 /**
  * Notification events that can trigger notifications.
@@ -45,6 +45,24 @@ export interface NotificationChannel {
 }
 
 /**
+ * Serialized protocol state for webhook wire format.
+ *
+ * This is the external representation sent to webhook consumers.
+ * It differs from the internal ProtocolState discriminated union
+ * by using a flat `{ phase, substate }` structure for backwards
+ * compatibility with external consumers.
+ */
+export interface WebhookProtocolState {
+  /** The current protocol phase. */
+  readonly phase: string;
+  /** The substate within the current phase. */
+  readonly substate: {
+    readonly kind: string;
+    readonly [key: string]: unknown;
+  };
+}
+
+/**
  * Webhook payload structure for notification events.
  *
  * Contains the full BlockingRecord for programmatic consumption,
@@ -59,8 +77,8 @@ export interface WebhookPayload {
   readonly blocking_record?: BlockingRecord;
   /** Phase change data (for phase_change events). */
   readonly phase_change?: PhaseChangeData;
-  /** Current protocol state (for all events). */
-  readonly protocol_state: ProtocolState;
+  /** Current protocol state for webhook consumers. */
+  readonly protocol_state: WebhookProtocolState;
 }
 
 /**

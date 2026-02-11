@@ -12,6 +12,11 @@ import {
   StatePersistenceError,
   type ProtocolStateSnapshot,
 } from '../protocol/persistence.js';
+import {
+  createActiveState,
+  createIgnitionPhaseState,
+  createIgnitionInterviewing,
+} from '../protocol/types.js';
 import type { BlockingRecord } from '../protocol/blocking.js';
 import { renameSync } from 'node:fs';
 import { stat, writeFile, rename, unlink } from 'node:fs/promises';
@@ -88,11 +93,11 @@ export function getDefaultLedgerPath(statePath: string): string {
  */
 export function createInitialCliState(): CliStateSnapshot {
   const now = new Date().toISOString();
+  const ignitionSubState = createIgnitionInterviewing('Discovery', 0);
+  const phaseState = createIgnitionPhaseState(ignitionSubState);
+
   return {
-    state: {
-      phase: 'Ignition',
-      substate: { kind: 'Active' },
-    },
+    state: createActiveState(phaseState),
     artifacts: [],
     blockingQueries: [],
     createdAt: now,

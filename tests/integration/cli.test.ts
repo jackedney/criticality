@@ -19,6 +19,12 @@ import { handleResumeCommand } from '../../src/cli/commands/resume.js';
 import type { CliContext } from '../../src/cli/types.js';
 import { saveState, type ProtocolStateSnapshot } from '../../src/protocol/persistence.js';
 import { type BlockingRecord } from '../../src/protocol/blocking.js';
+import {
+  createActiveState,
+  createBlockedState,
+  createCompleteState,
+  createLatticeCompilingCheck,
+} from '../../src/protocol/types.js';
 
 describe('CLI Integration Tests', () => {
   let testDir: string;
@@ -58,18 +64,15 @@ describe('CLI Integration Tests', () => {
     };
   }
 
-  function createActiveState(): ProtocolStateSnapshot {
+  function createActiveSnapshot(): ProtocolStateSnapshot {
     return {
-      state: {
-        phase: 'Lattice',
-        substate: { kind: 'Active' },
-      },
+      state: createActiveState({ phase: 'Lattice', substate: createLatticeCompilingCheck(0) }),
       artifacts: ['spec'],
       blockingQueries: [],
     };
   }
 
-  function createBlockedState(): ProtocolStateSnapshot {
+  function createBlockedSnapshot(): ProtocolStateSnapshot {
     const blockedQuery: BlockingRecord = {
       id: 'query_001',
       phase: 'Lattice',
@@ -80,26 +83,27 @@ describe('CLI Integration Tests', () => {
     };
 
     return {
-      state: {
+      state: createBlockedState({
+        reason: 'user_requested',
         phase: 'Lattice',
-        substate: {
-          kind: 'Blocking',
-          query: blockedQuery.query,
-          options: blockedQuery.options,
-          blockedAt: blockedQuery.blockedAt,
-        },
-      },
+        query: blockedQuery.query,
+        options: blockedQuery.options,
+      }),
       artifacts: ['spec'],
       blockingQueries: [blockedQuery],
     };
   }
 
-  function createCompletedState(): ProtocolStateSnapshot {
+  function createCompletedSnapshot(): ProtocolStateSnapshot {
     return {
-      state: {
-        phase: 'Complete',
-        substate: { kind: 'Active' },
-      },
+      state: createCompleteState([
+        'spec',
+        'latticeCode',
+        'validatedStructure',
+        'implementedCode',
+        'verifiedCode',
+        'finalArtifact',
+      ]),
       artifacts: [
         'spec',
         'latticeCode',
@@ -114,7 +118,7 @@ describe('CLI Integration Tests', () => {
 
   describe('Status Command', () => {
     it('displays active state with phase and progress', async () => {
-      const state = createActiveState();
+      const state = createActiveSnapshot();
       await saveState(state, statePath);
 
       const context = createMockContext({ args: ['status'] });
@@ -127,7 +131,7 @@ describe('CLI Integration Tests', () => {
     });
 
     it('displays blocked state with query and options', async () => {
-      const state = createBlockedState();
+      const state = createBlockedSnapshot();
       await saveState(state, statePath);
 
       const context = createMockContext({ args: ['status'] });
@@ -144,7 +148,7 @@ describe('CLI Integration Tests', () => {
     });
 
     it('displays completed state with artifact summary', async () => {
-      const state = createCompletedState();
+      const state = createCompletedSnapshot();
       await saveState(state, statePath);
 
       const context = createMockContext({ args: ['status'] });
@@ -169,7 +173,7 @@ describe('CLI Integration Tests', () => {
 
   describe('Resolve Command', () => {
     it('displays no pending queries when not blocked', async () => {
-      const state = createActiveState();
+      const state = createActiveSnapshot();
       await saveState(state, statePath);
 
       const context = createMockContext({ args: ['resolve'] });
@@ -197,7 +201,7 @@ describe('CLI Integration Tests', () => {
 
   describe('Resume Command', () => {
     it('displays error when no resolved queries exist', async () => {
-      const state = createActiveState();
+      const state = createActiveSnapshot();
       await saveState(state, statePath);
 
       const context = createMockContext({ args: ['resume'] });
@@ -226,7 +230,7 @@ describe('CLI Integration Tests', () => {
 
   describe('Config Integration', () => {
     it('respects color configuration from criticality.toml', async () => {
-      const state = createActiveState();
+      const state = createActiveSnapshot();
       await saveState(state, statePath);
 
       const configContent = `
@@ -245,7 +249,7 @@ watch_interval = 2000
     });
 
     it('respects unicode configuration from criticality.toml', async () => {
-      const state = createActiveState();
+      const state = createActiveSnapshot();
       await saveState(state, statePath);
 
       const configContent = `
@@ -263,7 +267,7 @@ watch_interval = 2000
     });
 
     it('handles missing config file with defaults', async () => {
-      const state = createActiveState();
+      const state = createActiveSnapshot();
       await saveState(state, statePath);
 
       const context = createMockContext({ args: ['status'] });
@@ -274,7 +278,7 @@ watch_interval = 2000
     });
 
     it('checks notification hooks in config', async () => {
-      const state = createActiveState();
+      const state = createActiveSnapshot();
       await saveState(state, statePath);
 
       const configContent = `
@@ -299,7 +303,7 @@ on_complete = { command = "notify-send 'Protocol complete'", enabled = true }
 
   describe('End-to-End Workflows', () => {
     it('handles complete state after all phases', async () => {
-      const state = createCompletedState();
+      const state = createCompletedSnapshot();
       await saveState(state, statePath);
 
       const statusResult = await handleStatusCommand(createMockContext({ args: ['status'] }));
@@ -308,7 +312,7 @@ on_complete = { command = "notify-send 'Protocol complete'", enabled = true }
     });
 
     it('handles active state with progress display', async () => {
-      const state = createActiveState();
+      const state = createActiveSnapshot();
       await saveState(state, statePath);
 
       const statusResult = await handleStatusCommand(createMockContext({ args: ['status'] }));
@@ -317,7 +321,7 @@ on_complete = { command = "notify-send 'Protocol complete'", enabled = true }
     });
 
     it('handles blocked state status display', async () => {
-      const state = createBlockedState();
+      const state = createBlockedSnapshot();
       await saveState(state, statePath);
 
       const statusResult = await handleStatusCommand(createMockContext({ args: ['status'] }));

@@ -1,12 +1,18 @@
 /**
  * Spinner component for protocol execution progress.
  *
- * Displays animated spinner with phase/substate updates during resume execution.
+ * Displays animated spinner with phase/state updates during resume execution.
  * Falls back to simple text in non-TTY environments.
  */
 
-import type { ProtocolPhase, ProtocolSubstate } from '../../protocol/types.js';
-import { isActiveSubstate } from '../../protocol/types.js';
+import type { ProtocolState } from '../../protocol/types.js';
+import {
+  getPhase,
+  getStep,
+  isActiveState,
+  isBlockedState,
+  isFailedState,
+} from '../../protocol/types.js';
 
 /**
  * Spinner frame characters for animation.
@@ -39,8 +45,7 @@ export interface SpinnerOptions {
  * Spinner state interface.
  */
 interface SpinnerState {
-  phase: ProtocolPhase;
-  substate: ProtocolSubstate;
+  protocolState: ProtocolState;
   currentFrame: number;
   lastUpdate: number;
   isRunning: boolean;
@@ -51,7 +56,7 @@ interface SpinnerState {
  * Spinner component class.
  *
  * Provides animated progress display for protocol execution with
- * phase/substate updates. Handles both TTY and non-TTY environments.
+ * phase/state updates. Handles both TTY and non-TTY environments.
  */
 export class Spinner {
   private state: SpinnerState;
@@ -69,8 +74,13 @@ export class Spinner {
     this.isTty = process.stdout.isTTY ?? false; // eslint-disable-line @typescript-eslint/no-unnecessary-condition
     this.currentText = '';
     this.state = {
-      phase: 'Ignition',
-      substate: { kind: 'Active' },
+      protocolState: {
+        kind: 'Active',
+        phase: {
+          phase: 'Ignition',
+          substate: { step: 'interviewing', interviewPhase: 'Discovery', questionIndex: 0 },
+        },
+      },
       currentFrame: 0,
       lastUpdate: Date.now(),
       isRunning: false,
@@ -91,54 +101,45 @@ export class Spinner {
   }
 
   /**
-   * Format the substate for display.
+   * Format the protocol state for display.
    *
-   * @param substate - The protocol substate.
-   * @returns Formatted substate string.
+   * @param state - The protocol state.
+   * @returns Formatted state string.
    */
-  private formatSubstate(substate: ProtocolSubstate): string {
-    const kind = substate.kind;
-    if (kind === 'Active') {
-      if (isActiveSubstate(substate)) {
-        const parts: string[] = [];
-        if (substate.task !== undefined) {
-          parts.push(substate.task);
-        }
-        if (substate.operation !== undefined) {
-          parts.push(substate.operation);
-        }
-        if (parts.length === 0) {
-          return 'active';
-        }
-        return parts.join(' > ');
+  private formatState(state: ProtocolState): string {
+    if (isActiveState(state)) {
+      const step = getStep(state);
+      if (step !== undefined) {
+        return step;
       }
       return 'active';
     }
-    if (kind === 'Blocking') {
-      const query = substate.query;
+
+    if (isBlockedState(state)) {
+      const query = state.query;
       return `blocked: ${query.substring(0, 30)}${query.length > 30 ? '...' : ''}`;
     }
-    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition
-    if (kind === 'Failed') {
-      const error = substate.error;
+
+    if (isFailedState(state)) {
+      const error = state.error;
       return `failed: ${error.substring(0, 30)}${error.length > 30 ? '...' : ''}`;
     }
-    return kind;
+
+    return 'complete';
   }
 
   /**
-   * Format the spinner text with phase and substate.
+   * Format the spinner text with phase and state.
    *
    * @returns The formatted text string.
    */
   private formatText(): string {
     const frame = this.getCurrentFrame();
-    const phase = this.state.phase;
-    const substateText = this.formatSubstate(this.state.substate);
+    const phase = getPhase(this.state.protocolState) ?? 'Complete';
+    const stateText = this.formatState(this.state.protocolState);
 
-    const text = `${frame} ${phase}${substateText !== 'active' ? ' > ' + substateText : ''}`;
+    const text = `${frame} ${phase}${stateText !== 'active' ? ' > ' + stateText : ''}`;
 
-    // Truncate text if too long for terminal
     if (text.length > MAX_TEXT_WIDTH) {
       return text.substring(0, MAX_TEXT_WIDTH - 3) + '...';
     }
@@ -171,22 +172,16 @@ export class Spinner {
   }
 
   /**
-   * Update the phase and substate.
+   * Update the displayed protocol state.
    *
-   * @param phase - The protocol phase.
-   * @param substate - The protocol substate.
+   * @param state - The current protocol state.
    */
-  update(phase: ProtocolPhase, substate: ProtocolSubstate): void {
-    const phaseChanged = this.state.phase !== phase;
-    const substateChanged =
-      this.state.substate.kind !== substate.kind ||
-      JSON.stringify(this.state.substate) !== JSON.stringify(substate);
+  update(state: ProtocolState): void {
+    const stateChanged = JSON.stringify(this.state.protocolState) !== JSON.stringify(state);
 
-    this.state.phase = phase;
-    this.state.substate = substate;
+    this.state.protocolState = state;
 
-    // Force update immediately on phase/substate change
-    if (phaseChanged || substateChanged) {
+    if (stateChanged) {
       this.updateDisplay();
     }
   }
@@ -206,7 +201,6 @@ export class Spinner {
         this.nextFrame();
       }, this.options.interval);
     } else {
-      // Non-TTY: just print initial state
       process.stdout.write(this.formatText() + '\n');
     }
   }
@@ -229,7 +223,6 @@ export class Spinner {
     }
 
     if (this.isTty) {
-      // Clear the spinner line
       process.stdout.write('\r\x1b[2K');
       if (finalText !== undefined) {
         process.stdout.write(finalText + '\n');

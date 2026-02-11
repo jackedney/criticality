@@ -7,6 +7,7 @@ import type { ActionResult, TickContext, ExternalOperations } from './orchestrat
 import type { MassDefectPhaseContext } from './phase-execution.js';
 import { executeMassDefectPhase } from './phase-execution.js';
 import type { ModelRouter, ModelRouterResult } from '../router/types.js';
+import { createActiveState, createMassDefectAnalyzingComplexity } from './types.js';
 
 describe('Phase Execution', () => {
   describe('MassDefect Phase', () => {
@@ -26,7 +27,10 @@ describe('Phase Execution', () => {
 
         const context: TickContext = {
           snapshot: {
-            state: { phase: 'MassDefect', substate: { kind: 'Active' } },
+            state: createActiveState({
+              phase: 'MassDefect',
+              substate: createMassDefectAnalyzingComplexity(),
+            }),
             artifacts: [],
             blockingQueries: [],
           },

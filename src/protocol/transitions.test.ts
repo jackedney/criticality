@@ -22,12 +22,52 @@ import {
 } from './transitions.js';
 import {
   type ProtocolPhase,
+  type ProtocolState,
   PROTOCOL_PHASES,
   createActiveState,
-  createProtocolState,
-  createBlockingSubstate,
-  createFailedSubstate,
+  createBlockedState,
+  createFailedState,
+  getPhase,
+  createIgnitionPhaseState,
+  createIgnitionInterviewing,
+  createLatticePhaseState,
+  createLatticeGeneratingStructure,
+  createCompositionAuditPhaseState,
+  createCompositionAuditAuditing,
+  createInjectionPhaseState,
+  createInjectionSelectingFunction,
+  createMesoscopicPhaseState,
+  createMesoscopicGeneratingTests,
+  createMassDefectPhaseState,
+  createMassDefectAnalyzingComplexity,
+  createCompleteState,
 } from './types.js';
+
+/**
+ * Creates an ActiveState (or CompleteState for 'Complete') for the given phase,
+ * using default substates. Used to avoid repeating verbose factory chains
+ * throughout the test suite.
+ */
+function createActiveStateForPhase(phase: ProtocolPhase): ProtocolState {
+  switch (phase) {
+    case 'Ignition':
+      return createActiveState(
+        createIgnitionPhaseState(createIgnitionInterviewing('Discovery', 0))
+      );
+    case 'Lattice':
+      return createActiveState(createLatticePhaseState(createLatticeGeneratingStructure()));
+    case 'CompositionAudit':
+      return createActiveState(createCompositionAuditPhaseState(createCompositionAuditAuditing(0)));
+    case 'Injection':
+      return createActiveState(createInjectionPhaseState(createInjectionSelectingFunction()));
+    case 'Mesoscopic':
+      return createActiveState(createMesoscopicPhaseState(createMesoscopicGeneratingTests()));
+    case 'MassDefect':
+      return createActiveState(createMassDefectPhaseState(createMassDefectAnalyzingComplexity()));
+    case 'Complete':
+      return createCompleteState([]);
+  }
+}
 
 describe('Phase Transitions', () => {
   describe('FORWARD_TRANSITIONS', () => {
@@ -286,15 +326,15 @@ describe('Phase Transitions', () => {
   describe('transition', () => {
     describe('Acceptance Criteria: transition from Ignition to Lattice succeeds with required artifacts', () => {
       it('succeeds when spec artifact is provided', () => {
-        const state = createActiveState('Ignition');
+        const state = createActiveStateForPhase('Ignition');
         const artifacts = createTransitionArtifacts(['spec']);
 
         const result = transition(state, 'Lattice', { artifacts });
 
         expect(result.success).toBe(true);
         if (result.success) {
-          expect(result.state.phase).toBe('Lattice');
-          expect(result.state.substate.kind).toBe('Active');
+          expect(getPhase(result.state)).toBe('Lattice');
+          expect(result.state.kind).toBe('Active');
           expect(result.contextShed).toBe(true);
         }
       });
@@ -302,7 +342,7 @@ describe('Phase Transitions', () => {
 
     describe('Negative case: transition from Ignition to Injection returns invalid transition error', () => {
       it('returns descriptive error when skipping phases', () => {
-        const state = createActiveState('Ignition');
+        const state = createActiveStateForPhase('Ignition');
 
         const result = transition(state, 'Injection');
 
@@ -330,15 +370,19 @@ describe('Phase Transitions', () => {
 
       for (const [from, to, requiredArtifacts] of forwardTransitionCases) {
         it(`transitions from ${from} to ${to} with required artifacts`, () => {
-          const state = createActiveState(from);
+          const state = createActiveStateForPhase(from);
           const artifacts = createTransitionArtifacts(requiredArtifacts);
 
           const result = transition(state, to, { artifacts });
 
           expect(result.success).toBe(true);
           if (result.success) {
-            expect(result.state.phase).toBe(to);
-            expect(result.state.substate.kind).toBe('Active');
+            if (to === 'Complete') {
+              expect(result.state.kind).toBe('Complete');
+            } else {
+              expect(getPhase(result.state)).toBe(to);
+              expect(result.state.kind).toBe('Active');
+            }
           }
         });
       }
@@ -346,45 +390,45 @@ describe('Phase Transitions', () => {
 
     describe('Valid failure transitions', () => {
       it('transitions from CompositionAudit to Ignition with contradiction report', () => {
-        const state = createActiveState('CompositionAudit');
+        const state = createActiveStateForPhase('CompositionAudit');
         const artifacts = createTransitionArtifacts(['contradictionReport']);
 
         const result = transition(state, 'Ignition', { artifacts });
 
         expect(result.success).toBe(true);
         if (result.success) {
-          expect(result.state.phase).toBe('Ignition');
+          expect(getPhase(result.state)).toBe('Ignition');
         }
       });
 
       it('transitions from Injection to Lattice with structural defect report', () => {
-        const state = createActiveState('Injection');
+        const state = createActiveStateForPhase('Injection');
         const artifacts = createTransitionArtifacts(['structuralDefectReport']);
 
         const result = transition(state, 'Lattice', { artifacts });
 
         expect(result.success).toBe(true);
         if (result.success) {
-          expect(result.state.phase).toBe('Lattice');
+          expect(getPhase(result.state)).toBe('Lattice');
         }
       });
 
       it('transitions from Mesoscopic to Injection with cluster failure report', () => {
-        const state = createActiveState('Mesoscopic');
+        const state = createActiveStateForPhase('Mesoscopic');
         const artifacts = createTransitionArtifacts(['clusterFailureReport']);
 
         const result = transition(state, 'Injection', { artifacts });
 
         expect(result.success).toBe(true);
         if (result.success) {
-          expect(result.state.phase).toBe('Injection');
+          expect(getPhase(result.state)).toBe('Injection');
         }
       });
     });
 
     describe('Missing artifact errors', () => {
       it('returns MISSING_ARTIFACTS error when no artifacts provided', () => {
-        const state = createActiveState('Ignition');
+        const state = createActiveStateForPhase('Ignition');
 
         const result = transition(state, 'Lattice');
 
@@ -397,7 +441,7 @@ describe('Phase Transitions', () => {
       });
 
       it('returns MISSING_ARTIFACTS error when some artifacts missing', () => {
-        const state = createActiveState('Lattice');
+        const state = createActiveStateForPhase('Lattice');
         const artifacts = createTransitionArtifacts(['latticeCode']); // missing witnesses, contracts
 
         const result = transition(state, 'CompositionAudit', { artifacts });
@@ -413,7 +457,7 @@ describe('Phase Transitions', () => {
 
     describe('Invalid transition errors', () => {
       it('returns INVALID_TRANSITION for skipping phases', () => {
-        const state = createActiveState('Ignition');
+        const state = createActiveStateForPhase('Ignition');
 
         const result = transition(state, 'MassDefect');
 
@@ -424,7 +468,7 @@ describe('Phase Transitions', () => {
       });
 
       it('returns INVALID_TRANSITION for invalid backward transitions', () => {
-        const state = createActiveState('Lattice');
+        const state = createActiveStateForPhase('Lattice');
 
         const result = transition(state, 'Ignition');
 
@@ -436,7 +480,7 @@ describe('Phase Transitions', () => {
       });
 
       it('returns INVALID_TRANSITION for same-phase transition', () => {
-        const state = createActiveState('Injection');
+        const state = createActiveStateForPhase('Injection');
 
         const result = transition(state, 'Injection');
 
@@ -449,7 +493,11 @@ describe('Phase Transitions', () => {
 
     describe('State validation errors', () => {
       it('returns BLOCKED_STATE when in blocking substate', () => {
-        const state = createProtocolState('Lattice', createBlockingSubstate({ query: 'Waiting?' }));
+        const state = createBlockedState({
+          reason: 'user_requested',
+          phase: 'Lattice',
+          query: 'Waiting?',
+        });
 
         const result = transition(state, 'CompositionAudit');
 
@@ -461,7 +509,7 @@ describe('Phase Transitions', () => {
       });
 
       it('returns FAILED_STATE when in failed substate', () => {
-        const state = createProtocolState('Injection', createFailedSubstate({ error: 'Failed' }));
+        const state = createFailedState({ phase: 'Injection', error: 'Failed' });
 
         const result = transition(state, 'Mesoscopic');
 
@@ -473,7 +521,7 @@ describe('Phase Transitions', () => {
       });
 
       it('returns ALREADY_COMPLETE when in Complete phase', () => {
-        const state = createActiveState('Complete');
+        const state = createCompleteState([]);
 
         const result = transition(state, 'Ignition');
 
@@ -487,7 +535,7 @@ describe('Phase Transitions', () => {
 
     describe('Context shedding', () => {
       it('triggers context shedding on successful transition', () => {
-        const state = createActiveState('Ignition');
+        const state = createActiveStateForPhase('Ignition');
         const artifacts = createTransitionArtifacts(['spec']);
 
         const result = transition(state, 'Lattice', { artifacts });
@@ -501,7 +549,7 @@ describe('Phase Transitions', () => {
 
     describe('Edge cases', () => {
       it('handles Complete phase correctly (no valid transitions)', () => {
-        const state = createActiveState('Complete');
+        const state = createCompleteState([]);
 
         // Try any transition - should fail
         const result = transition(state, 'Ignition');
@@ -513,7 +561,7 @@ describe('Phase Transitions', () => {
       });
 
       it('provides descriptive error for phase that has no outgoing transitions', () => {
-        const state = createActiveState('Complete');
+        const state = createCompleteState([]);
 
         const result = transition(state, 'MassDefect');
 
@@ -527,15 +575,15 @@ describe('Phase Transitions', () => {
 
     describe('Acceptance Criteria: Mesoscopic -> MassDefect transition with verifiedCode artifact', () => {
       it('transitions from Mesoscopic to MassDefect with verifiedCode artifact', () => {
-        const state = createActiveState('Mesoscopic');
+        const state = createActiveStateForPhase('Mesoscopic');
         const artifacts = createTransitionArtifacts(['verifiedCode']);
 
         const result = transition(state, 'MassDefect', { artifacts });
 
         expect(result.success).toBe(true);
         if (result.success) {
-          expect(result.state.phase).toBe('MassDefect');
-          expect(result.state.substate.kind).toBe('Active');
+          expect(getPhase(result.state)).toBe('MassDefect');
+          expect(result.state.kind).toBe('Active');
           expect(result.contextShed).toBe(true);
         }
       });
@@ -543,22 +591,21 @@ describe('Phase Transitions', () => {
 
     describe('Acceptance Criteria: MassDefect -> Complete transition with finalArtifact', () => {
       it('transitions from MassDefect to Complete with finalArtifact', () => {
-        const state = createActiveState('MassDefect');
+        const state = createActiveStateForPhase('MassDefect');
         const artifacts = createTransitionArtifacts(['finalArtifact']);
 
         const result = transition(state, 'Complete', { artifacts });
 
         expect(result.success).toBe(true);
         if (result.success) {
-          expect(result.state.phase).toBe('Complete');
-          expect(result.state.substate.kind).toBe('Active');
+          expect(result.state.kind).toBe('Complete');
         }
       });
     });
 
     describe('Negative case: MassDefect -> Complete without finalArtifact fails', () => {
       it('returns MISSING_ARTIFACTS error when finalArtifact not provided', () => {
-        const state = createActiveState('MassDefect');
+        const state = createActiveStateForPhase('MassDefect');
 
         const result = transition(state, 'Complete');
 
