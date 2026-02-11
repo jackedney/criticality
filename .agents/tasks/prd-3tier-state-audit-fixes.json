@@ -1,0 +1,311 @@
+{
+  "version": 1,
+  "project": "3-Tier State Model + Audit Gap Fixes",
+  "overview": "Restructure the protocol state from a flat 2-field model ({phase, substate}) to a 3-tier discriminated union hierarchy per SPECIFICATION.md section 9.3, add BlockReason typed enum, implement all phase-specific sub-state types, implement context shedding, create executeLatticePhase handler, and add conditional approval ledger integration. MCP servers excluded (already fully implemented \u2014 audit false positive on CR-001).",
+  "goals": [
+    "Replace flat ProtocolState with 3-tier hierarchy: Tier 1 (Active|Blocked|Failed|Complete) \u2192 Tier 2 (PhaseState per phase) \u2192 Tier 3 (phase-specific substates)",
+    "Add BlockReason typed enum (canonical_conflict, unresolved_contradiction, circuit_breaker, security_review, user_requested)",
+    "Add all phase-specific sub-state types: IgnitionSubState, LatticeSubState, CompositionAuditSubState, InjectionSubState, MesoscopicSubState, MassDefectSubState",
+    "Migrate all 21 source files and 13+ test files to use the new type system",
+    "Implement real context shedding (replace shedContext stub in transitions.ts)",
+    "Create executeLatticePhase handler that orchestrates the 7-step Lattice process using existing modules",
+    "Add conditional approval ledger integration in interview engine"
+  ],
+  "nonGoals": [
+    "MCP server implementation (already fully implemented \u2014 artifact-server has 4 tools, toolchain-server has 3 tools)",
+    "Documentation changes (SPECIFICATION.md, ROADMAP.md, README.md already updated in prior audit)",
+    "Rewriting any lattice component modules (only orchestrate existing modules)",
+    "Adding new protocol phases or changing phase execution order",
+    "Backward compatibility with v1 persisted state files (no active users)",
+    "Changing the ProtocolPhase string union or PROTOCOL_PHASES array values"
+  ],
+  "successMetrics": [
+    "ProtocolState is a 3-tier discriminated union: Active\u2192PhaseState\u2192PhaseSubState, Blocked (with reason), Failed, Complete",
+    "All 6 phases have typed sub-states with step-level tracking",
+    "BlockReason enum used in all blocking scenarios (not generic query string)",
+    "shedContext() archives artifacts to disk and records telemetry events",
+    "executeLatticePhase() calls all 6 lattice modules in correct order and handles compilation repair",
+    "ApproveWithConditions writes provisional ledger entries for each condition",
+    "All quality gates pass: npm run test, npm run lint, npm run typecheck, npm run build"
+  ],
+  "openQuestions": [],
+  "stack": {
+    "framework": "TypeScript 5.7.3 (strict mode, exactOptionalPropertyTypes)",
+    "hosting": "Local CLI (npm package)",
+    "database": "File-based state persistence (JSON + TOML)",
+    "auth": "N/A"
+  },
+  "routes": [],
+  "uiNotes": [],
+  "dataModel": [
+    {
+      "entity": "ProtocolState (Tier 1)",
+      "fields": [
+        "ActiveState: { kind: 'Active', phase: PhaseState }",
+        "BlockedState: { kind: 'Blocked', reason: BlockReason, phase: ProtocolPhase, query: string, options?: string[], blockedAt: string, timeoutMs?: number }",
+        "FailedState: { kind: 'Failed', phase: ProtocolPhase, error: string, code?: string, failedAt: string, recoverable: boolean, context?: string }",
+        "CompleteState: { kind: 'Complete', artifacts: ArtifactType[] }"
+      ]
+    },
+    {
+      "entity": "PhaseState (Tier 2)",
+      "fields": [
+        "{ phase: 'Ignition', substate: IgnitionSubState }",
+        "{ phase: 'Lattice', substate: LatticeSubState }",
+        "{ phase: 'CompositionAudit', substate: CompositionAuditSubState }",
+        "{ phase: 'Injection', substate: InjectionSubState }",
+        "{ phase: 'Mesoscopic', substate: MesoscopicSubState }",
+        "{ phase: 'MassDefect', substate: MassDefectSubState }"
+      ]
+    },
+    {
+      "entity": "Phase SubStates (Tier 3)",
+      "fields": [
+        "IgnitionSubState: interviewing (interviewPhase, questionIndex) | synthesizing (progress) | awaitingApproval",
+        "LatticeSubState: generatingStructure (currentModule?) | compilingCheck (attempt) | repairingStructure (errors, repairAttempt)",
+        "CompositionAuditSubState: auditing (auditorsCompleted) | reportingContradictions (severity)",
+        "InjectionSubState: selectingFunction | implementing (functionId, attempt) | verifying (functionId) | escalating (functionId, fromTier, toTier)",
+        "MesoscopicSubState: generatingTests (clusterId?) | executingCluster (clusterId, progress) | handlingVerdict (clusterId, passed)",
+        "MassDefectSubState: analyzingComplexity | applyingTransform (patternId, functionId) | verifyingSemantics (transformId)"
+      ]
+    },
+    {
+      "entity": "BlockReason",
+      "fields": [
+        "canonical_conflict",
+        "unresolved_contradiction",
+        "circuit_breaker",
+        "security_review",
+        "user_requested"
+      ]
+    }
+  ],
+  "importFormat": {
+    "description": "Not applicable \u2014 internal refactoring",
+    "example": {}
+  },
+  "rules": [
+    "All types must be readonly interfaces with exactOptionalPropertyTypes compliance",
+    "Factory functions must use conditional field construction pattern (no undefined values in objects) \u2014 follow pattern from current types.ts:204-306",
+    "Type guards must use discriminant field ('kind' for Tier 1, 'phase' for Tier 2, 'step' for Tier 3)",
+    "Persistence format version bumps to 2.0.0 \u2014 no backward compat with v1 needed",
+    "Intermediate migration stories may have typecheck failures in unmigrated modules \u2014 acceptable",
+    "Full quality gates (test + lint + typecheck + build) enforced on final migration story (US-005) and all subsequent stories",
+    "executeLatticePhase must follow executeMassDefectPhase pattern exactly (TickContext, ActionResult, Logger, error handling)",
+    "Context shedding uses safeWriteFile from src/utils/safe-fs.ts for atomic archive writes",
+    "Ledger integration uses existing append() API from src/ledger/ledger.ts with provisional confidence"
+  ],
+  "qualityGates": [
+    "npm run test",
+    "npm run lint",
+    "npm run typecheck",
+    "npm run build"
+  ],
+  "stories": [
+    {
+      "id": "US-001",
+      "title": "Define 3-tier type system in new file",
+      "status": "in_progress",
+      "dependsOn": [],
+      "description": "As a developer, I want the new 3-tier protocol state types defined so that the migration can reference them. Create types-v2.ts with all types, factory functions, type guards, and comprehensive tests. This is additive only \u2014 no existing code changes.",
+      "acceptanceCriteria": [
+        "Create src/protocol/types-v2.ts with all Tier 1 types: ActiveState, BlockedState, FailedState, CompleteState, ProtocolState union",
+        "Add BlockReason union type with 5 variants: canonical_conflict, unresolved_contradiction, circuit_breaker, security_review, user_requested",
+        "Add Tier 2 PhaseState union type with 6 phase variants, each embedding a phase-specific substate",
+        "Add all Tier 3 substate types: IgnitionSubState (3 steps: interviewing with interviewPhase+questionIndex, synthesizing with progress, awaitingApproval), LatticeSubState (3 steps: generatingStructure with currentModule?, compilingCheck with attempt, repairingStructure with errors+repairAttempt), CompositionAuditSubState (2 steps: auditing with auditorsCompleted, reportingContradictions with severity), InjectionSubState (4 steps: selectingFunction, implementing with functionId+attempt, verifying with functionId, escalating with functionId+fromTier+toTier), MesoscopicSubState (3 steps: generatingTests with clusterId?, executingCluster with clusterId+progress, handlingVerdict with clusterId+passed), MassDefectSubState (3 steps: analyzingComplexity, applyingTransform with patternId+functionId, verifyingSemantics with transformId)",
+        "Add factory functions using exactOptionalPropertyTypes pattern from types.ts:204-306: createActiveState(phase: PhaseState), createBlockedState(options: {reason, phase, query, options?, timeoutMs?}), createFailedState(options: {phase, error, code?, recoverable?, context?}), createCompleteState(artifacts: ArtifactType[])",
+        "Add phase-specific factory functions: createIgnitionInterviewing(interviewPhase, questionIndex), createIgnitionSynthesizing(progress), createIgnitionAwaitingApproval(), and similar for all other phases",
+        "Add type guards: isActiveState(state): state is ActiveState, isBlockedState(state): state is BlockedState, isFailedState(state): state is FailedState, isCompleteState(state): state is CompleteState",
+        "Add helper functions: getPhase(state: ProtocolState): ProtocolPhase (extracts phase from any variant), getStep(state: ProtocolState): string | undefined (extracts step from active state), isTerminalState(state): boolean, canTransition(state): boolean",
+        "Keep ProtocolPhase and PROTOCOL_PHASES unchanged (import from existing types.ts)",
+        "All interfaces must be readonly",
+        "Create src/protocol/types-v2.test.ts with tests for all factory functions, all type guards, all helper functions, readonly enforcement, and edge cases",
+        "Example: createActiveState({ phase: 'Ignition', substate: { step: 'interviewing', interviewPhase: 'Discovery', questionIndex: 0 } }) creates valid ActiveState",
+        "Negative case: createBlockedState with missing reason field should be caught by TypeScript compiler (verify in test)"
+      ],
+      "startedAt": "2026-02-11T11:41:30.851092+00:00",
+      "completedAt": null,
+      "updatedAt": "2026-02-11T11:41:30.851297+00:00"
+    },
+    {
+      "id": "US-002",
+      "title": "Migrate protocol core to 3-tier types",
+      "status": "open",
+      "dependsOn": [
+        "US-001"
+      ],
+      "description": "As a developer, I want the protocol core module to use the new 3-tier type system so that the orchestrator, transitions, blocking, persistence, and checkpoint modules work with the spec-aligned state model.",
+      "acceptanceCriteria": [
+        "Replace src/protocol/types.ts content with types-v2.ts content (move, don't copy). Delete types-v2.ts after moving. Keep ProtocolPhase, PROTOCOL_PHASES, isValidPhase, getPhaseIndex exports unchanged for backward compat",
+        "Update src/protocol/index.ts to re-export new types: ProtocolState, ActiveState, BlockedState, FailedState, CompleteState, BlockReason, PhaseState, all SubState types, all factory functions, all type guards, getPhase, getStep",
+        "Update src/protocol/orchestrator.ts: line 184 Guards.isActive change state.substate.kind === 'Active' to isActiveState(state); line 291 Complete check change phase === 'Complete' to isCompleteState(state); line 311 Failed check change substate.kind === 'Failed' to isFailedState(state); line 329 Blocking check change substate.kind === 'Blocking' to isBlockedState(state) and extract query from state.query; lines 356/391 create states using new factories; line 463 use new factories; lines 629-661 getProtocolStatus refactored to handle new state shape using getPhase(state)",
+        "Update src/protocol/blocking.ts: enterBlocking (lines 255-320) creates BlockedState instead of BlockingSubstate using createBlockedState with appropriate BlockReason; resolveBlocking (lines 348-459) handles BlockedState->ActiveState transition restoring phase and substate; handleTimeout (lines 531-682) checks isBlockedState",
+        "Update src/protocol/cli.ts: line 367 change substate.kind !== 'Blocking' to !isBlockedState(state); line 376 use createActiveState with appropriate phase substate; lines 399-400 extract phase via getPhase()",
+        "Update src/protocol/transitions.ts: transition function (lines 369-466) creates ActiveState with PhaseState containing default substate for target phase; keep shedContext as stub (implemented in US-006); update canTransition and isTerminalState to use new type guards",
+        "Update src/protocol/checkpoint.ts: validation (lines 322-375) checks new state shape, validates state.kind, validates nested phase and substate structure",
+        "Update src/protocol/persistence.ts: bump PERSISTED_STATE_VERSION to '2.0.0'; update PersistedStateData to include 3-tier structure; rewrite serializeSubstate to handle new types; rewrite deserializeSubstate to reconstruct 3-tier state; update ProtocolStateSnapshot.state type to new ProtocolState",
+        "Update src/protocol/phase-execution.ts: update any state access in executeMassDefectPhase to use getPhase() and new type guards",
+        "All modified protocol source files compile individually with tsc --noEmit",
+        "Example: orchestrator.ts getProtocolStatus returns { phase: getPhase(state), kind: state.kind, ... } instead of { phase: state.phase, substate: state.substate.kind }",
+        "Negative case: Attempting to access state.substate directly on new ProtocolState should be a compile error (it's now state.phase.substate for Active states only)"
+      ]
+    },
+    {
+      "id": "US-003",
+      "title": "Update protocol tests for 3-tier types",
+      "status": "open",
+      "dependsOn": [
+        "US-002"
+      ],
+      "description": "As a developer, I want all protocol test files updated to work with the new 3-tier type system so that the protocol module's test suite passes completely.",
+      "acceptanceCriteria": [
+        "Update src/protocol/types.test.ts: merge content from types-v2.test.ts, remove tests for old types (ActiveSubstate, BlockingSubstate, FailedSubstate, ProtocolSubstate), add tests for new types (ActiveState, BlockedState, FailedState, CompleteState, PhaseState, all SubState types)",
+        "Delete src/protocol/types-v2.test.ts (content merged into types.test.ts)",
+        "Update src/protocol/orchestrator.test.ts: all test state creation uses new factories (createActiveState, createBlockedState, etc.), all assertions check new state shape (state.kind, getPhase(state)), update TickContext mocks",
+        "Update src/protocol/blocking.test.ts: test enterBlocking creates BlockedState with BlockReason, test resolveBlocking transitions from BlockedState to ActiveState, test timeout handling on BlockedState",
+        "Update src/protocol/blocking-constraints.test.ts: update all state assertions for new shape",
+        "Update src/protocol/transitions.test.ts: test transitions create ActiveState with correct PhaseState and default substate, test artifact requirements still work, test shedContext still called",
+        "Update src/protocol/checkpoint.test.ts: update validation tests for new state shape, test that invalid state.kind values are rejected",
+        "Update src/protocol/persistence.test.ts: update serialization tests for v2.0.0 format, test roundtrip for each state variant (Active for each phase, Blocked with each reason, Failed, Complete)",
+        "Update src/protocol/cli.test.ts: update state checks for new type guards",
+        "All protocol tests pass: npm run test -- src/protocol",
+        "Example: blocking.test.ts creates BlockedState via createBlockedState({ reason: 'user_requested', phase: 'Injection', query: 'Approve decision?' })",
+        "Negative case: test that deserializing a v1 format state with {phase, substate: {kind: 'Active'}} fails gracefully with a clear error message"
+      ]
+    },
+    {
+      "id": "US-004",
+      "title": "Migrate CLI module to 3-tier types",
+      "status": "open",
+      "dependsOn": [
+        "US-003"
+      ],
+      "description": "As a developer, I want all CLI module files updated to use the new 3-tier type system so that the CLI correctly displays phase substates, BlockReason labels, and step-level progress.",
+      "acceptanceCriteria": [
+        "Update src/cli/commands/status.ts: replace ProtocolSubstate/BlockingSubstate imports with new types, change isActiveSubstate(substate) to isActiveState(state), change isBlockingSubstate(substate) to isBlockedState(state), change isFailedSubstate(substate) to isFailedState(state), display phase substep name (state.phase.substate.step when active), display BlockReason label when blocked (e.g., 'Blocked: Circuit Breaker'), keep PROTOCOL_PHASES usage unchanged",
+        "Update src/cli/commands/resume.ts: change state.substate access to use new type guards, change substate.kind === 'Blocking' to isBlockedState(state), extract query from state.query instead of substate.query, update LiveDisplay phase/substate updates",
+        "Update src/cli/components/Spinner.ts: change ProtocolSubstate import to ProtocolState, change isActiveSubstate import to isActiveState, update formatSubstate to show step name from phase substate (e.g., 'Ignition: Interviewing'), change blocking/failed checks to use new type guards",
+        "Update src/cli/components/LiveDisplay.ts: change ProtocolSubstate import to ProtocolState, change isActiveSubstate import to isActiveState, update formatSubstate to show step from phase substate, update blocking display to show BlockReason",
+        "Update src/cli/state.ts: update CliStateSnapshot to use new ProtocolState type, update initial state creation",
+        "Update src/cli/operations.ts: update any state type references",
+        "Update src/cli/telemetry.ts: update any state type references for phase tracking",
+        "Update src/cli/commands/status-display.test.ts: update test state creation to use new factories, verify new display format shows substep names",
+        "Update tests/integration/cli.test.ts: update integration test state assertions",
+        "Example: Spinner shows 'Lattice: Generating Structure' instead of 'Lattice: Active'",
+        "Negative case: When state is Complete, Spinner shows 'Complete' without trying to access phase.substate (Complete has no PhaseState)"
+      ]
+    },
+    {
+      "id": "US-005",
+      "title": "Migrate notifications and remaining files",
+      "status": "open",
+      "dependsOn": [
+        "US-004"
+      ],
+      "description": "As a developer, I want all remaining files migrated to the new 3-tier type system so that the entire codebase compiles and all quality gates pass.",
+      "acceptanceCriteria": [
+        "Update src/notifications/service.ts: update ProtocolState import, change state access to use new type guards and getPhase(), update webhook payload construction to include BlockReason when blocked and step name when active",
+        "Update src/notifications/types.ts: update ProtocolState and ProtocolPhase imports, update WebhookPayload.protocol_state type, update PhaseChangeData type",
+        "Update src/notifications/reminder.ts: update any BlockingRecord or ProtocolPhase usage if needed",
+        "Update src/composition-audit/phase-regression.ts: update any ProtocolState usage",
+        "Update src/notifications/service.test.ts: update test state creation to use new factories",
+        "Update src/notifications/integration.test.ts: update integration test assertions",
+        "Update src/composition-audit/phase-regression.test.ts: update if needed",
+        "All quality gates pass: npm run test && npm run lint && npm run typecheck && npm run build",
+        "Zero remaining references to old types: ActiveSubstate, BlockingSubstate, FailedSubstate, ProtocolSubstate (search entire codebase)",
+        "Example: notification webhook payload includes { state_kind: 'Blocked', block_reason: 'circuit_breaker', phase: 'Injection' }",
+        "Negative case: Searching codebase for 'ProtocolSubstate' returns zero results (type fully removed)"
+      ]
+    },
+    {
+      "id": "US-006",
+      "title": "Implement context shedding",
+      "status": "open",
+      "dependsOn": [
+        "US-005"
+      ],
+      "description": "As a developer, I want shedContext() to actually archive conversation artifacts at phase boundaries so that context isolation is enforced per the specification.",
+      "acceptanceCriteria": [
+        "Replace the stub shedContext function in src/protocol/transitions.ts (current lines 274-286 that just return true) with a real async implementation",
+        "Change function signature to: async shedContext(fromPhase: ProtocolPhase, toPhase: ProtocolPhase, projectRoot: string): Promise<boolean>",
+        "Implementation step 1: Create archive directory at <projectRoot>/.criticality/archives/<fromPhase>-to-<toPhase>-<ISO-timestamp>/",
+        "Implementation step 2: Archive any conversation artifacts from the completed phase by copying relevant files from the phase's working directory to the archive directory. Use safeWriteFile from src/utils/safe-fs.ts for atomic writes",
+        "Implementation step 3: Log a context_shed telemetry event using Logger from src/utils/logger.ts with fields: fromPhase, toPhase, archivePath, timestamp",
+        "Implementation step 4: Return true on success, false on archive failure (non-fatal \u2014 log warning but don't block transition)",
+        "Update the transition() function (line 460) to await shedContext and pass projectRoot. Transition function signature must also become async and accept projectRoot parameter",
+        "Update all callers of transition() to await the result and pass projectRoot",
+        "Add tests: verify archive directory is created, verify telemetry event is logged, verify transition still succeeds if archiving fails (graceful degradation), verify function returns true on success",
+        "Example: transitioning from Ignition to Lattice creates .criticality/archives/Ignition-to-Lattice-2026-02-11T12:00:00Z/ and logs context_shed event",
+        "Negative case: If archive directory creation fails (e.g., permissions), shedContext returns false but transition() still succeeds with a warning log"
+      ]
+    },
+    {
+      "id": "US-007",
+      "title": "Create executeLatticePhase handler",
+      "status": "open",
+      "dependsOn": [
+        "US-005"
+      ],
+      "description": "As a developer, I want an executeLatticePhase function that orchestrates the 7-step Lattice process using existing modules so that the Lattice phase can be executed through the orchestrator.",
+      "acceptanceCriteria": [
+        "Add executeLatticePhase function to src/protocol/phase-execution.ts following the executeMassDefectPhase pattern (lines 54-247)",
+        "Function signature: async executeLatticePhase(context: TickContext, latticeContext: LatticePhaseContext): Promise<ActionResult> where LatticePhaseContext = { config: Config, projectRoot: string, router: ModelRouter }",
+        "Step 1: Read and parse spec.toml from projectRoot using existing spec parser",
+        "Step 2: Call generateModuleStructure(specContent, options, projectRoot) from src/lattice/module-generator.ts",
+        "Step 3: Call generateTypeDefinitions(spec, options) from src/lattice/type-generator.ts",
+        "Step 4: Call generateFunctionSignatures(spec, options) from src/lattice/function-generator.ts",
+        "Step 5: Call generateWitnessIntegration(spec, options) from src/lattice/witness-generator.ts",
+        "Step 6: Call attachContracts(spec, options) from src/lattice/contract-attacher.ts",
+        "Step 7: Call new CompilationVerifier({ projectPath, modelRouter: router }).verify() from src/lattice/compilation-verifier.ts",
+        "On compilation failure: attempt repair via ModelRouter (prompt with error messages), then re-verify. If repair fails, return { success: false, error: 'Compilation failed after repair', recoverable: true }",
+        "On success: call context.operations.archivePhaseArtifacts('Lattice'), return { success: true, artifacts: ['latticeCode', 'witnesses', 'contracts'] }",
+        "Log each step via Logger: lattice_started, lattice_step (with step name), lattice_repair_attempt, lattice_completed or lattice_failed",
+        "Handle errors with try/catch: return { success: false, error: message, recoverable: true } for expected failures, recoverable: false for unexpected",
+        "Add tests: mock lattice modules, verify 7-step orchestration order, verify error handling returns correct ActionResult, verify artifacts archived on success",
+        "Example: successful run logs lattice_started, 6x lattice_step, lattice_completed and returns { success: true, artifacts: ['latticeCode', 'witnesses', 'contracts'] }",
+        "Negative case: if generateModuleStructure throws, function returns { success: false, error: 'Module generation failed: <message>', recoverable: true }"
+      ]
+    },
+    {
+      "id": "US-008",
+      "title": "Add conditional approval ledger integration",
+      "status": "open",
+      "dependsOn": [
+        "US-005"
+      ],
+      "description": "As a developer, I want the interview engine to record provisional ledger entries when a user approves with conditions so that conditional decisions are tracked in the decision ledger.",
+      "acceptanceCriteria": [
+        "Update src/interview/engine.ts processApprovalResponse method (lines 1086-1133) to write ledger entries when decision is 'ApproveWithConditions'",
+        "Add a ledger parameter to InterviewEngine constructor or processApprovalResponse, or load DECISIONS.toml from the project root. Use fromData() from src/ledger/ledger.ts to instantiate the Ledger",
+        "When ApproveWithConditions: for each condition string in response.conditions, call ledger.append() with: category 'phase_structure', source 'human_resolution', confidence 'provisional', phase 'ignition', constraint set to the condition text, rationale 'Conditional approval from user during Ignition interview'",
+        "After appending all conditions, serialize the ledger back to DECISIONS.toml using ledger.toData() and write atomically (temp file + rename pattern or safeWriteFile)",
+        "Preserve ALL existing approval logic unchanged \u2014 the ledger writes are purely additive, happening before the existing phase-revisit logic",
+        "Handle ledger append errors gracefully: log warning but don't fail the approval flow (ledger write is best-effort during interview)",
+        "Add tests: verify ledger entries created with correct fields for each condition, verify ledger file written, verify existing approval flow unchanged, verify error handling doesn't break approval",
+        "Example: User approves with conditions ['Must support pagination', 'Rate limiting required'] \u2192 two ledger entries created with category 'phase_structure', confidence 'provisional', constraints matching the condition text",
+        "Negative case: If conditions array is empty (ApproveWithConditions with no conditions), no ledger entries are created and the flow proceeds normally"
+      ]
+    },
+    {
+      "id": "US-009",
+      "title": "Final integration verification",
+      "status": "open",
+      "dependsOn": [
+        "US-006",
+        "US-007",
+        "US-008"
+      ],
+      "description": "As a developer, I want a final verification pass ensuring all components work together so that the codebase is stable and all quality gates pass.",
+      "acceptanceCriteria": [
+        "Run full quality gate suite: npm run test && npm run lint && npm run typecheck && npm run build \u2014 all must pass",
+        "Verify state serialization roundtrips: create a ProtocolState for each Tier 1 variant (Active with each of 6 phases and their substates, Blocked with each of 5 BlockReasons, Failed, Complete), serialize each via persistence.ts, deserialize each, assert deep equality",
+        "Verify zero references to old types remain: search entire src/ for ActiveSubstate, BlockingSubstate, FailedSubstate, ProtocolSubstate \u2014 expect zero results (excluding comments mentioning migration)",
+        "Verify getPhase() returns correct phase for all state variants",
+        "Verify getStep() returns correct step for all active states and undefined for non-active states",
+        "Fix any remaining type errors, test failures, or lint issues discovered during verification",
+        "Example: Roundtrip test creates ActiveState with { phase: 'Injection', substate: { step: 'implementing', functionId: 'auth_login', attempt: 3 } }, serializes to JSON, deserializes, verifies all fields match",
+        "Negative case: Verify that importing old type names (ActiveSubstate, etc.) from src/protocol/types.ts produces a compile error"
+      ]
+    }
+  ]
+}
