@@ -50,8 +50,8 @@ src/**/*.js.map
 # Logs
 *.log
 logs/
+
 # Local agent and AI tool metadata
-.agents/
 .ralph/
 .serena/
 .claude/
@@ -65,7 +65,6 @@ archive/
 tmp/
 temp/
 *.tmp
-*.temp
 .cache/
 .pytest_cache/
 .mypy_cache/

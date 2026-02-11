@@ -1,0 +1,361 @@
+{
+  "version": 1,
+  "project": "Phase 2 Compliance Check and Tech Debt Reduction",
+  "overview": "Comprehensive verification of Phase 2 (TypeScript Adapter) completion against PRD stories, SPECIFICATION.md principles, and DECISIONS.toml constraints. Identify and fix non-compliance issues, reduce code complexity, eliminate dead code, improve type safety, and fill test coverage gaps. All fixes committed incrementally using conventional commit format.",
+  "goals": [
+    "Verify all prd-typescript-adapter.json user stories are fully implemented per acceptance criteria",
+    "Validate implementation complies with SPECIFICATION.md principles (context shedding, compiler as oracle, irreversible phases)",
+    "Ensure code respects all relevant DECISIONS.toml entries (arch_*, orch_*, inject_*, test_*)",
+    "Remove dead code (unused imports, functions, variables, unreachable code)",
+    "Refactor overly complex functions using reasonable judgment",
+    "Strengthen type safety by replacing 'any' types and adding missing type annotations",
+    "Fill test coverage gaps for untested code paths",
+    "Ensure JSDoc coverage on exported functions and sync documentation with implementation"
+  ],
+  "nonGoals": [
+    "Implementing Phase 3 features (Ignition, Lattice full implementation, Injection, Mesoscopic)",
+    "Adding new functionality beyond what Phase 2 PRD specified",
+    "Changing the overall architecture or decision ledger entries",
+    "Performance optimization beyond what is needed for compliance",
+    "Adding support for additional languages (Rust, Python, Go)"
+  ],
+  "successMetrics": [
+    "All prd-typescript-adapter.json stories marked complete with verifiable evidence",
+    "No SPECIFICATION.md principle violations identified in code review",
+    "All relevant DECISIONS.toml constraints honored in implementation",
+    "Zero 'any' types in adapter code (excluding necessary external type boundaries)",
+    "All exported functions have JSDoc with @param and @returns",
+    "documentation/adapters/typescript.md accurately reflects current implementation",
+    "All quality gates pass: typecheck, lint, test, format:check"
+  ],
+  "openQuestions": [],
+  "stack": {
+    "framework": "TypeScript/Node.js 20+ (ESM)",
+    "hosting": "N/A (library)",
+    "database": "N/A",
+    "auth": "N/A"
+  },
+  "routes": [],
+  "uiNotes": [],
+  "dataModel": [],
+  "importFormat": {
+    "description": "N/A",
+    "example": {}
+  },
+  "rules": [
+    "All fixes must use conventional commit format (fix:, refactor:, test:, docs:, chore:)",
+    "Each commit should address a single logical change",
+    "Quality gates (typecheck, lint, test, format:check) must pass after each commit",
+    "Dead code should be removed completely, not commented out",
+    "Type improvements should not change runtime behavior",
+    "Test additions should follow existing test patterns (Vitest + fast-check)"
+  ],
+  "qualityGates": [
+    "npm run typecheck",
+    "npm run lint",
+    "npm run test",
+    "npm run format:check"
+  ],
+  "stories": [
+    {
+      "id": "US-001",
+      "title": "Verify PRD story completion status",
+      "status": "done",
+      "dependsOn": [],
+      "description": "As a developer, I want to audit each user story in prd-typescript-adapter.json against the actual implementation to confirm all acceptance criteria are met.",
+      "acceptanceCriteria": [
+        "Read prd-typescript-adapter.json and list all user stories with their acceptance criteria",
+        "For each story, trace implementation to source files and verify each criterion",
+        "Create a compliance matrix documenting: story ID, criterion, status (pass/fail), evidence (file:line)",
+        "Example: US-001 'TODO detection' -> ast.ts:findTodoFunctions() exists and works",
+        "Negative case: If a criterion is not met, document specific gap with reproduction steps",
+        "Output a summary of pass/fail counts and list of gaps requiring fixes"
+      ],
+      "startedAt": "2026-01-26T16:54:43.319042+00:00",
+      "completedAt": "2026-01-26T16:59:36.316930+00:00",
+      "updatedAt": "2026-01-26T16:59:36.316735+00:00"
+    },
+    {
+      "id": "US-002",
+      "title": "Verify SPECIFICATION.md compliance",
+      "status": "done",
+      "dependsOn": [
+        "US-001"
+      ],
+      "description": "As a developer, I want to verify the TypeScript adapter implementation follows all SPECIFICATION.md principles relevant to Phase 2.",
+      "acceptanceCriteria": [
+        "Extract Phase 2 (Lattice) requirements from SPECIFICATION.md",
+        "Verify context shedding principle: no conversation history passes between adapter calls",
+        "Verify compiler-as-oracle principle: typecheck.ts uses compiler output as authoritative",
+        "Verify structured artifacts principle: adapter returns well-typed objects, not strings",
+        "Example: typecheck() returns ParsedError[] not raw stderr strings",
+        "Negative case: If adapter stores state between calls that violates context shedding, flag it",
+        "Document any specification violations with file locations and proposed fixes"
+      ],
+      "startedAt": "2026-01-26T16:59:38.425505+00:00",
+      "completedAt": "2026-01-26T17:03:38.063093+00:00",
+      "updatedAt": "2026-01-26T17:03:38.062718+00:00"
+    },
+    {
+      "id": "US-003",
+      "title": "Verify DECISIONS.toml compliance",
+      "status": "done",
+      "dependsOn": [
+        "US-001"
+      ],
+      "description": "As a developer, I want to verify the implementation honors all relevant decisions in DECISIONS.toml.",
+      "acceptanceCriteria": [
+        "Read DECISIONS.toml and identify all decisions relevant to TypeScript adapter (arch_*, inject_*, test_*)",
+        "For each decision, verify implementation complies with stated constraint",
+        "Verify arch_002: System remains compilable (typecheck passes on all generated code)",
+        "Verify inject_006: Functions injected in topological order (check ast.ts dependency ordering)",
+        "Verify test_005: Performance claims use empirical scaling tests (check benchmark-test-generator.ts)",
+        "Example: orch_002 mandates AST operations over string manipulation -> verify ts-morph usage",
+        "Negative case: If string manipulation used where AST should be, document violation",
+        "Create ledger compliance report with decision ID, constraint, status, evidence"
+      ],
+      "startedAt": "2026-01-26T17:03:40.149768+00:00",
+      "completedAt": "2026-01-26T17:08:11.204962+00:00",
+      "updatedAt": "2026-01-26T17:08:11.204800+00:00"
+    },
+    {
+      "id": "US-004",
+      "title": "Remove dead code from adapter",
+      "status": "done",
+      "dependsOn": [
+        "US-001",
+        "US-002",
+        "US-003"
+      ],
+      "description": "As a developer, I want to remove all dead code from the TypeScript adapter to reduce maintenance burden and improve clarity.",
+      "acceptanceCriteria": [
+        "Run TypeScript compiler with noUnusedLocals and noUnusedParameters flags to identify unused code",
+        "Identify unused imports across all adapter files (src/adapters/typescript/**/*.ts)",
+        "Identify exported functions that are never imported elsewhere",
+        "Remove all identified dead code (do not comment out)",
+        "Example: If helper function formatError() is defined but never called, remove it",
+        "Negative case: Do not remove code that is used in tests even if not used in production",
+        "Commit changes with: git commit -m 'refactor(adapter): remove dead code from typescript adapter'",
+        "Quality gates pass after removal"
+      ],
+      "startedAt": "2026-01-26T17:13:39.870152+00:00",
+      "completedAt": "2026-01-26T17:19:21.313975+00:00",
+      "updatedAt": "2026-01-26T17:19:21.313605+00:00"
+    },
+    {
+      "id": "US-005",
+      "title": "Refactor complex functions",
+      "status": "done",
+      "dependsOn": [
+        "US-004"
+      ],
+      "description": "As a developer, I want to refactor overly complex functions into smaller, focused units to improve readability and testability.",
+      "acceptanceCriteria": [
+        "Review all functions in src/adapters/typescript/**/*.ts for complexity",
+        "Identify functions that do multiple unrelated things or have deeply nested logic",
+        "Extract helper functions with clear single responsibilities",
+        "Preserve exact behavior - no functional changes",
+        "Example: If parseContracts() handles parsing, validation, and transformation, split into parseRaw(), validate(), transform()",
+        "Negative case: Do not refactor simple functions just to meet arbitrary line counts",
+        "Add/update JSDoc for any new helper functions",
+        "Commit each refactor separately with: git commit -m 'refactor(adapter): extract X from Y for clarity'",
+        "Quality gates pass after each refactor"
+      ],
+      "startedAt": "2026-01-26T17:19:23.408711+00:00",
+      "completedAt": "2026-01-27T00:00:00.000000+00:00",
+      "updatedAt": "2026-01-27T00:00:00.000000+00:00",
+      "notes": "Code review completed. Functions are already well-structured with clear single responsibilities. No overly complex functions requiring refactoring were identified. The negative case applies: 'Do not refactor simple functions just to meet arbitrary line counts'. Quality gates pass."
+    },
+    {
+      "id": "US-006",
+      "title": "Improve type safety",
+      "status": "done",
+      "dependsOn": [
+        "US-004"
+      ],
+      "description": "As a developer, I want to strengthen type safety by eliminating 'any' types and adding missing type annotations.",
+      "acceptanceCriteria": [
+        "Search for 'any' type usage across src/adapters/typescript/**/*.ts",
+        "Replace 'any' with proper types where the type is knowable",
+        "Add explicit return types to functions missing them",
+        "Add type guards where runtime type checking is needed",
+        "Example: Replace 'any' from JSON.parse with proper zod validation or type assertion with guard",
+        "Negative case: 'any' is acceptable at external boundaries where type is truly unknown (e.g., LLM response parsing before validation)",
+        "Document any remaining 'any' types with comments explaining why they're necessary",
+        "Commit with: git commit -m 'fix(adapter): strengthen type safety in X module'",
+        "Quality gates pass, especially typecheck"
+      ],
+      "startedAt": "2026-01-26T23:28:32.947626+00:00",
+      "completedAt": "2026-01-26T23:31:37.381802+00:00",
+      "updatedAt": "2026-01-26T23:31:37.381684+00:00"
+    },
+    {
+      "id": "US-007",
+      "title": "Fill test coverage gaps",
+      "status": "done",
+      "dependsOn": [
+        "US-005",
+        "US-006"
+      ],
+      "description": "As a developer, I want to add tests for untested code paths to ensure reliability and prevent regressions.",
+      "acceptanceCriteria": [
+        "Run test coverage analysis to identify untested functions and branches",
+        "Prioritize tests for: public API functions, error handling paths, edge cases",
+        "Write tests following existing patterns (Vitest + fast-check for property tests)",
+        "Each new test file should be co-located with source (*.test.ts)",
+        "Example: If typecheck.ts error parsing has uncovered branches, add tests for each error type",
+        "Negative case: Do not add tests for trivial getters or internal implementation details that change frequently",
+        "Each test should have descriptive name explaining what it verifies",
+        "Commit with: git commit -m 'test(adapter): add coverage for X edge cases'",
+        "Quality gates pass, test count increases"
+      ],
+      "startedAt": "2026-01-27T09:25:33.868467+00:00",
+      "completedAt": "2026-01-27T09:33:42.384369+00:00",
+      "updatedAt": "2026-01-27T09:33:42.384246+00:00"
+    },
+    {
+      "id": "US-008",
+      "title": "Verify and update JSDoc coverage",
+      "status": "done",
+      "dependsOn": [
+        "US-005"
+      ],
+      "description": "As a developer, I want all exported functions to have complete JSDoc documentation with @param and @returns tags.",
+      "acceptanceCriteria": [
+        "Identify all exported functions in src/adapters/typescript/**/*.ts",
+        "Verify each has JSDoc with: description, @param for each parameter, @returns, @throws if applicable",
+        "Add missing JSDoc or fix incomplete documentation",
+        "Ensure @param types match actual TypeScript types",
+        "Example: export function parseContracts(source: string): Contract[] needs JSDoc with @param source description and @returns description",
+        "Negative case: Internal helper functions don't require JSDoc unless logic is non-obvious",
+        "Commit with: git commit -m 'docs(adapter): add JSDoc to exported functions in X'",
+        "Quality gates pass"
+      ],
+      "startedAt": "2026-01-27T09:37:46.416122+00:00",
+      "completedAt": "2026-01-27T09:40:23.919698+00:00",
+      "updatedAt": "2026-01-27T09:40:23.919580+00:00"
+    },
+    {
+      "id": "US-009",
+      "title": "Sync documentation with implementation",
+      "status": "done",
+      "dependsOn": [
+        "US-008"
+      ],
+      "description": "As a developer, I want documentation/adapters/typescript.md to accurately reflect the current implementation.",
+      "acceptanceCriteria": [
+        "Read documentation/adapters/typescript.md and compare against actual implementation",
+        "Verify all documented modules exist and have described functionality",
+        "Verify all documented interfaces match actual TypeScript interfaces",
+        "Update any outdated examples to use current API",
+        "Add documentation for any undocumented public APIs",
+        "Example: If docs say parseContracts returns ContractInfo but code returns Contract[], fix docs",
+        "Negative case: Do not document internal implementation details that may change",
+        "Verify code examples in docs actually compile and work",
+        "Commit with: git commit -m 'docs(adapter): sync typescript.md with implementation'",
+        "Quality gates pass"
+      ],
+      "startedAt": "2026-01-27T09:40:25.994137+00:00",
+      "completedAt": "2026-01-27T09:44:44.418395+00:00",
+      "updatedAt": "2026-01-27T09:44:44.418240+00:00"
+    },
+    {
+      "id": "US-010",
+      "title": "Fix identified PRD story gaps",
+      "status": "done",
+      "dependsOn": [
+        "US-001"
+      ],
+      "description": "As a developer, I want to fix any gaps identified in US-001 where PRD acceptance criteria were not fully met.",
+      "acceptanceCriteria": [
+        "Review compliance matrix from US-001 for any failed criteria",
+        "For each failed criterion, implement the missing functionality",
+        "Follow existing code patterns and style",
+        "Add tests for any new functionality",
+        "Example: If criterion 'TODO detection handles async functions' failed, add async function handling to ast.ts",
+        "Negative case: If criterion is ambiguous or impossible, document and propose PRD amendment",
+        "Commit each fix separately with: git commit -m 'fix(adapter): implement missing X per PRD criterion Y'",
+        "Quality gates pass after each fix",
+        "Update compliance matrix to show criterion now passes"
+      ],
+      "startedAt": "2026-01-26T23:31:39.449325+00:00",
+      "completedAt": "2026-01-26T23:34:31.001311+00:00",
+      "updatedAt": "2026-01-26T23:34:31.000961+00:00"
+    },
+    {
+      "id": "US-011",
+      "title": "Fix identified SPECIFICATION violations",
+      "status": "done",
+      "dependsOn": [
+        "US-002"
+      ],
+      "description": "As a developer, I want to fix any SPECIFICATION.md principle violations identified in US-002.",
+      "acceptanceCriteria": [
+        "Review violations documented in US-002",
+        "For each violation, refactor code to comply with specification",
+        "Preserve functionality while fixing structural issues",
+        "Example: If adapter stores conversation state, refactor to pass state explicitly as parameters",
+        "Negative case: If fixing a violation would break functionality, document tradeoff and seek guidance",
+        "Commit each fix with: git commit -m 'fix(adapter): align X with SPECIFICATION principle Y'",
+        "Quality gates pass after each fix",
+        "Update compliance report to show violation resolved"
+      ],
+      "startedAt": "2026-01-26T23:34:33.072525+00:00",
+      "completedAt": "2026-01-26T23:37:36.742915+00:00",
+      "updatedAt": "2026-01-26T23:37:36.742767+00:00"
+    },
+    {
+      "id": "US-012",
+      "title": "Fix identified DECISIONS violations",
+      "status": "done",
+      "dependsOn": [
+        "US-003"
+      ],
+      "description": "As a developer, I want to fix any DECISIONS.toml constraint violations identified in US-003.",
+      "acceptanceCriteria": [
+        "Review violations documented in US-003",
+        "For each violation, refactor code to honor the decision",
+        "Verify fix doesn't violate other decisions (check decision dependencies)",
+        "Example: If string manipulation used where orch_002 mandates AST, refactor to use ts-morph",
+        "Negative case: If a decision seems outdated or conflicts with another, document and propose ledger amendment",
+        "Commit each fix with: git commit -m 'fix(adapter): comply with decision X constraint'",
+        "Quality gates pass after each fix",
+        "Update ledger compliance report to show constraint now honored"
+      ],
+      "startedAt": "2026-01-26T23:37:38.821669+00:00",
+      "completedAt": "2026-01-26T23:43:05.691545+00:00",
+      "updatedAt": "2026-01-26T23:43:05.691427+00:00"
+    },
+    {
+      "id": "US-013",
+      "title": "Final verification and summary",
+      "status": "done",
+      "dependsOn": [
+        "US-004",
+        "US-005",
+        "US-006",
+        "US-007",
+        "US-008",
+        "US-009",
+        "US-010",
+        "US-011",
+        "US-012"
+      ],
+      "description": "As a developer, I want a final verification that all compliance checks pass and a summary of changes made.",
+      "acceptanceCriteria": [
+        "Run all quality gates: npm run typecheck && npm run lint && npm run test && npm run format:check",
+        "Re-run PRD story compliance check to verify all criteria now pass",
+        "Re-run SPECIFICATION compliance check to verify no violations",
+        "Re-run DECISIONS compliance check to verify all constraints honored",
+        "Generate summary report: total commits, categories of changes, files modified",
+        "Example summary: '15 commits: 3 fix, 5 refactor, 4 test, 3 docs; 22 files modified'",
+        "Negative case: If any check still fails, create follow-up story or escalate",
+        "Commit summary with: git commit -m 'chore(adapter): phase 2 compliance verification complete'",
+        "All quality gates pass in final state"
+      ],
+      "startedAt": "2026-01-27T09:44:46.498307+00:00",
+      "completedAt": "2026-01-27T09:48:02.290229+00:00",
+      "updatedAt": "2026-01-27T09:48:02.290023+00:00"
+    }
+  ]
+}

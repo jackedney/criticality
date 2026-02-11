@@ -1,0 +1,315 @@
+{
+  "version": 1,
+  "project": "Codebase Cleanup & Spec Alignment",
+  "overview": "Clean the codebase by removing legacy code, ensuring zero divergence from SPECIFICATION.md and DECISIONS.toml, completing Phase 1 milestones, and making small improvements to code quality.",
+  "goals": [
+    "Achieve 100% alignment with SPECIFICATION.md and DECISIONS.toml",
+    "Remove legacy code, dead code paths, and redundant implementations",
+    "Verify and complete all Phase 1 milestones from ROADMAP.md",
+    "Replace phase numbers with semantic names in user-facing outputs",
+    "Ensure all model references use role-based aliases per model_005/model_006",
+    "Replace console.log with structured logging per telemetry_001"
+  ],
+  "nonGoals": [
+    "Implementing Phase 2+ features",
+    "Adding new functionality beyond Phase 1 scope",
+    "Rewriting working code that already conforms to spec",
+    "Updating TSDoc comments that are already correct"
+  ],
+  "successMetrics": [
+    "All quality gates pass: npm run build && npm run typecheck && npm run lint && npm run test",
+    "Zero divergence between code and DECISIONS.toml constraints",
+    "All Phase 1 ROADMAP milestones verified complete or implemented",
+    "No hardcoded model names outside configuration defaults",
+    "No phase numbers in user-facing output strings"
+  ],
+  "openQuestions": [],
+  "stack": {
+    "framework": "Node.js with TypeScript",
+    "hosting": "N/A (library/CLI)",
+    "database": "N/A",
+    "auth": "N/A"
+  },
+  "routes": [],
+  "uiNotes": [],
+  "dataModel": [],
+  "importFormat": {
+    "description": "Not applicable",
+    "example": {}
+  },
+  "rules": [
+    "Per arch_001: Protocol uses irreversible phase transitions with context destruction at boundaries",
+    "Per phase_005: Phases referenced by semantic name only (Ignition, Lattice, Composition Audit, Injection, Mesoscopic, Mass Defect); phase numbers deprecated",
+    "Per model_005/model_006: Use role-based aliases (architect_model, auditor_model, worker_model, fallback_model); specific model names only in configuration",
+    "Per telemetry_001: Telemetry emitted as JSON summary and append-only JSONL event log",
+    "Per lang_005: TypeScript requires strict: true in tsconfig.json"
+  ],
+  "qualityGates": [
+    "npm run build && npm run typecheck && npm run lint && npm run test"
+  ],
+  "stories": [
+    {
+      "id": "US-001",
+      "title": "Audit Phase 1 milestone completion status",
+      "status": "done",
+      "dependsOn": [],
+      "description": "As a developer, I want to verify which Phase 1 milestones from ROADMAP.md are complete vs incomplete, so we have a clear gap analysis.",
+      "acceptanceCriteria": [
+        "Create checklist mapping each 1.1-1.6 milestone to existing code",
+        "Document which milestones are complete with file references",
+        "Document which milestones are incomplete or partially complete",
+        "Example: milestone '1.3 Decision Ledger - Implement append operations' maps to src/ledger/ledger.ts:append()",
+        "Negative case: milestone not found in code is marked as 'missing' with required implementation notes",
+        "Output: summary report in .agents/tasks/ directory"
+      ],
+      "startedAt": "2026-01-25T10:40:56.179930+00:00",
+      "completedAt": "2026-01-25T10:46:09.429730+00:00",
+      "updatedAt": "2026-01-25T10:46:09.429579+00:00"
+    },
+    {
+      "id": "US-002",
+      "title": "Replace phase numbers with semantic names in user-facing outputs",
+      "status": "done",
+      "dependsOn": [],
+      "description": "As a user, I want to see semantic phase names (Ignition, Lattice, etc.) instead of phase numbers in all output, per decision phase_005.",
+      "acceptanceCriteria": [
+        "Search codebase for patterns like 'Phase I', 'Phase II', 'Phase III', 'Phase IV', 'Phase III.5'",
+        "Replace with semantic names: Ignition, Lattice, Composition Audit, Injection, Mesoscopic, Mass Defect",
+        "Only change user-facing strings (error messages, logs, CLI output)",
+        "Preserve internal code comments that reference phases for developer context",
+        "Example: 'Phase I: IGNITION' becomes 'Ignition'",
+        "Negative case: internal technical comments like '// Phase I logic' can remain",
+        "Quality gates pass after changes"
+      ],
+      "startedAt": "2026-01-25T10:46:11.521447+00:00",
+      "completedAt": "2026-01-25T10:50:01.877863+00:00",
+      "updatedAt": "2026-01-25T10:50:01.877715+00:00"
+    },
+    {
+      "id": "US-003",
+      "title": "Audit and fix model alias usage",
+      "status": "done",
+      "dependsOn": [],
+      "description": "As a developer, I want all model references to use role-based aliases per decisions model_005 and model_006, ensuring configuration is the only place with concrete model names.",
+      "acceptanceCriteria": [
+        "Search for hardcoded model names: 'claude-opus', 'claude-sonnet', 'gpt-', 'minimax', 'kimi'",
+        "Verify hardcoded names only appear in config/defaults.ts for default values",
+        "All other code references use aliases: architect_model, auditor_model, structurer_model, worker_model, fallback_model",
+        "Example: config/defaults.ts may have 'claude-opus-4.5' as default value - this is correct",
+        "Negative case: if router/routing.ts contains 'claude-opus-4.5' directly, replace with alias lookup",
+        "Quality gates pass after changes"
+      ],
+      "startedAt": "2026-01-25T10:50:03.979672+00:00",
+      "completedAt": "2026-01-25T10:53:34.232823+00:00",
+      "updatedAt": "2026-01-25T10:53:34.232656+00:00"
+    },
+    {
+      "id": "US-004",
+      "title": "Replace console.log with structured logging",
+      "status": "done",
+      "dependsOn": [],
+      "description": "As a developer, I want console.log statements replaced with structured logging per decision telemetry_001, ensuring proper observability.",
+      "acceptanceCriteria": [
+        "Identify all console.log/console.warn/console.error statements in src/",
+        "Currently 5 warnings in: servers/artifact/cli.ts, servers/artifact/server.ts, servers/toolchain/server.ts",
+        "Create or use existing logging utility that outputs structured JSON",
+        "Replace console statements with structured logger calls",
+        "Logger should respect debug flag from server config",
+        "Example: console.log('Starting server') becomes logger.info({ event: 'server_start' })",
+        "Negative case: test files may use console for debugging - these are acceptable",
+        "Lint warnings for no-console reduced to 0",
+        "Quality gates pass after changes"
+      ],
+      "startedAt": "2026-01-25T10:53:36.339563+00:00",
+      "completedAt": "2026-01-25T10:59:16.609867+00:00",
+      "updatedAt": "2026-01-25T10:59:16.609692+00:00"
+    },
+    {
+      "id": "US-005",
+      "title": "Remove unused exports and dead code",
+      "status": "done",
+      "dependsOn": [],
+      "description": "As a developer, I want unused exports and dead code removed to keep the codebase clean and maintainable.",
+      "acceptanceCriteria": [
+        "Run TypeScript compiler with noUnusedLocals and noUnusedParameters (already enabled)",
+        "Identify exports that are not imported anywhere",
+        "Remove truly dead code paths that cannot be reached",
+        "Preserve public API exports even if not currently used internally",
+        "Example: internal helper function not called anywhere should be removed",
+        "Negative case: exported type used only in tests should be kept",
+        "Quality gates pass after changes"
+      ],
+      "startedAt": "2026-01-25T10:59:18.713846+00:00",
+      "completedAt": "2026-01-25T11:04:30.110748+00:00",
+      "updatedAt": "2026-01-25T11:04:30.110591+00:00"
+    },
+    {
+      "id": "US-006",
+      "title": "Verify Decision Ledger implementation matches DECISIONS.toml constraints",
+      "status": "done",
+      "dependsOn": [
+        "US-001"
+      ],
+      "description": "As a developer, I want the Decision Ledger implementation to match all constraints in DECISIONS.toml related to ledger behavior.",
+      "acceptanceCriteria": [
+        "Verify ledger_001: append-only with explicit override operations - check Ledger class",
+        "Verify ledger_002: records WHAT not HOW - ensure rationale is not used in prompts",
+        "Verify ledger_004: hybrid append-only model with status field (active/superseded/invalidated)",
+        "Verify ledger_005: rationale field is for human audit only, never in LLM prompts",
+        "Verify ledger_006: 'delegated' confidence level exists",
+        "Verify ledger_007: delegated decisions downgrade to 'inferred' on contradiction",
+        "Example: Ledger.append() should set status to 'active' by default",
+        "Negative case: if rationale is included in any prompt generation, this must be fixed",
+        "Document any gaps found and fix them"
+      ],
+      "startedAt": "2026-01-25T11:04:32.198533+00:00",
+      "completedAt": "2026-01-25T11:09:46.408899+00:00",
+      "updatedAt": "2026-01-25T11:09:46.408739+00:00"
+    },
+    {
+      "id": "US-007",
+      "title": "Verify Protocol State Machine matches spec decisions",
+      "status": "done",
+      "dependsOn": [
+        "US-001"
+      ],
+      "description": "As a developer, I want the Protocol State Machine to match all constraints in DECISIONS.toml related to orchestrator behavior.",
+      "acceptanceCriteria": [
+        "Verify orch_001: orchestrator is deterministic and performs no reasoning",
+        "Verify orch_003: performs CLASSIFICATION not REASONING",
+        "Verify orch_004: hierarchical state machine with top-level and phase-specific sub-states",
+        "Verify orch_005: state transitions as (from, to, guard, action) tuples",
+        "Verify orch_006: tick loop execution model",
+        "Verify orch_007: atomic write pattern for state persistence",
+        "Verify orch_008: CLI provides status, resume, resolve commands",
+        "Example: ProtocolState should have phase and substate as separate concerns",
+        "Negative case: if transitions include reasoning logic, refactor to classification",
+        "Document any gaps and fix them"
+      ],
+      "startedAt": "2026-01-25T11:24:15.586875+00:00",
+      "completedAt": "2026-01-25T11:28:40.572276+00:00",
+      "updatedAt": "2026-01-25T11:28:40.572118+00:00"
+    },
+    {
+      "id": "US-008",
+      "title": "Verify Model Router matches routing decisions",
+      "status": "done",
+      "dependsOn": [
+        "US-001"
+      ],
+      "description": "As a developer, I want the Model Router to match all constraints in DECISIONS.toml related to model routing.",
+      "acceptanceCriteria": [
+        "Verify routing_001: deterministic rules based on measurable signals, no LLM reasoning",
+        "Verify routing_002: conservative pre-emption (context > 12k tokens OR complexity > 5)",
+        "Verify routing_003: Claude via Claude Code, others via OpenCode/OpenRouter",
+        "Verify routing_004: context overflow handling (truncate/upgrade/reject)",
+        "Verify routing_005: signatureComplexity formula implemented correctly",
+        "Verify inject_003: escalation chain MiniMax -> Sonnet -> Opus -> Human",
+        "Example: routing.ts should have complexity calculation matching the formula",
+        "Negative case: if routing uses LLM to decide model, this violates routing_001",
+        "Document any gaps and fix them"
+      ],
+      "startedAt": "2026-01-25T11:28:42.662884+00:00",
+      "completedAt": "2026-01-25T11:36:35.292267+00:00",
+      "updatedAt": "2026-01-25T11:36:35.292108+00:00"
+    },
+    {
+      "id": "US-009",
+      "title": "Verify blocking behavior matches spec",
+      "status": "done",
+      "dependsOn": [
+        "US-001"
+      ],
+      "description": "As a developer, I want blocking behavior to match all constraints in DECISIONS.toml related to human intervention.",
+      "acceptanceCriteria": [
+        "Verify block_001: BLOCKED state halts all phases",
+        "Verify block_002: blocked state is persistable and resumable",
+        "Verify block_003: only ledger decisions persist when resuming, not prior context",
+        "Verify block_004: CLI resume model - persist state, notify, exit process",
+        "Verify block_005: minimal notification message format",
+        "Example: BlockingSubstate should include blockedAt timestamp",
+        "Negative case: if blocked state stores conversation history, this violates block_003",
+        "Document any gaps and fix them"
+      ],
+      "startedAt": "2026-01-25T11:36:37.381942+00:00",
+      "completedAt": "2026-01-25T11:48:34.675283+00:00",
+      "updatedAt": "2026-01-25T11:48:34.675125+00:00"
+    },
+    {
+      "id": "US-010",
+      "title": "Implement missing Phase 1 milestones",
+      "status": "done",
+      "dependsOn": [
+        "US-001",
+        "US-006",
+        "US-007",
+        "US-008",
+        "US-009"
+      ],
+      "description": "As a developer, I want all Phase 1 milestones implemented so the core infrastructure is complete.",
+      "acceptanceCriteria": [
+        "Address all gaps identified in US-001 audit",
+        "Implement any missing 1.2 Configuration System features",
+        "Implement any missing 1.3 Decision Ledger features",
+        "Implement any missing 1.4 Protocol State Machine features",
+        "Implement any missing 1.5 Model Router features",
+        "Implement any missing 1.6 Tooling & Agents features",
+        "Example: if 'ledger query interface' is missing, implement it",
+        "Negative case: do not implement Phase 2+ features",
+        "All quality gates pass",
+        "Update ROADMAP.md to mark completed items with [x]"
+      ],
+      "startedAt": "2026-01-25T11:48:36.764914+00:00",
+      "completedAt": "2026-01-25T11:53:24.033235+00:00",
+      "updatedAt": "2026-01-25T11:53:24.033082+00:00"
+    },
+    {
+      "id": "US-011",
+      "title": "Fix incorrect or misleading documentation",
+      "status": "done",
+      "dependsOn": [
+        "US-002",
+        "US-003"
+      ],
+      "description": "As a developer, I want TSDoc comments that are incorrect or misleading to be fixed, ensuring documentation matches implementation.",
+      "acceptanceCriteria": [
+        "Review TSDoc in files modified by other stories",
+        "Fix any documentation that contradicts the code behavior",
+        "Fix any documentation that uses deprecated terminology (phase numbers)",
+        "Do NOT add documentation to undocumented code (out of scope)",
+        "Example: if TSDoc says 'Phase II' but code uses 'Lattice', update TSDoc",
+        "Negative case: if TSDoc is simply missing, do not add it",
+        "Quality gates pass after changes"
+      ],
+      "startedAt": "2026-01-25T11:53:26.130725+00:00",
+      "completedAt": "2026-01-25T11:57:41.319179+00:00",
+      "updatedAt": "2026-01-25T11:57:41.319024+00:00"
+    },
+    {
+      "id": "US-012",
+      "title": "Final verification and cleanup",
+      "status": "done",
+      "dependsOn": [
+        "US-002",
+        "US-003",
+        "US-004",
+        "US-005",
+        "US-010",
+        "US-011"
+      ],
+      "description": "As a developer, I want a final verification that all changes are complete and the codebase passes all quality gates.",
+      "acceptanceCriteria": [
+        "Run full quality gate suite: npm run build && npm run typecheck && npm run lint && npm run test",
+        "Verify 0 lint errors and 0 lint warnings",
+        "Verify all tests pass",
+        "Review git diff to ensure no unintended changes",
+        "Example: 'npm run lint' shows '0 problems'",
+        "Negative case: if any quality gate fails, fix before marking complete",
+        "Create summary of all changes made in .agents/tasks/cleanup-summary.md"
+      ],
+      "startedAt": "2026-01-25T11:57:43.416422+00:00",
+      "completedAt": "2026-01-25T12:00:54.387376+00:00",
+      "updatedAt": "2026-01-25T12:00:54.387210+00:00"
+    }
+  ]
+}

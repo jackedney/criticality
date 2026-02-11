@@ -1,0 +1,285 @@
+{
+  "version": 1,
+  "project": "PR #9 CodeRabbit Review Fixes",
+  "overview": "Address all 13 CodeRabbit review comments on PR #9 to get the PR approved. This includes fixing type safety issues with safeReaddir, adding property-based tests, improving code consistency, and updating error message expectations.",
+  "goals": [
+    "Fix all safeReaddir type safety issues by updating the function signature to return Promise<string[]>",
+    "Add property-based testing with fast-check for serialization round-trips",
+    "Standardize fs imports to use named imports project-wide",
+    "Complete safe-fs migration in artifact server tests",
+    "Remove redundant type casts in files touched by the PR",
+    "Update spec parser tests to expect correct error messages"
+  ],
+  "nonGoals": [
+    "Refactoring beyond what's needed to address review comments",
+    "Adding new features or functionality",
+    "Changing safe-fs implementation behavior"
+  ],
+  "successMetrics": [
+    "All 13 CodeRabbit review comments addressed",
+    "All quality gates pass (test, lint, typecheck)",
+    "PR #9 ready for approval"
+  ],
+  "openQuestions": [],
+  "stack": {
+    "framework": "TypeScript/Node.js",
+    "hosting": "N/A",
+    "database": "N/A",
+    "auth": "N/A"
+  },
+  "routes": [],
+  "uiNotes": [],
+  "dataModel": [],
+  "importFormat": {
+    "description": "Not applicable",
+    "example": {}
+  },
+  "rules": [
+    "safeReaddir should return Promise<string[]> not Promise<unknown>",
+    "All fs operations in tests should use safe-fs equivalents where available",
+    "Use named imports instead of namespace imports for fs module",
+    "Use entries() for index-based iteration instead of manual counters"
+  ],
+  "qualityGates": [
+    "npm test",
+    "npm run lint",
+    "npm run typecheck"
+  ],
+  "stories": [
+    {
+      "id": "US-001",
+      "title": "Update safeReaddir return type to Promise<string[]>",
+      "status": "done",
+      "dependsOn": [],
+      "description": "As a developer, I want safeReaddir to have a proper return type so that callers don't need type assertions.",
+      "acceptanceCriteria": [
+        "Update safeReaddir function signature in safe-fs.ts to return Promise<string[]> instead of Promise<unknown>",
+        "Ensure the implementation properly types the return value",
+        "Example: const files = await safeReaddir(dir) -> files is typed as string[] without assertion",
+        "Negative case: if safeReaddir is called with invalid path, it should still handle errors gracefully",
+        "All existing tests pass",
+        "npm run typecheck passes"
+      ],
+      "startedAt": "2026-02-02T21:54:16.391775+00:00",
+      "completedAt": "2026-02-02T22:03:21.037648+00:00",
+      "updatedAt": "2026-02-02T22:03:21.037468+00:00"
+    },
+    {
+      "id": "US-002",
+      "title": "Remove safeReaddir type assertions in persistence.test.ts",
+      "status": "done",
+      "dependsOn": [
+        "US-001"
+      ],
+      "description": "As a developer, I want to remove now-unnecessary type assertions for safeReaddir results in interview persistence tests.",
+      "acceptanceCriteria": [
+        "Remove 'as string[]' type assertion from safeReaddir call in src/interview/persistence.test.ts",
+        "Example: const files = await safeReaddir(dir) as string[] -> const files = await safeReaddir(dir)",
+        "Negative case: if there are other type assertions unrelated to safeReaddir, leave them untouched",
+        "Tests still pass after removing assertion",
+        "npm run typecheck passes"
+      ],
+      "startedAt": "2026-02-02T22:03:23.126883+00:00",
+      "completedAt": "2026-02-02T22:06:55.081751+00:00",
+      "updatedAt": "2026-02-02T22:06:55.081601+00:00"
+    },
+    {
+      "id": "US-003",
+      "title": "Remove safeReaddir type assertions in spec-generator.ts",
+      "status": "done",
+      "dependsOn": [
+        "US-001"
+      ],
+      "description": "As a developer, I want to remove now-unnecessary type assertions for safeReaddir results in spec-generator.",
+      "acceptanceCriteria": [
+        "Remove type assertion at lines 691-693 in src/interview/spec-generator.ts",
+        "Remove type assertion at lines 828-830 in src/interview/spec-generator.ts",
+        "Example: safeReaddir result should be usable directly without 'as string[]'",
+        "Negative case: ensure no other code is affected by these changes",
+        "npm run typecheck passes"
+      ],
+      "startedAt": "2026-02-02T22:06:57.158656+00:00",
+      "completedAt": "2026-02-02T22:09:49.538545+00:00",
+      "updatedAt": "2026-02-02T22:09:49.538334+00:00"
+    },
+    {
+      "id": "US-004",
+      "title": "Remove safeReaddir type assertion in module-generator.ts",
+      "status": "done",
+      "dependsOn": [
+        "US-001"
+      ],
+      "description": "As a developer, I want to remove the type cast before calling .some() on safeReaddir result in module-generator.",
+      "acceptanceCriteria": [
+        "Remove type cast before .some() call on safeReaddir result in src/lattice/module-generator.ts",
+        "Example: (await safeReaddir(dir) as string[]).some(...) -> (await safeReaddir(dir)).some(...)",
+        "Negative case: other array methods on safeReaddir results should also work without casts",
+        "npm run typecheck passes"
+      ],
+      "startedAt": "2026-02-02T22:09:51.613490+00:00",
+      "completedAt": "2026-02-02T22:15:54.060286+00:00",
+      "updatedAt": "2026-02-02T22:15:54.060111+00:00"
+    },
+    {
+      "id": "US-005",
+      "title": "Remove safeReaddir type assertion in ledger persistence.test.ts",
+      "status": "done",
+      "dependsOn": [
+        "US-001"
+      ],
+      "description": "As a developer, I want to remove the type assertion before .filter() on safeReaddir result in ledger persistence tests.",
+      "acceptanceCriteria": [
+        "Remove type assertion before .filter() call in src/ledger/persistence.test.ts",
+        "Example: (await safeReaddir(dir) as string[]).filter(...) -> (await safeReaddir(dir)).filter(...)",
+        "Negative case: ensure the filter logic itself is unchanged",
+        "Tests still pass",
+        "npm run typecheck passes"
+      ],
+      "startedAt": "2026-02-02T22:15:56.129552+00:00",
+      "completedAt": "2026-02-02T22:19:34.804589+00:00",
+      "updatedAt": "2026-02-02T22:19:34.804426+00:00"
+    },
+    {
+      "id": "US-006",
+      "title": "Remove redundant 'as number' cast in report-storage.ts and audit related files",
+      "status": "done",
+      "dependsOn": [],
+      "description": "As a developer, I want to remove redundant type casts to keep the code clean and let TypeScript's inference work naturally.",
+      "acceptanceCriteria": [
+        "Remove redundant 'as number' cast on stats.mtimeMs in src/composition-audit/report-storage.ts",
+        "Audit other files in src/composition-audit/ for similar redundant casts and remove them",
+        "Example: stats.mtimeMs as number -> stats.mtimeMs (since mtimeMs is already typed as number)",
+        "Negative case: do not remove casts that are actually necessary for type narrowing",
+        "npm run typecheck passes"
+      ],
+      "startedAt": "2026-02-02T22:19:36.873514+00:00",
+      "completedAt": "2026-02-02T22:25:07.389639+00:00",
+      "updatedAt": "2026-02-02T22:25:07.389472+00:00"
+    },
+    {
+      "id": "US-007",
+      "title": "Update report-parser test to verify null prototypes",
+      "status": "done",
+      "dependsOn": [],
+      "description": "As a developer, I want the report-parser test to verify that parsed YAML objects have null prototypes, not just test generic JS behavior.",
+      "acceptanceCriteria": [
+        "Update test in src/composition-audit/report-parser.test.ts to verify parsed YAML objects have null prototypes",
+        "Test should check Object.getPrototypeOf(parsedObject) === null",
+        "Example: parsing a YAML document should return an object with null prototype for prototype pollution protection",
+        "Negative case: test should fail if parser returns objects with standard Object prototype",
+        "Tests pass with meaningful assertions"
+      ],
+      "startedAt": "2026-02-02T22:25:09.460082+00:00",
+      "completedAt": "2026-02-02T22:30:32.775616+00:00",
+      "updatedAt": "2026-02-02T22:30:32.775363+00:00"
+    },
+    {
+      "id": "US-008",
+      "title": "Add property-based tests for ledger persistence serialization",
+      "status": "done",
+      "dependsOn": [],
+      "description": "As a developer, I want property-based tests for ledger persistence round-trip serialization to catch edge cases.",
+      "acceptanceCriteria": [
+        "Add property-based tests using fast-check in src/ledger/persistence.test.ts lines 327-386 area",
+        "Test serialization round-trip: serialize(deserialize(x)) === x for arbitrary valid inputs",
+        "Use fc.record(), fc.string(), fc.array() etc. to generate test data",
+        "Example: fc.assert(fc.property(ledgerArbitrary, (ledger) => deepEqual(deserialize(serialize(ledger)), ledger)))",
+        "Negative case: malformed data should fail deserialization gracefully",
+        "Tests pass and cover edge cases like empty strings, special characters, unicode"
+      ],
+      "startedAt": "2026-02-02T22:30:34.857569+00:00",
+      "completedAt": "2026-02-02T22:40:31.954159+00:00",
+      "updatedAt": "2026-02-02T22:40:31.953959+00:00"
+    },
+    {
+      "id": "US-009",
+      "title": "Add property-based tests for interview persistence serialization",
+      "status": "done",
+      "dependsOn": [],
+      "description": "As a developer, I want property-based tests for interview persistence round-trip serialization.",
+      "acceptanceCriteria": [
+        "Add property-based tests using fast-check in src/interview/persistence.test.ts lines 257-281 area",
+        "Test serialization round-trip for interview data structures",
+        "Use appropriate fast-check arbitraries for the data types involved",
+        "Example: round-trip property test ensuring data integrity through serialize/deserialize cycle",
+        "Negative case: invalid interview data should be rejected appropriately",
+        "Tests pass and improve confidence in serialization correctness"
+      ],
+      "startedAt": "2026-02-02T22:40:34.034793+00:00",
+      "completedAt": "2026-02-02T22:49:30.385571+00:00",
+      "updatedAt": "2026-02-02T22:49:30.385362+00:00"
+    },
+    {
+      "id": "US-010",
+      "title": "Convert namespace fs imports to named imports project-wide",
+      "status": "done",
+      "dependsOn": [],
+      "description": "As a developer, I want consistent named imports for fs module across the project instead of namespace imports.",
+      "acceptanceCriteria": [
+        "Change 'import * as fs from \"fs\"' to named imports like 'import { mkdtempSync, ... } from \"fs\"'",
+        "Start with src/adapters/typescript/index.test.ts as mentioned in review",
+        "Apply same pattern to all other files using '* as fs' namespace import",
+        "Example: import * as fs from 'fs'; fs.mkdtempSync(...) -> import { mkdtempSync } from 'fs'; mkdtempSync(...)",
+        "Negative case: if a file uses many fs functions, named imports should list all used functions",
+        "npm run lint passes",
+        "npm run typecheck passes"
+      ],
+      "startedAt": "2026-02-02T22:49:32.461381+00:00",
+      "completedAt": "2026-02-02T23:04:19.917938+00:00",
+      "updatedAt": "2026-02-02T23:04:19.917812+00:00"
+    },
+    {
+      "id": "US-011",
+      "title": "Complete safe-fs migration in artifact server.test.ts",
+      "status": "done",
+      "dependsOn": [],
+      "description": "As a developer, I want consistent safe-fs usage in artifact server tests to match the project's security patterns.",
+      "acceptanceCriteria": [
+        "Replace fs.mkdtemp with safe-fs equivalent in src/servers/artifact/server.test.ts",
+        "Replace fs.copyFile with safe-fs equivalent",
+        "Replace fs.rm with safe-fs equivalent",
+        "Migrate all other remaining unsafe fs operations in that file",
+        "Example: fs.mkdtemp(path) -> safeMkdtemp(path) (or appropriate safe-fs function)",
+        "Negative case: if safe-fs doesn't have an equivalent for an operation, document why raw fs is used",
+        "Tests still pass after migration"
+      ],
+      "startedAt": "2026-02-02T23:04:22.008408+00:00",
+      "completedAt": "2026-02-02T23:10:00.469451+00:00",
+      "updatedAt": "2026-02-02T23:10:00.469305+00:00"
+    },
+    {
+      "id": "US-012",
+      "title": "Use entries() for index iteration in phase-regression.ts",
+      "status": "done",
+      "dependsOn": [],
+      "description": "As a developer, I want consistent iteration patterns using entries() instead of manual index counters.",
+      "acceptanceCriteria": [
+        "Refactor lines 259-278 in src/composition-audit/phase-regression.ts to use entries() instead of manual index counter",
+        "Example: let i = 0; for (const item of items) { use(i); i++; } -> for (const [i, item] of items.entries()) { use(i); }",
+        "Negative case: if entries() doesn't fit the use case (e.g., index modified in loop), document why",
+        "Behavior remains identical after refactor",
+        "npm run typecheck passes"
+      ],
+      "startedAt": "2026-02-02T23:10:02.552702+00:00",
+      "completedAt": "2026-02-02T23:12:38.766473+00:00",
+      "updatedAt": "2026-02-02T23:12:38.766347+00:00"
+    },
+    {
+      "id": "US-013",
+      "title": "Update spec parser tests for SpecParseError message",
+      "status": "done",
+      "dependsOn": [],
+      "description": "As a developer, I want spec parser tests to expect the correct SpecParseError with 'Prohibited key constructor' message.",
+      "acceptanceCriteria": [
+        "Update tests in src/spec/parser.test.ts that test 'constructor' key handling",
+        "Change expectation from 'Invalid TOML syntax' to SpecParseError with 'Prohibited key 'constructor'' message",
+        "Example: expect(() => parse(input)).toThrow('Invalid TOML syntax') -> expect(() => parse(input)).toThrow(SpecParseError); expect(() => parse(input)).toThrow(/Prohibited key 'constructor'/)",
+        "Negative case: other TOML syntax errors should still throw appropriate messages",
+        "Tests pass and correctly verify the security protection"
+      ],
+      "startedAt": "2026-02-02T23:12:40.854013+00:00",
+      "completedAt": "2026-02-02T23:18:16.700875+00:00",
+      "updatedAt": "2026-02-02T23:18:16.700757+00:00"
+    }
+  ]
+}

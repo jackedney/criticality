@@ -1,0 +1,567 @@
+{
+  "version": 1,
+  "project": "PR9 Code Review Suggestions",
+  "overview": "Implement 22 code review suggestions from PR#9 including security hardening, bug fixes, code refactoring, and comprehensive property-based testing across the codebase.",
+  "goals": [
+    "Eliminate prototype pollution vulnerabilities through safe object creation patterns",
+    "Fix mergeWithDefaults bug in swarm loader configuration",
+    "Refactor loop patterns to use .entries() for cleaner code",
+    "Achieve consistency with safe-fs utilities throughout codebase",
+    "Add comprehensive property-based tests using fast-check",
+    "Fix race conditions in async module loading tests",
+    "Improve type safety with proper index access patterns",
+    "Optimize file system operations and prevent unnecessary allocations"
+  ],
+  "nonGoals": [
+    "No performance benchmarks required",
+    "No API documentation updates needed",
+    "No breaking changes to public contracts expected"
+  ],
+  "successMetrics": [
+    "All security/detect-object-injection linter suppressions eliminated or justified",
+    "All safe-fs utilities used consistently",
+    "Property-based tests cover critical modules with fast-check",
+    "TypeScript noUncheckedIndexedAccess compliance maintained",
+    "All quality gates pass (test, lint, typecheck, build)"
+  ],
+  "openQuestions": [],
+  "stack": {
+    "framework": "TypeScript",
+    "hosting": "N/A - existing codebase",
+    "database": "N/A",
+    "auth": "N/A"
+  },
+  "routes": [],
+  "uiNotes": [
+    "No UI changes - backend/refactoring only"
+  ],
+  "dataModel": [],
+  "importFormat": {
+    "description": "Not applicable - internal refactoring",
+    "example": {}
+  },
+  "rules": [
+    "Use Object.create(null) for objects with dynamic keys from external input",
+    "Reject dangerous keys (__proto__, constructor, prototype) before object assignment",
+    "Use Object.hasOwn() or Object.prototype.hasOwnProperty.call() for property existence checks",
+    "Use safe-fs utilities consistently instead of direct node:fs operations",
+    "Use .entries() pattern for loops requiring both index and element",
+    "Ensure async module imports are awaited before use in tests",
+    "Add eslint-disable comments only when truly necessary with clear justification"
+  ],
+  "qualityGates": [
+    "npm run test",
+    "npm run lint",
+    "npm run typecheck",
+    "npm run build"
+  ],
+  "stories": [
+    {
+      "id": "US-001",
+      "title": "Harden spec/parser.ts against prototype pollution",
+      "status": "done",
+      "dependsOn": [],
+      "description": "As a developer, I want to prevent prototype pollution in TOML key mapping so that parsed external input cannot compromise object prototypes.",
+      "acceptanceCriteria": [
+        "Create enums, dataModels, interfaces, claims, and witnesses objects using Object.create(null)",
+        "Add validation to reject '__proto__', 'constructor', 'prototype' keys before assignment",
+        "Throw SpecParseError with descriptive message for invalid keys",
+        "Remove eslint-disable security/detect-object-injection comments where possible",
+        "Example: parsing TOML with __proto__ key throws SpecParseError",
+        "Negative case: valid TOML keys like 'myEnum' parse successfully"
+      ],
+      "startedAt": "2026-02-02T17:30:58.074355+00:00",
+      "completedAt": "2026-02-02T17:50:01.656804+00:00",
+      "updatedAt": "2026-02-02T17:50:01.656662+00:00"
+    },
+    {
+      "id": "US-002",
+      "title": "Refactor composition-audit/prompts.ts to use .entries() pattern",
+      "status": "done",
+      "dependsOn": [],
+      "description": "As a developer, I want to use .entries() for loops requiring index access so that ESLint suppressions can be eliminated.",
+      "acceptanceCriteria": [
+        "Replace three for-loops (functional, non_functional, security constraints) with .entries() pattern",
+        "Remove eslint-disable security/detect-object-injection comments",
+        "Maintain identical output formatting with FC001, NF001, SC001 labels",
+        "Example: functional constraint list generates [FC001], [FC002] labels correctly",
+        "Negative case: empty constraint arrays produce no output sections"
+      ],
+      "startedAt": "2026-02-02T17:50:03.755633+00:00",
+      "completedAt": "2026-02-02T17:56:14.418414+00:00",
+      "updatedAt": "2026-02-02T17:56:14.418263+00:00"
+    },
+    {
+      "id": "US-003",
+      "title": "Fix mergeWithDefaults bug in swarm/loader.ts",
+      "status": "done",
+      "dependsOn": [],
+      "description": "As a developer, I want the mergeWithDefaults flag to actually merge configurations so that defaults are properly applied.",
+      "acceptanceCriteria": [
+        "Call mergeConfigurations when mergeWithDefaults is true",
+        "Set source to 'merged' only when merge actually occurs",
+        "Set source to 'file' when no merge occurs",
+        "Example: loading file with mergeWithDefaults=true includes DEFAULT_SWARM_CONFIG values",
+        "Negative case: loading file with mergeWithDefaults=false contains only file values"
+      ],
+      "startedAt": "2026-02-02T17:56:16.522123+00:00",
+      "completedAt": "2026-02-02T18:01:49.280897+00:00",
+      "updatedAt": "2026-02-02T18:01:49.280735+00:00"
+    },
+    {
+      "id": "US-004",
+      "title": "Fix race condition in report-parser.test.ts",
+      "status": "done",
+      "dependsOn": [],
+      "description": "As a developer, I want js-yaml module to load completely before parsing so that tests don't fail due to async race conditions.",
+      "acceptanceCriteria": [
+        "Replace 100ms timeout with mechanism that guarantees js-yaml loads",
+        "Use vi.stubEnv() or vi.waitFor() to ensure module load completes",
+        "Verify parseContradictionOutput succeeds after module import",
+        "Example: test with PARSE_WITH_JSYAML=true passes consistently",
+        "Negative case: test fails if js-yaml loading is not awaited"
+      ],
+      "startedAt": "2026-02-02T18:01:51.391806+00:00",
+      "completedAt": "2026-02-02T18:09:32.405428+00:00",
+      "updatedAt": "2026-02-02T18:09:32.405281+00:00"
+    },
+    {
+      "id": "US-005",
+      "title": "Extract directoryExists helper in module-generator.ts",
+      "status": "done",
+      "dependsOn": [],
+      "description": "As a developer, I want a reusable directoryExists helper so that repeated try/catch patterns are eliminated.",
+      "acceptanceCriteria": [
+        "Create async directoryExists(dirPath) helper function using safeStat",
+        "Replace three directory existence checks with helper call",
+        "Maintain identical error handling behavior",
+        "Example: directoryExists returns true for existing directories",
+        "Negative case: directoryExists returns false for non-existent paths"
+      ],
+      "startedAt": "2026-02-02T18:09:34.518819+00:00",
+      "completedAt": "2026-02-02T18:12:31.733590+00:00",
+      "updatedAt": "2026-02-02T18:12:31.733431+00:00"
+    },
+    {
+      "id": "US-006",
+      "title": "Update persistence.test.ts to use safeReaddir",
+      "status": "done",
+      "dependsOn": [],
+      "description": "As a developer, I want to use safe-fs utilities consistently so that file operations follow project conventions.",
+      "acceptanceCriteria": [
+        "Import safeReaddir from safe-fs utilities",
+        "Replace direct node:fs/promises readdir with safeReaddir",
+        "Cast result to string[] to match original typing",
+        "Example: test reads test directory files correctly",
+        "Negative case: missing directory throws appropriate error"
+      ],
+      "startedAt": "2026-02-02T18:12:33.844720+00:00",
+      "completedAt": "2026-02-02T18:16:36.867040+00:00",
+      "updatedAt": "2026-02-02T18:16:36.866897+00:00"
+    },
+    {
+      "id": "US-007",
+      "title": "Optimize stateFileExists in persistence.ts",
+      "status": "done",
+      "dependsOn": [],
+      "description": "As a developer, I want file existence checks to be efficient so that large state files are not unnecessarily read into memory.",
+      "acceptanceCriteria": [
+        "Replace safeReadFile with safeStat for existence check",
+        "Import safeStat from safe-fs utilities",
+        "Maintain identical boolean return behavior",
+        "Example: checking existence of large file is instant",
+        "Negative case: non-existent file returns false without reading content"
+      ],
+      "startedAt": "2026-02-02T18:16:38.945192+00:00",
+      "completedAt": "2026-02-02T18:20:28.465416+00:00",
+      "updatedAt": "2026-02-02T18:20:28.465251+00:00"
+    },
+    {
+      "id": "US-008",
+      "title": "Update toolchain/server.ts to use safeStat",
+      "status": "done",
+      "dependsOn": [],
+      "description": "As a developer, I want to use safe-fs utilities consistently in detectLanguage so that all file operations follow project conventions.",
+      "acceptanceCriteria": [
+        "Replace fs.access with safeStat in detectLanguage function",
+        "Remove unused fs import if applicable",
+        "Maintain identical language detection logic",
+        "Example: TypeScript project detected via tsconfig.json or package.json",
+        "Negative case: project without config files defaults to TypeScript"
+      ],
+      "startedAt": "2026-02-02T18:20:30.573551+00:00",
+      "completedAt": "2026-02-02T18:23:15.522265+00:00",
+      "updatedAt": "2026-02-02T18:23:15.522111+00:00"
+    },
+    {
+      "id": "US-009",
+      "title": "Fix grammatical error in typescript adapter test header",
+      "status": "done",
+      "dependsOn": [],
+      "description": "As a developer, I want correct grammar in code comments so that documentation is professional.",
+      "acceptanceCriteria": [
+        "Locate comment 'These tests exercise of full adapter workflow' in index.test.ts",
+        "Change to 'These tests exercise the full adapter workflow'",
+        "Example: comment reads correctly with proper grammar",
+        "Negative case: no grammatical errors remain in header comment"
+      ],
+      "startedAt": "2026-02-02T18:23:17.638670+00:00",
+      "completedAt": "2026-02-02T18:26:26.405548+00:00",
+      "updatedAt": "2026-02-02T18:26:26.405399+00:00"
+    },
+    {
+      "id": "US-010",
+      "title": "Remove dead logic in invariant-test-generator.ts",
+      "status": "done",
+      "dependsOn": [],
+      "description": "As a developer, I want to remove unnecessary code so that the codebase is cleaner and more maintainable.",
+      "acceptanceCriteria": [
+        "Remove isLast and separator variable declarations in arbList.forEach loop",
+        "Change lines.push to always append comma (e.g., `${arb},`)",
+        "Verify generated test output unchanged",
+        "Example: generated invariant tests have trailing commas after each arb",
+        "Negative case: no unused variables remain in loop scope"
+      ],
+      "startedAt": "2026-02-02T18:26:28.523169+00:00",
+      "completedAt": "2026-02-02T18:28:49.498062+00:00",
+      "updatedAt": "2026-02-02T18:28:49.497898+00:00"
+    },
+    {
+      "id": "US-011",
+      "title": "Standardize regex whitespace in witness.ts",
+      "status": "done",
+      "dependsOn": [],
+      "description": "As a developer, I want consistent whitespace handling in regexes so that parsing behavior is predictable.",
+      "acceptanceCriteria": [
+        "Update minMatch and maxMatch regexes to use \\s* instead of [ \\t]*",
+        "Match patterns used by other invariant parsers (~lines 694-695)",
+        "Verify parsing behavior unchanged for valid inputs",
+        "Example: min/max invariants with tabs and spaces parse correctly",
+        "Negative case: malformed invariants still fail appropriately"
+      ],
+      "startedAt": "2026-02-02T18:28:51.593172+00:00",
+      "completedAt": "2026-02-02T18:34:32.122520+00:00",
+      "updatedAt": "2026-02-02T18:34:32.122368+00:00"
+    },
+    {
+      "id": "US-012",
+      "title": "Fix indexed access safety in witness.ts",
+      "status": "done",
+      "dependsOn": [],
+      "description": "As a developer, I want consistent undefined-safe index access patterns so that noUncheckedIndexedAccess compliance is maintained.",
+      "acceptanceCriteria": [
+        "Update char assignment: char = trimmed[i] ?? ''",
+        "Update prevChar assignment: prevChar = i > 0 ? (trimmed[i - 1] ?? '') : ''",
+        "Remove unnecessary eslint-disable comment if possible",
+        "Example: accessing empty string safely returns '' instead of undefined",
+        "Negative case: boundary index access does not cause TypeScript errors"
+      ],
+      "startedAt": "2026-02-02T18:34:34.230007+00:00",
+      "completedAt": "2026-02-02T18:38:09.093737+00:00",
+      "updatedAt": "2026-02-02T18:38:09.093590+00:00"
+    },
+    {
+      "id": "US-013",
+      "title": "Guard regex captures in witness.ts",
+      "status": "done",
+      "dependsOn": [],
+      "description": "As a developer, I want regex captures validated before use so that noUncheckedIndexedAccess compliance is maintained.",
+      "acceptanceCriteria": [
+        "Check minMatch[1] !== undefined before calling Number()",
+        "Check invMinMatch[1] !== undefined before calling Number()",
+        "Skip branch if captures are undefined",
+        "Example: invariant with min/max values sets arbMin/compare correctly",
+        "Negative case: invariants without min/max skip comparison logic"
+      ],
+      "startedAt": "2026-02-02T18:38:11.202116+00:00",
+      "completedAt": "2026-02-02T18:41:21.605328+00:00",
+      "updatedAt": "2026-02-02T18:41:21.605178+00:00"
+    },
+    {
+      "id": "US-014",
+      "title": "Fix readonly violation in swarm/loader.ts access object",
+      "status": "done",
+      "dependsOn": [],
+      "description": "As a developer, I want to build access objects immutably so that readonly contract violations are avoided.",
+      "acceptanceCriteria": [
+        "Build access object using conditional spreads instead of mutation",
+        "Filter scopedPaths and allowedTools to string arrays",
+        "Include scopedPaths only when mode==='scoped' and array non-empty",
+        "Include allowedTools only when mode==='scoped' and array non-empty",
+        "Example: scoped mode with valid paths/tools creates proper access object",
+        "Negative case: invalid types in arrays are filtered out"
+      ],
+      "startedAt": "2026-02-02T18:41:23.715203+00:00",
+      "completedAt": "2026-02-02T18:48:30.056084+00:00",
+      "updatedAt": "2026-02-02T18:48:30.055918+00:00"
+    },
+    {
+      "id": "US-015",
+      "title": "Refactor loops in phase-regression.ts to .entries()",
+      "status": "done",
+      "dependsOn": [],
+      "description": "As a developer, I want to use .entries() for contradiction loops so that manual index counters are eliminated.",
+      "acceptanceCriteria": [
+        "Replace first contradiction loop with for (const [i, contradiction] of contradictions.entries())",
+        "Replace second contradiction loop with same .entries() pattern",
+        "Use i+1 for index display in both loops",
+        "Maintain identical output formatting",
+        "Example: contradictions are numbered [1], [2], etc. correctly",
+        "Negative case: empty contradiction array produces no numbered output"
+      ],
+      "startedAt": "2026-02-02T18:48:32.172127+00:00",
+      "completedAt": "2026-02-02T18:55:26.503924+00:00",
+      "updatedAt": "2026-02-02T18:55:26.503763+00:00"
+    },
+    {
+      "id": "US-016",
+      "title": "Consolidate eslint suppressions in composition-audit/types.test.ts",
+      "status": "done",
+      "dependsOn": [],
+      "description": "As a developer, I want to eliminate repeated eslint-disable comments so that code is cleaner.",
+      "acceptanceCriteria": [
+        "Extract CONTRADICTION_TYPE_DESCRIPTIONS[type] to local const desc",
+        "Apply single eslint-disable before declaration or wrap loop",
+        "Assert on desc for defined, typeof 'string', and length > 0",
+        "Example: all contradiction types validated with single suppression",
+        "Negative case: missing or invalid types still fail tests"
+      ],
+      "startedAt": "2026-02-02T18:55:28.619663+00:00",
+      "completedAt": "2026-02-02T18:59:24.348536+00:00",
+      "updatedAt": "2026-02-02T18:59:24.348363+00:00"
+    },
+    {
+      "id": "US-017",
+      "title": "Add property-based tests for injection escalation",
+      "status": "done",
+      "dependsOn": [],
+      "description": "As a developer, I want comprehensive property-based tests so that escalation logic invariants are verified.",
+      "acceptanceCriteria": [
+        "Test coherence failures always circuit break across tiers",
+        "Test attempt-tracking immutability with random inputs",
+        "Test getRetryLimit respects DEFAULT_ESCALATION_CONFIG for all failure types",
+        "Use fast-check to generate random functionIds, tiers, and counts",
+        "Place tests under 'Property-based tests' describe block",
+        "Example: random coherence failures always trigger escalation circuit break",
+        "Negative case: invalid failure types handled correctly"
+      ],
+      "startedAt": "2026-02-02T18:59:26.464198+00:00",
+      "completedAt": "2026-02-02T19:09:55.088970+00:00",
+      "updatedAt": "2026-02-02T19:09:55.088816+00:00"
+    },
+    {
+      "id": "US-018",
+      "title": "Fix fs.access usage in ralph-loop.ts",
+      "status": "done",
+      "dependsOn": [],
+      "description": "As a developer, I want to use safeExists helper consistently so that file path validation follows project conventions.",
+      "acceptanceCriteria": [
+        "Replace fs.access with safeExists(testFile) check",
+        "Replace fs.access with safeExists(specFile) check",
+        "Set testPattern accordingly when file exists",
+        "Return undefined with log message when neither exists",
+        "Example: test discovery finds .test.ts files correctly",
+        "Negative case: non-existent test/spec files return undefined"
+      ],
+      "startedAt": "2026-02-02T19:09:57.209314+00:00",
+      "completedAt": "2026-02-02T19:13:23.138253+00:00",
+      "updatedAt": "2026-02-02T19:13:23.138078+00:00"
+    },
+    {
+      "id": "US-019",
+      "title": "Fix security scan fallback in ralph-loop.ts",
+      "status": "done",
+      "dependsOn": [],
+      "description": "As a developer, I want critical vulnerabilities to always trigger rejection so that vulnerable code cannot proceed.",
+      "acceptanceCriteria": [
+        "Ensure hasCriticalVulnerabilities always triggers rejection",
+        "Add explicit fallback when securityScanToFailure returns undefined",
+        "Set failure = securityScanToFailure(...) ?? 'security_scan_failure'",
+        "Run rollback and rejection logic consistently",
+        "Example: critical vulnerability always rejects regardless of failure mapping",
+        "Negative case: non-critical vulnerabilities handled as configured"
+      ],
+      "startedAt": "2026-02-02T19:13:25.249341+00:00",
+      "completedAt": "2026-02-02T19:16:55.914951+00:00",
+      "updatedAt": "2026-02-02T19:16:55.914801+00:00"
+    },
+    {
+      "id": "US-020",
+      "title": "Add property-based tests for security scanner",
+      "status": "done",
+      "dependsOn": [],
+      "description": "As a developer, I want comprehensive property-based tests so that security scanner invariants are verified.",
+      "acceptanceCriteria": [
+        "Test formatVulnerability produces expected tokens across random severity inputs",
+        "Test securityScanToFailure picks highest-severity vulnerability",
+        "Test OWASP_TOP_10 and CWE_MAPPINGS completeness",
+        "Generate arbitrary VulnerabilitySeverity values and vulnerability objects",
+        "Place tests alongside existing suites",
+        "Example: random vulnerability arrays always select correct max severity",
+        "Negative case: empty vulnerability arrays return undefined"
+      ],
+      "startedAt": "2026-02-02T19:16:58.025046+00:00",
+      "completedAt": "2026-02-02T19:24:27.209982+00:00",
+      "updatedAt": "2026-02-02T19:24:27.209827+00:00"
+    },
+    {
+      "id": "US-021",
+      "title": "Harden lattice modules against prototype pollution",
+      "status": "done",
+      "dependsOn": [],
+      "description": "As a developer, I want to prevent prototype pollution in lattice code so that dynamic key access is safe.",
+      "acceptanceCriteria": [
+        "contract-attacher.ts: Check hasOwnProperty before accessing spec.interfaces[interfaceName]",
+        "function-generator.ts: Use Object.hasOwn() before accessing spec.interfaces and typeMap",
+        "type-generator.ts: Use Object.create(null) for accumulator objects, filter unsafe keys",
+        "Throw descriptive errors for invalid interface names",
+        "Example: accessing '__proto__' as interface name throws error",
+        "Negative case: valid interface names work correctly"
+      ],
+      "startedAt": "2026-02-02T19:24:29.325155+00:00",
+      "completedAt": "2026-02-02T19:50:50.780533+00:00",
+      "updatedAt": "2026-02-02T19:50:50.780387+00:00"
+    },
+    {
+      "id": "US-022",
+      "title": "Optimize model alias map allocation",
+      "status": "done",
+      "dependsOn": [],
+      "description": "As a developer, I want to avoid unnecessary allocations so that performance is improved.",
+      "acceptanceCriteria": [
+        "Extract model mapping to module-level constant MODEL_ALIAS_MAP",
+        "Initialize MODEL_ALIAS_MAP once using TypedMap.fromObject",
+        "Update resolveModelAlias to use MODEL_ALIAS_MAP.get(alias)",
+        "Maintain identical lookup fallback logic",
+        "Example: resolveModelAlias returns correct model for known aliases",
+        "Negative case: unknown aliases fall back to config.models lookup"
+      ],
+      "startedAt": "2026-02-02T19:50:52.891182+00:00",
+      "completedAt": "2026-02-02T19:56:57.633180+00:00",
+      "updatedAt": "2026-02-02T19:56:57.633032+00:00"
+    },
+    {
+      "id": "US-023",
+      "title": "Fix eslint coverage in CLI argument parsing",
+      "status": "done",
+      "dependsOn": [],
+      "description": "As a developer, I want ESLint suppressions to cover all array accesses so that linting is consistent.",
+      "acceptanceCriteria": [
+        "Extend eslint-disable-next-line to cover both args[i] and args[i+1]",
+        "Move suppression above for loop or add second suppression",
+        "Maintain existing bounded access justification comment",
+        "Example: parsing --arg value works without lint warnings",
+        "Negative case: missing arguments handled gracefully"
+      ],
+      "startedAt": "2026-02-02T19:56:59.739405+00:00",
+      "completedAt": "2026-02-02T20:03:22.563982+00:00",
+      "updatedAt": "2026-02-02T20:03:22.563743+00:00"
+    },
+    {
+      "id": "US-024",
+      "title": "Cross-platform validatePath test and property tests",
+      "status": "done",
+      "dependsOn": [],
+      "description": "As a developer, I want cross-platform tests so that validatePath works correctly on Windows and Unix.",
+      "acceptanceCriteria": [
+        "Replace expect(result.startsWith('/')) with expect(path.isAbsolute(result))",
+        "Add property-based test: non-empty strings without null bytes don't throw",
+        "Add property-based test: strings with null bytes throw PathValidationError",
+        "Use fast-check fc.string() and fc.assert() for property tests",
+        "Example: Windows paths validated correctly as absolute",
+        "Negative case: paths with null bytes throw appropriate error"
+      ],
+      "startedAt": "2026-02-02T20:03:24.667044+00:00",
+      "completedAt": "2026-02-02T20:09:49.732943+00:00",
+      "updatedAt": "2026-02-02T20:09:49.732763+00:00"
+    },
+    {
+      "id": "US-025",
+      "title": "Improve safe-fs.ts type safety and path validation",
+      "status": "done",
+      "dependsOn": [],
+      "description": "As a developer, I want better type safety and path validation so that safe-fs utilities are robust.",
+      "acceptanceCriteria": [
+        "Add TypeScript overloads to safeReaddir matching fs.readdir signatures",
+        "Update validatePath JSDoc or add root parameter to enforce containment",
+        "Add eslint-disable comment for safeRmSync fsSync.rmSync call",
+        "Example: safeReaddir returns string[] or Dirent[] based on options",
+        "Negative case: invalid path validation behavior documented clearly"
+      ],
+      "startedAt": "2026-02-02T20:09:51.824074+00:00",
+      "completedAt": "2026-02-02T20:40:38.566400+00:00",
+      "updatedAt": "2026-02-02T20:40:38.566190+00:00"
+    },
+    {
+      "id": "US-026",
+      "title": "Add property-based tests for TypedMap",
+      "status": "done",
+      "dependsOn": [],
+      "description": "As a developer, I want comprehensive property-based tests so that TypedMap invariants are verified.",
+      "acceptanceCriteria": [
+        "Test TypedMap.fromObject(obj).toObject() equals original for random objects",
+        "Test TypedMap.fromEntries size equals unique key count",
+        "Test has(key) consistent with get(key) !== undefined",
+        "Generate arbitrary objects and entry arrays using fast-check",
+        "Example: random objects round-trip through TypedMap correctly",
+        "Negative case: duplicate keys handled appropriately"
+      ],
+      "startedAt": "2026-02-02T20:43:56.976678+00:00",
+      "completedAt": "2026-02-02T20:50:06.752907+00:00",
+      "updatedAt": "2026-02-02T20:50:06.752727+00:00"
+    },
+    {
+      "id": "US-027",
+      "title": "Add eslint-disable for TypedMap.toObject",
+      "status": "done",
+      "dependsOn": [],
+      "description": "As a developer, I want explicit eslint justification so that security suppressions are intentional and documented.",
+      "acceptanceCriteria": [
+        "Add inline eslint-disable above obj[String(key)] = value assignment",
+        "Include justification comment: 'safe: key originates from internal Map keys'",
+        "Reference toObject method and obj/entriesArray/map variables",
+        "Example: suppresses security/detect-object-injection warning appropriately",
+        "Negative case: no other inline suppressions needed in function"
+      ],
+      "startedAt": "2026-02-02T21:02:59.341175+00:00",
+      "completedAt": "2026-02-02T21:07:55.202194+00:00",
+      "updatedAt": "2026-02-02T21:07:55.200077+00:00"
+    },
+    {
+      "id": "US-028",
+      "title": "Fix YAML parser race condition in report-parser.ts",
+      "status": "done",
+      "dependsOn": [],
+      "description": "As a developer, I want async module imports to be awaited so that YAML parsing doesn't fail due to race conditions.",
+      "acceptanceCriteria": [
+        "Convert parseContradictionOutput to async function",
+        "Await yamlLoadPromise or ensureYamlLoaded() before parseWithJsYaml",
+        "Update parseWithJsYaml to check yaml is truthy and await yamlLoadPromise",
+        "Update all callers to handle async signature",
+        "Example: parsing succeeds consistently after module loads",
+        "Negative case: early parse attempts wait for module load completion"
+      ],
+      "startedAt": "2026-02-02T21:07:57.311078+00:00",
+      "completedAt": "2026-02-02T21:14:56.177728+00:00",
+      "updatedAt": "2026-02-02T21:14:56.177540+00:00"
+    },
+    {
+      "id": "US-029",
+      "title": "Harden report-parser.ts against prototype pollution",
+      "status": "done",
+      "dependsOn": [],
+      "description": "As a developer, I want to prevent prototype pollution in YAML parsing so that external input is safe.",
+      "acceptanceCriteria": [
+        "Create safeAssign helper that rejects __proto__, constructor, prototype keys",
+        "Use Object.create(null) for new nested containers",
+        "Replace all direct indexed assignments with safeAssign calls",
+        "Validate keys are strings and non-empty",
+        "Example: YAML with __proto__ key throws error or is ignored",
+        "Negative case: valid YAML keys parse correctly into result object"
+      ],
+      "startedAt": "2026-02-02T21:14:58.258819+00:00",
+      "completedAt": "2026-02-02T21:31:38.728607+00:00",
+      "updatedAt": "2026-02-02T21:31:38.728404+00:00"
+    }
+  ]
+}

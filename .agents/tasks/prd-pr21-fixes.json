@@ -1,0 +1,425 @@
+{
+  "version": 1,
+  "project": "PR21 Code Review Fixes",
+  "overview": "Address all code review comments from PR21 plus proactively fix similar patterns across the codebase. Issues include duplicated code, resource leaks, inverted logic, stale state bugs, and missing validation.",
+  "goals": [
+    "Fix all 18 explicitly identified issues from PR21-review.md",
+    "Extract duplicated helpers into shared utility modules",
+    "Eliminate resource leaks (listeners, readline interfaces)",
+    "Fix logic bugs (inverted guards, stale state, double-close)",
+    "Add missing validation and proper error handling",
+    "Proactively fix similar patterns found elsewhere in codebase"
+  ],
+  "nonGoals": [
+    "No new features or functionality",
+    "No refactoring beyond what's needed to fix identified issues",
+    "No changes to public API contracts"
+  ],
+  "successMetrics": [
+    "All 18 PR21 review comments resolved",
+    "No duplicated display helper functions across CLI commands",
+    "No listener leaks in watch mode",
+    "All quality gates pass (test, lint, typecheck)"
+  ],
+  "openQuestions": [
+    "What is the canonical source for PHASES constant? (to be investigated in US-009)"
+  ],
+  "stack": {
+    "framework": "Node.js CLI with TypeScript",
+    "hosting": "N/A - CLI tool",
+    "database": "File-based state persistence",
+    "auth": "N/A"
+  },
+  "routes": [],
+  "uiNotes": [],
+  "dataModel": [],
+  "importFormat": {
+    "description": "Not applicable",
+    "example": {}
+  },
+  "rules": [
+    "All extracted helpers must be exported and have proper TypeScript types",
+    "Existing tests must continue to pass",
+    "No breaking changes to CLI command interfaces"
+  ],
+  "qualityGates": [
+    "npm test",
+    "npm run lint",
+    "npm run typecheck"
+  ],
+  "stories": [
+    {
+      "id": "US-001",
+      "title": "Fix @opentui/core dependency version",
+      "status": "done",
+      "dependsOn": [],
+      "description": "As a developer, I want the package.json to reference a valid @opentui/core version so that npm/yarn install succeeds.",
+      "acceptanceCriteria": [
+        "Check npm registry for latest available @opentui/core version",
+        "Update package.json line 71 from '^0.1.77' to the latest valid version",
+        "Example: npm install completes without resolution errors",
+        "Negative case: version '^0.1.77' is unavailable and causes install failure",
+        "Run npm install or yarn install to verify resolution succeeds"
+      ],
+      "startedAt": "2026-02-07T09:33:39.908752+00:00",
+      "completedAt": "2026-02-07T09:39:48.348800+00:00",
+      "updatedAt": "2026-02-07T09:39:48.348675+00:00"
+    },
+    {
+      "id": "US-002",
+      "title": "Add test mock cleanup in app.test.ts",
+      "status": "done",
+      "dependsOn": [],
+      "description": "As a developer, I want test mocks to be reset between tests so that tests don't leak state to each other.",
+      "acceptanceCriteria": [
+        "Add beforeEach or afterEach hook in createCliApp test suite (around lines 5-22)",
+        "Call mockExistsSync.mockReset() and mockReadFileSync.mockReset() in the hook",
+        "Alternatively use vi.clearAllMocks() or vi.resetAllMocks()",
+        "Example: running tests in any order produces consistent results",
+        "Negative case: without cleanup, test B could fail due to mock state from test A",
+        "All existing tests continue to pass"
+      ],
+      "startedAt": "2026-02-07T09:39:50.436868+00:00",
+      "completedAt": "2026-02-07T09:51:39.825304+00:00",
+      "updatedAt": "2026-02-07T09:51:39.824920+00:00"
+    },
+    {
+      "id": "US-003",
+      "title": "Fix inverted guard logic in app.ts",
+      "status": "done",
+      "dependsOn": [],
+      "description": "As a developer, I want runCliApp and stopCliApp to correctly detect uninitialized renderer so that error messages are accurate.",
+      "acceptanceCriteria": [
+        "Update runCliApp (around line 54-60) to throw when renderer is uninitialized",
+        "Update stopCliApp to throw when renderer is uninitialized",
+        "Guard condition should be: Object.keys(renderer).length === 0 or !Object.keys(renderer).length",
+        "Error message should accurately describe 'renderer not initialized' or 'TUI not initialized'",
+        "Example: calling runCliApp before initialization throws with clear message",
+        "Negative case: current logic throws when renderer HAS keys (opposite of intended)",
+        "Existing tests pass after fix"
+      ],
+      "startedAt": "2026-02-07T09:51:41.900319+00:00",
+      "completedAt": "2026-02-07T09:57:49.386027+00:00",
+      "updatedAt": "2026-02-07T09:57:49.385658+00:00"
+    },
+    {
+      "id": "US-004",
+      "title": "Remove duplicate readline interface in readMultiLineInput",
+      "status": "done",
+      "dependsOn": [],
+      "description": "As a developer, I want readMultiLineInput to use a single readline interface so that resource usage is correct.",
+      "acceptanceCriteria": [
+        "In resolve.ts around lines 325-385, remove the redundant 'readline' creation",
+        "Keep only 'lineReader' as the single readline interface",
+        "Attach 'line', 'SIGINT', and 'close' handlers to lineReader",
+        "Replace readline.close() calls with lineReader.close()",
+        "Preserve initial prompt and line numbering behavior",
+        "Example: readMultiLineInput creates exactly one readline interface",
+        "Negative case: current code creates two interfaces but only uses one"
+      ],
+      "startedAt": "2026-02-07T09:57:51.458053+00:00",
+      "completedAt": "2026-02-07T10:05:40.281429+00:00",
+      "updatedAt": "2026-02-07T10:05:40.281087+00:00"
+    },
+    {
+      "id": "US-005",
+      "title": "Fix double-close of confirmReader in resolve.ts",
+      "status": "done",
+      "dependsOn": [],
+      "description": "As a developer, I want confirmReader to be closed exactly once so that no resource errors occur.",
+      "acceptanceCriteria": [
+        "In resolve.ts around lines 449-481, remove explicit confirmReader.close() calls inside branches",
+        "Rely solely on the finally block to close confirmReader",
+        "Remove close calls from: confirmation-success branch, promptForClarification branch, isClarificationOption branch, numericInput block",
+        "Example: confirmReader.close() is called exactly once in finally block",
+        "Negative case: current code can call close() twice causing potential errors",
+        "All confirmation flows still work correctly"
+      ],
+      "startedAt": "2026-02-07T10:05:42.356612+00:00",
+      "completedAt": "2026-02-07T10:11:25.384543+00:00",
+      "updatedAt": "2026-02-07T10:11:25.384195+00:00"
+    },
+    {
+      "id": "US-006",
+      "title": "Fix stale state in resolution loop",
+      "status": "done",
+      "dependsOn": [],
+      "description": "As a developer, I want the resolution loop to use current state so that resolutions don't conflict.",
+      "acceptanceCriteria": [
+        "In resolve.ts around lines 662-715, update snapshot after each updateStateAfterResolution call",
+        "Assign snapshot = updatedSnapshot after saveCliState",
+        "Re-derive pendingQueries from updated snapshot.blockingQueries or re-read from snapshot",
+        "Pass current snapshot.state (not original) to resolveBlocking",
+        "Example: second resolution in loop sees results of first resolution",
+        "Negative case: current code uses original snapshot throughout loop causing stale reads"
+      ],
+      "startedAt": "2026-02-07T10:11:27.452425+00:00",
+      "completedAt": "2026-02-07T10:16:36.467347+00:00",
+      "updatedAt": "2026-02-07T10:16:36.467187+00:00"
+    },
+    {
+      "id": "US-007",
+      "title": "Extract shared display utilities module",
+      "status": "done",
+      "dependsOn": [],
+      "description": "As a developer, I want display helpers in a shared module so that code is not duplicated across commands.",
+      "acceptanceCriteria": [
+        "Create src/cli/utils/displayUtils.ts with exported functions",
+        "Extract formatRelativeTime, formatConfidence, getBorderChars, wrapInBox",
+        "Move any related tests or comments",
+        "Update resume.ts to import from displayUtils and remove local definitions",
+        "Update resolve.ts to import from displayUtils and remove local definitions",
+        "Update status.ts to import from displayUtils and remove local definitions",
+        "Ensure TypeScript types are properly exported",
+        "Example: all three files import { formatRelativeTime } from './utils/displayUtils'",
+        "Negative case: duplicated 30+ line functions across 3 files",
+        "Scan codebase for any other files with similar duplicated helpers"
+      ],
+      "startedAt": "2026-02-07T10:16:38.547794+00:00",
+      "completedAt": "2026-02-07T10:28:58.718438+00:00",
+      "updatedAt": "2026-02-07T10:28:58.718122+00:00"
+    },
+    {
+      "id": "US-008",
+      "title": "Add getDefaultLedgerPath helper in state.ts",
+      "status": "done",
+      "dependsOn": [],
+      "description": "As a developer, I want a robust ledgerPath derivation so that path computation doesn't silently fail.",
+      "acceptanceCriteria": [
+        "Add exported function getDefaultLedgerPath(statePath: string): string in state.ts",
+        "Implementation: return path.join(path.dirname(statePath), '.criticality', 'ledger')",
+        "Update resume.ts line 180 to use getDefaultLedgerPath(statePath) instead of string.replace",
+        "Example: getDefaultLedgerPath('/foo/bar/state.json') returns '/foo/bar/.criticality/ledger'",
+        "Negative case: current string.replace fails silently if pattern doesn't match"
+      ],
+      "startedAt": "2026-02-07T10:29:00.784833+00:00",
+      "completedAt": "2026-02-07T10:34:06.783711+00:00",
+      "updatedAt": "2026-02-07T10:34:06.783582+00:00"
+    },
+    {
+      "id": "US-009",
+      "title": "Use canonical PHASES constant in status.ts",
+      "status": "done",
+      "dependsOn": [],
+      "description": "As a developer, I want status.ts to use the canonical phase definitions so that phases stay in sync.",
+      "acceptanceCriteria": [
+        "Investigate codebase to find canonical PHASES or PHASE_ENUM definition",
+        "Import PHASES constant into status.ts (around lines 349-359)",
+        "Replace hardcoded phase array with PHASES",
+        "Compute phaseIndex = PHASES.indexOf(snapshot.state.phase)",
+        "Compute totalPhases = PHASES.length",
+        "Handle unknown phase case: if phaseIndex === -1, show 'Unknown phase' message or raw phase value",
+        "Only compute progress when phaseIndex >= 0",
+        "Example: adding a new phase to canonical source automatically updates status display",
+        "Negative case: hardcoded array becomes outdated when phases change"
+      ],
+      "startedAt": "2026-02-07T10:34:08.856274+00:00",
+      "completedAt": "2026-02-07T10:39:56.071880+00:00",
+      "updatedAt": "2026-02-07T10:39:56.071738+00:00"
+    },
+    {
+      "id": "US-010",
+      "title": "Fix listener leaks in status.ts watch mode",
+      "status": "done",
+      "dependsOn": [],
+      "description": "As a developer, I want watch mode listeners to be properly cleaned up so that no listener leaks occur.",
+      "acceptanceCriteria": [
+        "In status.ts around lines 526-543, create named handler for beforeExit listener",
+        "Capture gracefulShutdown function reference for SIGINT handler",
+        "When watch mode stops (running becomes false or cleanup path):",
+        "  - Call process.off('SIGINT', gracefulShutdown)",
+        "  - Call process.off('beforeExit', beforeExitHandler)",
+        "  - Clear intervalId",
+        "Example: calling handleStatusCommand multiple times doesn't accumulate listeners",
+        "Negative case: current code never removes listeners causing memory/listener leaks",
+        "Scan for similar listener registration patterns elsewhere in codebase"
+      ],
+      "startedAt": "2026-02-07T10:39:58.143392+00:00",
+      "completedAt": "2026-02-07T10:44:54.562773+00:00",
+      "updatedAt": "2026-02-07T10:44:54.562632+00:00"
+    },
+    {
+      "id": "US-011",
+      "title": "Extract withErrorHandling helper in cli/index.ts",
+      "status": "done",
+      "dependsOn": [],
+      "description": "As a developer, I want a shared error handling wrapper so that command handlers don't duplicate try/catch logic.",
+      "acceptanceCriteria": [
+        "Create src/cli/utils/errorHandling.ts",
+        "Export withErrorHandling function that accepts sync or async function",
+        "Implementation: try -> await fn() -> process.exit(result.exitCode), catch -> console.error if Error -> process.exit(1)",
+        "Update handleVersionCommandWithContext to use withErrorHandling",
+        "Update handleStatusCommandWithContext to use withErrorHandling",
+        "Update handleResolveCommandWithContext to use withErrorHandling",
+        "Update handleResumeCommandWithContext to use withErrorHandling",
+        "Remove duplicated try/catch/process.exit from all four wrappers",
+        "Example: each wrapper becomes return withErrorHandling(() => handleXCommand())",
+        "Negative case: identical 10+ line try/catch blocks in 4 places"
+      ],
+      "startedAt": "2026-02-07T10:44:56.635818+00:00",
+      "completedAt": "2026-02-07T10:58:08.812549+00:00",
+      "updatedAt": "2026-02-07T10:58:08.812192+00:00"
+    },
+    {
+      "id": "US-012",
+      "title": "Fix swallowed error in top-level catch",
+      "status": "done",
+      "dependsOn": [],
+      "description": "As a developer, I want top-level errors to be logged so that debugging is possible.",
+      "acceptanceCriteria": [
+        "In cli/index.ts around lines 242-247, update catch block to capture exception",
+        "Change bare catch to catch (err) or catch (error)",
+        "Log error details with console.error before process.exit(1)",
+        "Include error message and/or stack trace",
+        "Retain process.exit(1) after logging",
+        "Example: unexpected error shows message 'Error: something failed' before exit",
+        "Negative case: current code exits silently making debugging impossible"
+      ],
+      "startedAt": "2026-02-07T10:58:10.888005+00:00",
+      "completedAt": "2026-02-07T11:01:51.651831+00:00",
+      "updatedAt": "2026-02-07T11:01:51.651476+00:00"
+    },
+    {
+      "id": "US-013",
+      "title": "Handle undefined command variable in cli/index.ts",
+      "status": "done",
+      "dependsOn": [],
+      "description": "As a developer, I want command variable to be safely typed so that noUncheckedIndexedAccess is satisfied.",
+      "acceptanceCriteria": [
+        "In cli/index.ts line 86, add type-narrowing guard for command",
+        "Either replace destructuring with const command = args[0] ?? ''",
+        "Or add explicit undefined check before switch statement",
+        "Handle missing command case (show help or exit with message)",
+        "Update commandArgs handling accordingly",
+        "Remove reliance on String(command) type coercion later in function",
+        "Example: running CLI with no command shows help instead of undefined behavior",
+        "Negative case: TypeScript error with noUncheckedIndexedAccess enabled"
+      ],
+      "startedAt": "2026-02-07T11:01:53.714719+00:00",
+      "completedAt": "2026-02-07T11:06:01.422934+00:00",
+      "updatedAt": "2026-02-07T11:06:01.422789+00:00"
+    },
+    {
+      "id": "US-014",
+      "title": "Extract withRecovery helper in state.ts",
+      "status": "done",
+      "dependsOn": [],
+      "description": "As a developer, I want recovery logic in a shared helper so that loadCliStateWithRecovery and loadStateWithRecovery don't duplicate code.",
+      "acceptanceCriteria": [
+        "Create and export withRecovery<T> generic function in state.ts",
+        "Signature: withRecovery<T>(loadFn: () => Promise<T>, resetFn: () => Promise<T>, filePath: string, options?: RecoveryOptions): Promise<T>",
+        "Encapsulate: error classification (StatePersistenceError types), display/prompt handling, file stat/last-modified, backup via renameSync with timestamp, throw on user decline",
+        "Rewrite loadCliStateWithRecovery to use withRecovery",
+        "Rewrite loadStateWithRecovery to use withRecovery",
+        "Preserve errorType, error.cause/details propagation",
+        "Ensure proper generic return typing",
+        "Example: adding new recovery behavior only requires changing withRecovery",
+        "Negative case: 80+ lines of near-identical recovery logic duplicated"
+      ],
+      "startedAt": "2026-02-07T11:06:03.497654+00:00",
+      "completedAt": "2026-02-07T11:14:32.170104+00:00",
+      "updatedAt": "2026-02-07T11:14:32.169980+00:00"
+    },
+    {
+      "id": "US-015",
+      "title": "Preserve existing timestamps in upgradeToCliState",
+      "status": "done",
+      "dependsOn": [],
+      "description": "As a developer, I want upgradeToCliState to preserve existing timestamps so that metadata isn't lost on upgrade.",
+      "acceptanceCriteria": [
+        "In state.ts around lines 240-249, update upgradeToCliState function",
+        "Use snapshot.createdAt ?? now instead of unconditionally setting now",
+        "Use snapshot.lastActivity ?? now instead of unconditionally setting now",
+        "Only initialize resolvedQueries to empty array if snapshot.resolvedQueries is missing",
+        "Example: upgrading state with createdAt='2024-01-01' preserves that date",
+        "Negative case: current code overwrites all timestamps losing original creation time"
+      ],
+      "startedAt": "2026-02-07T11:14:34.241818+00:00",
+      "completedAt": "2026-02-07T11:21:11.233195+00:00",
+      "updatedAt": "2026-02-07T11:21:11.233068+00:00"
+    },
+    {
+      "id": "US-016",
+      "title": "Hoist dynamic import in saveCliState",
+      "status": "done",
+      "dependsOn": [],
+      "description": "As a developer, I want fs/promises imported statically so that module loading is efficient.",
+      "acceptanceCriteria": [
+        "In state.ts, add static import at module level: import fs from 'node:fs/promises' or import { writeFile, rename, unlink } from 'node:fs/promises'",
+        "Remove dynamic import of 'node:fs/promises' from inside saveCliState (around lines 131-149)",
+        "Update saveCliState to use the hoisted fs functions",
+        "Preserve existing StatePersistenceError construction and cleanup logic",
+        "Example: saveCliState no longer calls import() internally",
+        "Negative case: dynamic import causes repeated module loads on each save"
+      ],
+      "startedAt": "2026-02-07T11:21:13.307039+00:00",
+      "completedAt": "2026-02-07T11:25:21.339094+00:00",
+      "updatedAt": "2026-02-07T11:25:21.338939+00:00"
+    },
+    {
+      "id": "US-017",
+      "title": "Make CliContext.config non-optional",
+      "status": "done",
+      "dependsOn": [],
+      "description": "As a developer, I want CliContext.config to always be defined so that downstream code doesn't need undefined checks.",
+      "acceptanceCriteria": [
+        "In cli/types.ts around lines 40-78, change CliContext.config from optional to required",
+        "Remove undefined from CliConfig union if present",
+        "Update createCliApp to always construct and assign a CliConfig instance",
+        "Update createCliApp return type to reflect non-optional config",
+        "Find and update any usages that check config === undefined",
+        "Example: code can access context.config.watchInterval without optional chaining",
+        "Negative case: optional config requires ?. and undefined checks everywhere"
+      ],
+      "startedAt": "2026-02-07T11:25:23.410026+00:00",
+      "completedAt": "2026-02-07T11:34:52.376395+00:00",
+      "updatedAt": "2026-02-07T11:34:52.376268+00:00"
+    },
+    {
+      "id": "US-018",
+      "title": "Add watch_interval validation in parser.ts",
+      "status": "done",
+      "dependsOn": [],
+      "description": "As a developer, I want watch_interval to be validated so that invalid values are rejected.",
+      "acceptanceCriteria": [
+        "In config/parser.ts around lines 315-333, add validation after validateNumber call",
+        "Verify watch_interval is finite (Number.isFinite)",
+        "Verify watch_interval is greater than 0",
+        "If invalid, throw validation error with clear message mentioning cli.watch_interval",
+        "Or fall back to DEFAULT_CLI_CONFIG.watch_interval",
+        "Example: watch_interval: 5000 is accepted",
+        "Negative case: watch_interval: -1 or watch_interval: Infinity should fail or use default"
+      ],
+      "startedAt": "2026-02-07T11:34:54.448812+00:00",
+      "completedAt": "2026-02-07T11:43:13.097986+00:00",
+      "updatedAt": "2026-02-07T11:43:13.097652+00:00"
+    },
+    {
+      "id": "US-019",
+      "title": "Scan and fix similar patterns across codebase",
+      "status": "done",
+      "dependsOn": [
+        "US-007",
+        "US-010",
+        "US-011",
+        "US-014",
+        "US-016"
+      ],
+      "description": "As a developer, I want to proactively fix similar issues elsewhere so that the codebase is consistent.",
+      "acceptanceCriteria": [
+        "Scan for other dynamic imports that should be static",
+        "Scan for other listener registrations without cleanup",
+        "Scan for other duplicated helper functions that should be extracted",
+        "Scan for other double-close or resource cleanup issues",
+        "Scan for other inverted guard logic patterns",
+        "Document any additional issues found in PR comments or commit message",
+        "Fix issues following the same patterns established in earlier stories",
+        "Example: find and fix dynamic import in another file using same pattern as US-016",
+        "Negative case: only fixing explicitly mentioned issues leaves similar bugs elsewhere"
+      ],
+      "startedAt": "2026-02-07T11:43:15.170565+00:00",
+      "completedAt": "2026-02-07T12:09:35.008207+00:00",
+      "updatedAt": "2026-02-07T12:09:35.008078+00:00"
+    }
+  ]
+}

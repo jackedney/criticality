@@ -1,0 +1,343 @@
+{
+  "version": 1,
+  "project": "Fix All Review Comments from .ralph/reviews.md",
+  "overview": "Address all code review comments and issues identified in .ralph/reviews.md across multiple files including markdown formatting fixes, TypeScript type corrections, test improvements, and code quality enhancements.",
+  "goals": [
+    "Fix all markdownlint violations in documentation files",
+    "Fix multi-line rendering issues in CLI components",
+    "Fix type safety issues across TypeScript files",
+    "Fix test reliability and cleanup issues",
+    "Remove redundant code and improve code quality"
+  ],
+  "nonGoals": [
+    "Adding new features",
+    "Refactoring beyond what is required for the fixes",
+    "Updating dependencies",
+    "Performance optimizations beyond the stripAnsi regex fix"
+  ],
+  "successMetrics": [
+    "All markdownlint violations are fixed",
+    "All tests pass after changes",
+    "TypeScript compiles without errors",
+    "No duplicate type definitions in test files",
+    "All global.fetch mocks are properly restored in test teardown"
+  ],
+  "openQuestions": [],
+  "stack": {
+    "framework": "TypeScript/Node.js",
+    "hosting": "N/A",
+    "database": "N/A",
+    "auth": "N/A"
+  },
+  "routes": [],
+  "uiNotes": [],
+  "dataModel": [],
+  "importFormat": {
+    "description": "N/A",
+    "example": {}
+  },
+  "rules": [
+    "Preserve existing behavior - these are fixes only",
+    "All tests must continue to pass after changes"
+  ],
+  "qualityGates": [
+    "npm run lint",
+    "npm run typecheck",
+    "npm test"
+  ],
+  "technicalNotes": [
+    "The PR23_REVIEW_FIXES_GUIDE.md file may have been deleted based on git status showing 'D PR23_REVIEW_FIXES_GUIDE.md' - verify if file exists before fixing",
+    "Multiple test files need afterEach cleanup for global.fetch mocking",
+    "The orchestrator.ts fix requires understanding how generateBlockingQueryId() works",
+    "TypedMap forEach fix needs to handle thisArg correctly while maintaining type safety"
+  ],
+  "stories": [
+    {
+      "id": "US-001",
+      "title": "Fix PR23_REVIEW_FIXES_GUIDE.md Markdown Formatting",
+      "status": "done",
+      "dependsOn": [],
+      "description": "Fix markdownlint violations: add blank lines before and after fenced code blocks (MD031) and normalize ordered-list prefixes to use consistent numbering style (MD029). Scan all occurrences of ``` blocks and ordered lists and apply spacing and prefix fixes consistently.",
+      "acceptanceCriteria": [
+        "All fenced code blocks have blank lines before and after them",
+        "All ordered lists use consistent numbering (either all '1.' or sequential)",
+        "markdownlint passes for this file",
+        "NOTE: Verify file exists first - git status shows it may be deleted"
+      ],
+      "startedAt": "2026-02-09T00:00:38.821052+00:00",
+      "completedAt": "2026-02-09T00:16:03.270230+00:00",
+      "updatedAt": "2026-02-09T00:16:03.270110+00:00"
+    },
+    {
+      "id": "US-002",
+      "title": "Fix PR23_REVIEW_FIXES_GUIDE.md TOC Anchor",
+      "status": "done",
+      "dependsOn": [
+        "US-001"
+      ],
+      "description": "Update the Table of Contents line that contains a mistyped anchor '#trivialnippick-issues' to the correct '#trivial-nitpick-issues' so the TOC link matches the 'Trivial/Nitpick Issues' heading (fixes MD051).",
+      "acceptanceCriteria": [
+        "TOC anchor '#trivialnippick-issues' is replaced with '#trivial-nitpick-issues'",
+        "markdownlint MD051 passes for this file"
+      ],
+      "startedAt": "2026-02-09T00:16:05.360839+00:00",
+      "completedAt": "2026-02-09T00:20:45.958621+00:00",
+      "updatedAt": "2026-02-09T00:20:45.958505+00:00"
+    },
+    {
+      "id": "US-003",
+      "title": "Add H1 Heading to README.md",
+      "status": "done",
+      "dependsOn": [],
+      "description": "Insert a top-level H1 heading immediately before the opening code fence so the file no longer starts with a fenced block (fixes markdownlint MD041). Add a single-line Markdown H1 (e.g. '# Criticality' or appropriate project name) above the existing ASCII art code block.",
+      "acceptanceCriteria": [
+        "README.md starts with an H1 heading before the ASCII art block",
+        "markdownlint MD041 passes for this file",
+        "The heading accurately represents the project name"
+      ],
+      "startedAt": "2026-02-09T00:20:48.049588+00:00",
+      "completedAt": "2026-02-09T00:24:08.854251+00:00",
+      "updatedAt": "2026-02-09T00:24:08.854116+00:00"
+    },
+    {
+      "id": "US-004",
+      "title": "Remove Duplicate ProtocolState Section in SPECIFICATION.md",
+      "status": "done",
+      "dependsOn": [],
+      "description": "Remove the stale duplicate '#### Blocking State' section and the stray message that appear after the newly added ProtocolState definition around lines 1767-1774. Delete the repeated header and the repeated TypeScript block that defines ProtocolState so only the new single ProtocolState definition remains.",
+      "acceptanceCriteria": [
+        "Only one ProtocolState definition exists in SPECIFICATION.md",
+        "No duplicate '#### Blocking State' section exists",
+        "No stray 'Full context is available via CLI' message remains in wrong location"
+      ],
+      "startedAt": "2026-02-09T00:24:10.941443+00:00",
+      "completedAt": "2026-02-09T00:27:33.497198+00:00",
+      "updatedAt": "2026-02-09T00:27:33.497022+00:00"
+    },
+    {
+      "id": "US-005",
+      "title": "Fix Multi-line Rendering in LiveDisplay.ts",
+      "status": "done",
+      "dependsOn": [],
+      "description": "The update() rendering only clears the current line so multi-line output leaves stale lines. Add tracking of the previous render's line count (e.g., a new private prevLineCount:number on LiveDisplay). Before writing, compute how many terminal lines lastOutput occupied, move the cursor up that many lines and clear each line (or use clearScreenDown) then write the new output. Update lastOutput and prevLineCount after render. Apply the same clear-before-write logic to spinner/timer update methods and ensure timers stop/cleanup still clear all previously rendered lines when isRunning becomes false.",
+      "acceptanceCriteria": [
+        "LiveDisplay has a private prevLineCount property",
+        "Before rendering new output, previous lines are properly cleared",
+        "Multi-line output no longer leaves stale lines on terminal",
+        "Spinner/timer update methods use the same clear-before-write pattern",
+        "Timer cleanup properly clears all previously rendered lines"
+      ],
+      "startedAt": "2026-02-09T00:27:35.567907+00:00",
+      "completedAt": "2026-02-09T00:34:28.774326+00:00",
+      "updatedAt": "2026-02-09T00:34:28.774207+00:00"
+    },
+    {
+      "id": "US-006",
+      "title": "Fix Boolean Coercion in Spinner.ts Constructor",
+      "status": "done",
+      "dependsOn": [],
+      "description": "The constructor currently sets this.isTty from process.stdout.isTTY which is boolean | undefined. Change the assignment in the Spinner constructor to explicitly coerce to a boolean (e.g., use Boolean(...) or double-bang) so this.isTty is always a true boolean.",
+      "acceptanceCriteria": [
+        "this.isTty assignment uses Boolean() or !! for explicit coercion",
+        "this.isTty is always a true boolean, never undefined",
+        "TypeScript compiles without errors"
+      ],
+      "startedAt": "2026-02-09T00:34:30.862819+00:00",
+      "completedAt": "2026-02-09T00:40:19.723450+00:00",
+      "updatedAt": "2026-02-09T00:40:19.723336+00:00"
+    },
+    {
+      "id": "US-007",
+      "title": "Fix Unknown Suggestion Entries in errors.ts",
+      "status": "done",
+      "dependsOn": [],
+      "description": "The 'unknown' suggestion entries in src/cli/errors.ts currently reference incorrect product/org artifacts. Update the array entry keyed 'unknown' to use this project's actual log file path and repository URL. Replace 'cat .ralph/errors.log' with the correct local log path used by this project and change the 'https://github.com/anomalyco/criticality/issues' URL to this repo's issues page. Ensure the other suggestion actions ('crit status --watch' and 'crit resume --verbose') reflect the actual CLI command names used in this codebase.",
+      "acceptanceCriteria": [
+        "Log file path references correct project location",
+        "GitHub issues URL points to correct repository",
+        "CLI command names match actual commands in this project",
+        "All suggestion actions are valid for this codebase"
+      ],
+      "startedAt": "2026-02-09T00:40:21.812109+00:00",
+      "completedAt": "2026-02-09T00:45:11.121947+00:00",
+      "updatedAt": "2026-02-09T00:45:11.121822+00:00"
+    },
+    {
+      "id": "US-008",
+      "title": "Fix Archive Path Construction in operations.ts",
+      "status": "done",
+      "dependsOn": [],
+      "description": "The archive path construction in archivePhaseArtifacts currently always prepends a new '.criticality' folder which double-nests when statePath already lives under a .criticality directory. Change the logic to detect whether statePath/stateDir already contains a '.criticality' ancestor and if so use that existing .criticality directory as the base for archives, otherwise fall back to path.join(stateDir, '.criticality', 'archives').",
+      "acceptanceCriteria": [
+        "Archive path does not double-nest .criticality directories",
+        "Logic detects if statePath already contains .criticality ancestor",
+        "Existing .criticality directory is reused when present",
+        "Fallback to creating new .criticality/archives works correctly"
+      ],
+      "startedAt": "2026-02-09T00:45:13.209500+00:00",
+      "completedAt": "2026-02-09T00:51:19.351960+00:00",
+      "updatedAt": "2026-02-09T00:51:19.351841+00:00"
+    },
+    {
+      "id": "US-009",
+      "title": "Optimize RegExp in displayUtils.ts stripAnsi",
+      "status": "done",
+      "dependsOn": [],
+      "description": "Replace the per-call RegExp construction inside stripAnsi with a reusable regex instance. Move the ANSI escape pattern to a module-level constant (or use a regex literal) and reference that constant from stripAnsi so the regex is compiled once.",
+      "acceptanceCriteria": [
+        "ANSI escape pattern is defined as module-level constant",
+        "stripAnsi function uses the constant instead of creating new RegExp",
+        "Regex is compiled only once at module load time"
+      ],
+      "startedAt": "2026-02-09T00:51:21.435083+00:00",
+      "completedAt": "2026-02-09T00:55:30.649185+00:00",
+      "updatedAt": "2026-02-09T00:55:30.648883+00:00"
+    },
+    {
+      "id": "US-010",
+      "title": "Fix Array Index Access in parser.test.ts",
+      "status": "done",
+      "dependsOn": [],
+      "description": "The test indexes into config.notifications.channels assuming elements exist but with noUncheckedIndexedAccess enabled each channels[index] can be undefined. Update the assertions to guard element access by either destructuring the array after the defined check or explicitly assert config.notifications.channels[0] !== undefined and config.notifications.channels[1] !== undefined before accessing .type/.endpoint/.enabled/.events. Apply the same pattern for all occurrences around lines ~186, ~234, ~257.",
+      "acceptanceCriteria": [
+        "All array index accesses are guarded with undefined checks",
+        "Either destructuring with defined checks or explicit !== undefined assertions",
+        "TypeScript compiles without noUncheckedIndexedAccess errors",
+        "Pattern applied consistently at lines ~186, ~234, ~257"
+      ],
+      "startedAt": "2026-02-09T00:55:32.735381+00:00",
+      "completedAt": "2026-02-09T01:05:16.694652+00:00",
+      "updatedAt": "2026-02-09T01:05:16.694539+00:00"
+    },
+    {
+      "id": "US-011",
+      "title": "Await fc.assert() in validator.test.ts",
+      "status": "done",
+      "dependsOn": [],
+      "description": "The property-based assertions using fc.assert(fc.asyncProperty(...)) are not awaited, causing tests to complete before the properties run. Update each affected it(...) callback to be async and prepend await to the fc.assert(...) call for tests like 'should accept any threshold in valid range (0, 1]', 'should reject any threshold > 1.0', 'should accept any positive integer for retry attempts up to 100', and additional cases around lines 773-807.",
+      "acceptanceCriteria": [
+        "All fc.assert() calls with fc.asyncProperty are awaited",
+        "All affected it() callbacks are async",
+        "Tests properly wait for property-based assertions to complete",
+        "Affected tests around lines 650-714 and 773-807 are fixed"
+      ],
+      "startedAt": "2026-02-09T01:05:18.785843+00:00",
+      "completedAt": "2026-02-09T01:12:02.989860+00:00",
+      "updatedAt": "2026-02-09T01:12:02.989744+00:00"
+    },
+    {
+      "id": "US-012",
+      "title": "Restore global.fetch in integration.test.ts",
+      "status": "done",
+      "dependsOn": [],
+      "description": "The test currently replaces global.fetch with mockFetch in beforeEach but never restores it. Capture the original global.fetch before overriding in beforeEach and restore it in afterEach. Also ensure the mock is cleared (mockFetch.mockReset() or vi.restoreAllMocks()).",
+      "acceptanceCriteria": [
+        "Original global.fetch is captured before overriding",
+        "afterEach restores global.fetch to original value",
+        "Mock is properly cleared/reset in afterEach",
+        "No cross-test leakage of mocked fetch"
+      ],
+      "startedAt": "2026-02-09T01:12:05.072435+00:00",
+      "completedAt": "2026-02-09T01:17:37.548320+00:00",
+      "updatedAt": "2026-02-09T01:17:37.548019+00:00"
+    },
+    {
+      "id": "US-013",
+      "title": "Remove Duplicate ArtifactType in integration.test.ts",
+      "status": "done",
+      "dependsOn": [
+        "US-012"
+      ],
+      "description": "Remove the duplicated ArtifactType definition in the test and import the canonical type from the shared module instead. Delete the local type alias named ArtifactType and add an import for ArtifactType from the production module that defines it (transitions.ts), then update any references to use the imported ArtifactType.",
+      "acceptanceCriteria": [
+        "Local ArtifactType definition is removed",
+        "ArtifactType is imported from production module (transitions.ts)",
+        "All references use the imported type",
+        "Tests stay in sync with production type changes"
+      ],
+      "startedAt": "2026-02-09T01:17:39.633437+00:00",
+      "completedAt": "2026-02-09T01:24:43.171305+00:00",
+      "updatedAt": "2026-02-09T01:24:43.171190+00:00"
+    },
+    {
+      "id": "US-014",
+      "title": "Restore global.fetch in service.test.ts",
+      "status": "done",
+      "dependsOn": [],
+      "description": "The tests set global.fetch in beforeEach via mockFetch but never restore it. Add an afterEach that restores global.fetch to its original value and clears the mock to avoid cross-test leakage. Capture the originalFetch before overwriting, then in afterEach restore global.fetch = originalFetch and call mockFetch.mockRestore() or mockFetch.mockClear().",
+      "acceptanceCriteria": [
+        "Original global.fetch is captured before overriding",
+        "afterEach restores global.fetch to original value",
+        "Mock is properly cleared/reset in afterEach",
+        "No cross-test leakage of mocked fetch"
+      ],
+      "startedAt": "2026-02-09T01:24:45.238571+00:00",
+      "completedAt": "2026-02-09T01:29:54.091344+00:00",
+      "updatedAt": "2026-02-09T01:29:54.091228+00:00"
+    },
+    {
+      "id": "US-015",
+      "title": "Remove Redundant Type Assertion in service.ts",
+      "status": "done",
+      "dependsOn": [],
+      "description": "In the send method, remove the redundant type assertion for webhookResult in the else branch. Rely on TypeScript's control-flow narrowing (webhookResult.success === false) to access the error property directly and return { success: false, channel, error: webhookResult.error } instead of creating a new failureResult variable.",
+      "acceptanceCriteria": [
+        "Redundant type assertion is removed",
+        "Control-flow narrowing is used to access error property",
+        "No unnecessary failureResult variable",
+        "TypeScript compiles without errors"
+      ],
+      "startedAt": "2026-02-09T01:29:56.180148+00:00",
+      "completedAt": "2026-02-09T01:34:07.944175+00:00",
+      "updatedAt": "2026-02-09T01:34:07.944058+00:00"
+    },
+    {
+      "id": "US-016",
+      "title": "Consolidate Fetch Mocking in webhook.test.ts",
+      "status": "done",
+      "dependsOn": [],
+      "description": "Remove the local fetch stubbing/restore in the ping tests and reuse the shared mock from the outer beforeEach/afterEach. Replace creation of local variables originalFetch and pingMockFetch with the existing shared mock (mockFetch) and call mockFetch.mockResolvedValueOnce/mockRejectedValueOnce as needed. Assert expectations against mockFetch and remove the redundant global.fetch = originalFetch restores.",
+      "acceptanceCriteria": [
+        "Local originalFetch and pingMockFetch variables are removed",
+        "Ping tests use shared mockFetch from outer scope",
+        "Assertions use mockFetch instead of local mocks",
+        "Redundant global.fetch restores are removed"
+      ],
+      "startedAt": "2026-02-09T01:34:10.027779+00:00",
+      "completedAt": "2026-02-09T01:37:46.798270+00:00",
+      "updatedAt": "2026-02-09T01:37:46.798155+00:00"
+    },
+    {
+      "id": "US-017",
+      "title": "Fix Query ID in orchestrator.ts addResolution",
+      "status": "done",
+      "dependsOn": [],
+      "description": "The addResolution function is recording a synthetic queryId based only on phase which doesn't match the real IDs produced by generateBlockingQueryId(). Update the flow to use the actual blocking query id: when generating a blocking query, capture that exact id and pass it into addResolution (or change addResolution to accept a queryId parameter) and store that id on the pendingResolutions entry instead of `blocking-${phase}`. Ensure this ties to the same id used by the blockingQueries filtering logic.",
+      "acceptanceCriteria": [
+        "addResolution uses actual query ID from generateBlockingQueryId()",
+        "pendingResolutions entries store the real query ID",
+        "Query IDs match between blockingQueries and pendingResolutions",
+        "No synthetic `blocking-${phase}` IDs are used"
+      ],
+      "startedAt": "2026-02-09T01:37:48.887680+00:00",
+      "completedAt": "2026-02-09T01:45:57.719382+00:00",
+      "updatedAt": "2026-02-09T01:45:57.719132+00:00"
+    },
+    {
+      "id": "US-018",
+      "title": "Fix thisArg in TypedMap forEach",
+      "status": "done",
+      "dependsOn": [],
+      "description": "The forEach implementation in TypedMap ignores the provided thisArg when invoking the user callback because it wraps callbackfn in an arrow function. Change the implementation to call this.map.forEach with a normal function that forwards the original callbackfn using Function.prototype.call/apply (or pass the callbackfn directly) so that the thisArg parameter is applied to callbackfn as Map.prototype.forEach does.",
+      "acceptanceCriteria": [
+        "forEach implementation respects thisArg parameter",
+        "Callback is invoked with correct this context",
+        "Arrow function wrapper is replaced with proper function binding",
+        "Behavior matches native Map.prototype.forEach"
+      ],
+      "startedAt": "2026-02-09T01:45:59.807898+00:00",
+      "completedAt": "2026-02-09T01:51:39.827001+00:00",
+      "updatedAt": "2026-02-09T01:51:39.826887+00:00"
+    }
+  ]
+}

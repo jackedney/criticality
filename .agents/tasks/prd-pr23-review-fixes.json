@@ -1,0 +1,500 @@
+{
+  "version": 1,
+  "project": "PR23 CodeRabbit Review Fixes",
+  "overview": "Apply all 41 fixes identified in the CodeRabbit review of PR #23, addressing critical bugs (Map iteration, committed JS files), major issues (notification system wiring, cron semantics, timezone tests), and minor/trivial improvements across the notification system, CLI, and protocol components.",
+  "goals": [
+    "Fix critical Map iteration bug that causes telemetry data loss",
+    "Remove compiled .js files from src/ and prevent future commits",
+    "Wire NotificationService correctly into resume command",
+    "Fix POSIX cron OR semantics for day-of-month/day-of-week",
+    "Make all tests timezone-independent and cross-platform",
+    "Resolve lint violations (regex control characters, etc.)",
+    "Fix edge cases in spinner, cursor, state persistence, and type safety"
+  ],
+  "nonGoals": [
+    "Adding new features beyond what's needed for the fixes",
+    "Refactoring code not mentioned in the review",
+    "Changing the overall architecture or design patterns",
+    "Rewriting git history to remove compiled files (just untrack them)"
+  ],
+  "successMetrics": [
+    "npm run test passes with all tests green",
+    "npm run lint passes with no errors",
+    "npm run typecheck passes with no errors",
+    "npm run build succeeds and outputs to dist/",
+    "No .js files exist in src/ directory",
+    "All 41 review comments addressed"
+  ],
+  "openQuestions": [],
+  "stack": {
+    "framework": "Node.js with TypeScript",
+    "hosting": "CLI tool (local execution)",
+    "database": "File-based state persistence",
+    "auth": "N/A"
+  },
+  "routes": [],
+  "uiNotes": [
+    "CLI output uses ANSI escape codes for spinner and cursor control"
+  ],
+  "dataModel": [
+    {
+      "entity": "ProtocolTelemetry",
+      "fields": [
+        "phases (Map)",
+        "modelCalls",
+        "promptTokens",
+        "completionTokens",
+        "executionTimeMs"
+      ]
+    },
+    {
+      "entity": "NotificationChannel",
+      "fields": [
+        "type",
+        "endpoint",
+        "enabled",
+        "events"
+      ]
+    },
+    {
+      "entity": "ReminderState",
+      "fields": [
+        "enabled",
+        "schedule",
+        "lastSent",
+        "nextScheduled"
+      ]
+    }
+  ],
+  "importFormat": {
+    "description": "Not applicable - this is a fix PR",
+    "example": {}
+  },
+  "rules": [
+    "All TypeScript source files compile to dist/, never to src/",
+    "Map iteration must use .values(), .keys(), or .entries() - never array-style access",
+    "POSIX cron uses OR semantics when both day-of-month and day-of-week are restricted",
+    "Tests must not depend on local timezone - use UTC methods or fixed timezones",
+    "State changes must be persisted via saveState() calls",
+    "Async operations must be awaited or have error handlers - no fire-and-forget"
+  ],
+  "qualityGates": [
+    "npm run test",
+    "npm run lint",
+    "npm run typecheck",
+    "npm run build"
+  ],
+  "stories": [
+    {
+      "id": "US-001",
+      "title": "Remove compiled JS files from src/ and update .gitignore",
+      "status": "done",
+      "dependsOn": [],
+      "description": "As a developer, I want compiled JavaScript files removed from src/ and prevented from being committed, so that transpilation artifacts don't cause bugs like the Map iteration issue.",
+      "acceptanceCriteria": [
+        "Add 'src/**/*.js' to .gitignore",
+        "Add 'src/**/*.js.map' to .gitignore",
+        "Add '!src/**/*.config.js' exception for any config files",
+        "Run 'git rm --cached' on all .js files in src/",
+        "Verify no .js files exist in src/ after cleanup",
+        "Example: ls src/**/*.js returns no files",
+        "Negative case: Attempting to git add src/foo.js should be ignored by git",
+        "npm run build still outputs correctly to dist/"
+      ],
+      "startedAt": "2026-02-08T12:02:42.674073+00:00",
+      "completedAt": "2026-02-08T12:17:39.440861+00:00",
+      "updatedAt": "2026-02-08T12:17:39.440707+00:00"
+    },
+    {
+      "id": "US-002",
+      "title": "Fix notification event name consistency in SPECIFICATION.md",
+      "status": "done",
+      "dependsOn": [],
+      "description": "As a developer, I want the notification event names in documentation to match the schema, so that users configure notifications correctly.",
+      "acceptanceCriteria": [
+        "Update SPECIFICATION.md to use canonical event names: 'block', 'complete', 'error', 'phase_change'",
+        "Remove 'on_' prefix from all event name examples",
+        "Example: 'events = [\"block\", \"complete\", \"error\"]' instead of 'events = [\"on_block\", \"on_complete\", \"on_error\"]'",
+        "Negative case: No instances of 'on_block', 'on_complete', 'on_error', or 'on_phase_change' remain",
+        "Fix markdown lint issues: add language tags to fenced code blocks, ensure blank lines around code blocks"
+      ],
+      "startedAt": "2026-02-08T12:17:41.516679+00:00",
+      "completedAt": "2026-02-08T12:22:38.831432+00:00",
+      "updatedAt": "2026-02-08T12:22:38.831301+00:00"
+    },
+    {
+      "id": "US-003",
+      "title": "Wire NotificationService into resume command",
+      "status": "done",
+      "dependsOn": [
+        "US-001"
+      ],
+      "description": "As a user, I want the resume command to emit notifications, so that I receive webhook alerts during resumed protocol execution.",
+      "acceptanceCriteria": [
+        "Add public getter 'notificationService' to CLIOperations class in src/cli/operations.ts",
+        "Update createOrchestrator call in src/cli/commands/resume.ts to pass notificationService",
+        "Example: createOrchestrator({ statePath, operations, notificationService: operations.notificationService })",
+        "Negative case: If notificationService is null, orchestrator should still work without notifications",
+        "Verify notifications are emitted during resume by checking webhook calls in tests"
+      ],
+      "startedAt": "2026-02-08T12:22:40.922925+00:00",
+      "completedAt": "2026-02-08T12:33:56.072431+00:00",
+      "updatedAt": "2026-02-08T12:33:56.072093+00:00"
+    },
+    {
+      "id": "US-004",
+      "title": "Fix module-level mutable state in resume command",
+      "status": "done",
+      "dependsOn": [
+        "US-001"
+      ],
+      "description": "As a developer, I want telemetry state to be scoped to each invocation, so that state doesn't persist incorrectly across multiple resume calls.",
+      "acceptanceCriteria": [
+        "Move 'telemetry' and 'telemetryCollector' declarations inside handleResumeCommand function",
+        "Remove module-level declarations of these variables",
+        "Example: Each call to handleResumeCommand creates fresh telemetry state",
+        "Negative case: Calling handleResumeCommand twice in succession doesn't accumulate data from first call",
+        "Tests verify telemetry isolation between invocations"
+      ],
+      "startedAt": "2026-02-08T12:33:58.168633+00:00",
+      "completedAt": "2026-02-08T12:47:43.261998+00:00",
+      "updatedAt": "2026-02-08T12:47:43.261858+00:00"
+    },
+    {
+      "id": "US-005",
+      "title": "Fix cron day-of-week/day-of-month OR semantics",
+      "status": "done",
+      "dependsOn": [
+        "US-001"
+      ],
+      "description": "As a user, I want cron expressions with both day-of-month and day-of-week restrictions to use POSIX OR semantics, so that reminders trigger correctly.",
+      "acceptanceCriteria": [
+        "Update src/notifications/cron.ts matchesDateTime function",
+        "When both day-of-month and day-of-week are restricted, match if EITHER condition is true (OR semantics)",
+        "Example: '0 9 15 * 1' triggers on the 15th of any month OR any Monday at 9am",
+        "Negative case: '0 9 * * *' (unrestricted days) triggers every day at 9am as before",
+        "Add test cases covering OR semantics behavior"
+      ],
+      "startedAt": "2026-02-08T12:47:45.346567+00:00",
+      "completedAt": "2026-02-08T12:54:21.896425+00:00",
+      "updatedAt": "2026-02-08T12:54:21.896099+00:00"
+    },
+    {
+      "id": "US-006",
+      "title": "Fix timezone-dependent test failures",
+      "status": "done",
+      "dependsOn": [
+        "US-001"
+      ],
+      "description": "As a developer, I want tests to pass regardless of local timezone, so that CI and local development work consistently.",
+      "acceptanceCriteria": [
+        "Update src/notifications/cron.test.ts to use UTC methods (getUTCDate, getUTCHours, etc.)",
+        "Or construct test dates in a timezone-independent way",
+        "Example: expect(next.getUTCHours()).toBe(9) instead of expect(next.getHours()).toBe(9)",
+        "Negative case: Tests pass when run with TZ=America/Los_Angeles and TZ=UTC",
+        "Update toContain assertions on Sets to use .has() method instead"
+      ],
+      "startedAt": "2026-02-08T12:54:23.978354+00:00",
+      "completedAt": "2026-02-08T13:09:11.724984+00:00",
+      "updatedAt": "2026-02-08T13:09:11.724847+00:00"
+    },
+    {
+      "id": "US-007",
+      "title": "Fix regex control character lint violations",
+      "status": "done",
+      "dependsOn": [
+        "US-001"
+      ],
+      "description": "As a developer, I want code to pass Biome's noControlCharactersInRegex rule, so that lint checks pass.",
+      "acceptanceCriteria": [
+        "Update src/cli/errors.test.ts line 24 to use new RegExp constructor instead of regex literal",
+        "Update src/cli/utils/displayUtils.ts to use new RegExp for ANSI escape sequences",
+        "Example: const pattern = new RegExp('\\\\x1b\\\\[') instead of /\\x1b\\[/",
+        "Negative case: npm run lint passes without noControlCharactersInRegex errors",
+        "Functionality remains identical - ANSI stripping still works"
+      ],
+      "startedAt": "2026-02-08T13:09:13.811317+00:00",
+      "completedAt": "2026-02-08T13:16:43.912004+00:00",
+      "updatedAt": "2026-02-08T13:16:43.911874+00:00"
+    },
+    {
+      "id": "US-008",
+      "title": "Fix hardcoded /tmp paths in tests",
+      "status": "done",
+      "dependsOn": [
+        "US-001"
+      ],
+      "description": "As a developer, I want tests to use platform-appropriate temp directories, so that tests pass on Windows and avoid parallel test collisions.",
+      "acceptanceCriteria": [
+        "Update src/notifications/reminder.test.ts to use os.tmpdir() and fs.mkdtemp()",
+        "Update src/notifications/integration.test.ts similarly",
+        "Create unique temp directory per test run with random suffix",
+        "Clean up temp directories in afterEach hooks",
+        "Example: testDir = await mkdtemp(path.join(tmpdir(), 'reminder-test-'))",
+        "Negative case: Tests don't fail when run in parallel"
+      ],
+      "startedAt": "2026-02-08T13:16:46.003802+00:00",
+      "completedAt": "2026-02-08T13:27:42.851620+00:00",
+      "updatedAt": "2026-02-08T13:27:42.851493+00:00"
+    },
+    {
+      "id": "US-009",
+      "title": "Fix spinner frame advancement and cursor restoration",
+      "status": "done",
+      "dependsOn": [
+        "US-001"
+      ],
+      "description": "As a user, I want the CLI spinner to animate correctly and restore the cursor on exit, so that the terminal displays properly.",
+      "acceptanceCriteria": [
+        "Update src/cli/components/LiveDisplay.ts to increment currentFrame in setInterval callback",
+        "Fix stop() method to use \\x1b[?25h (show cursor) instead of \\x1b[?25l (hide cursor)",
+        "Example: currentFrame = (currentFrame + 1) % frames.length in interval callback",
+        "Negative case: Cursor is visible after program exits or errors",
+        "Spinner visually animates through all frame characters"
+      ],
+      "startedAt": "2026-02-08T13:27:44.939890+00:00",
+      "completedAt": "2026-02-08T13:34:17.896781+00:00",
+      "updatedAt": "2026-02-08T13:34:17.896644+00:00"
+    },
+    {
+      "id": "US-010",
+      "title": "Fix reminder state persistence",
+      "status": "done",
+      "dependsOn": [
+        "US-001"
+      ],
+      "description": "As a user, I want enable/disable state to persist across restarts, so that my reminder preferences are remembered.",
+      "acceptanceCriteria": [
+        "Update enable() method in src/notifications/reminder.ts to call saveState()",
+        "Update disable() method to call saveState()",
+        "Implement atomic file writes using temp file + rename pattern",
+        "Example: Write to .tmp file, then rename to actual path",
+        "Negative case: Power loss during save doesn't corrupt state file",
+        "Add tests verifying state persists after enable/disable"
+      ],
+      "startedAt": "2026-02-08T13:34:19.975184+00:00",
+      "completedAt": "2026-02-08T13:42:13.675931+00:00",
+      "updatedAt": "2026-02-08T13:42:13.675785+00:00"
+    },
+    {
+      "id": "US-011",
+      "title": "Fix transition logging and async handling in resume",
+      "status": "done",
+      "dependsOn": [
+        "US-003",
+        "US-004"
+      ],
+      "description": "As a developer, I want phase transitions to be logged correctly and async errors to be handled, so that debugging is easier.",
+      "acceptanceCriteria": [
+        "Capture fromPhase before calling orchestrator.tick(), not after",
+        "Handle validateWebhookEndpoints errors instead of fire-and-forget with void",
+        "Example: const fromPhase = orchestrator.state.snapshot.phase; await orchestrator.tick(); const toPhase = ...",
+        "Negative case: validateWebhookEndpoints failure logs warning but doesn't crash",
+        "Phase transitions appear in logs when they occur"
+      ],
+      "startedAt": "2026-02-08T13:42:15.764335+00:00",
+      "completedAt": "2026-02-08T13:49:04.619561+00:00",
+      "updatedAt": "2026-02-08T13:49:04.619428+00:00"
+    },
+    {
+      "id": "US-012",
+      "title": "Fix telemetry data checks and phase handling",
+      "status": "done",
+      "dependsOn": [
+        "US-004"
+      ],
+      "description": "As a developer, I want telemetry to correctly detect data presence and handle all phases, so that stats are accurate.",
+      "acceptanceCriteria": [
+        "Update hasData() in src/cli/telemetry.ts to check executionTimeMs and executionTimes.size",
+        "Add 'Complete' to validPhases array during deserialization",
+        "Example: hasData() returns true if totalExecutionTimeMs > 0 even with zero model calls",
+        "Negative case: Telemetry for 'Complete' phase is not dropped during deserialization",
+        "Missing nextScheduled check added before logging in resume command"
+      ],
+      "startedAt": "2026-02-08T13:49:06.702058+00:00",
+      "completedAt": "2026-02-08T14:00:45.726565+00:00",
+      "updatedAt": "2026-02-08T14:00:45.726425+00:00"
+    },
+    {
+      "id": "US-013",
+      "title": "Fix type safety issues in notification service",
+      "status": "done",
+      "dependsOn": [
+        "US-001"
+      ],
+      "description": "As a developer, I want proper type validation for notification events, so that invalid configurations fail fast.",
+      "acceptanceCriteria": [
+        "Replace unsafe type assertion in src/notifications/service.ts with runtime validation",
+        "Filter events through validEvents array with type guard",
+        "Remove duplicate NotificationChannel interface (use imported type)",
+        "Add PhaseChangeData to WebhookPayload interface in src/notifications/types.ts",
+        "Example: events.filter((e): e is NotificationEvent => validEvents.includes(e))",
+        "Negative case: Invalid event type 'on_block' is filtered out, not cast"
+      ],
+      "startedAt": "2026-02-08T14:00:47.813849+00:00",
+      "completedAt": "2026-02-08T14:09:39.704244+00:00",
+      "updatedAt": "2026-02-08T14:09:39.704112+00:00"
+    },
+    {
+      "id": "US-014",
+      "title": "Fix test patterns and mock cleanup",
+      "status": "done",
+      "dependsOn": [
+        "US-006",
+        "US-008"
+      ],
+      "description": "As a developer, I want tests to follow best practices for mocking and assertions, so that tests are reliable.",
+      "acceptanceCriteria": [
+        "Remove duplicate notification test cases in src/config/parser.test.ts",
+        "Update Set assertions to use .has() instead of toContain",
+        "Add proper fetch mock save/restore in src/notifications/webhook.test.ts",
+        "Example: beforeEach saves originalFetch, afterEach restores it",
+        "Negative case: Tests don't leak mocked fetch to other test suites",
+        "Remove duplicate describe blocks that add time without coverage"
+      ],
+      "startedAt": "2026-02-08T14:09:41.779544+00:00",
+      "completedAt": "2026-02-08T14:17:17.921378+00:00",
+      "updatedAt": "2026-02-08T14:17:17.921239+00:00"
+    },
+    {
+      "id": "US-015",
+      "title": "Fix utility and protocol edge cases",
+      "status": "done",
+      "dependsOn": [
+        "US-001"
+      ],
+      "description": "As a developer, I want edge cases in utilities and protocol handlers to work correctly, so that there are no silent failures.",
+      "acceptanceCriteria": [
+        "Fix TypedMap.forEach to pass TypedMap wrapper, not native Map",
+        "Fix toObject to use Object.create(null) and filter __proto__/constructor keys",
+        "Add warning log for unexpected blocking in Complete phase",
+        "Define specific error codes instead of reusing NOT_BLOCKING",
+        "Rename 'path' parameter to avoid shadowing import in safe-fs.js",
+        "Example: forEach callback receives (value, key, this) not (value, key, internalMap)",
+        "Negative case: Prototype pollution via __proto__ key is prevented"
+      ],
+      "startedAt": "2026-02-08T14:17:20.008377+00:00",
+      "completedAt": "2026-02-08T14:33:24.549395+00:00",
+      "updatedAt": "2026-02-08T14:33:24.549256+00:00"
+    },
+    {
+      "id": "US-016",
+      "title": "Fix Spinner and substate change detection",
+      "status": "done",
+      "dependsOn": [
+        "US-009"
+      ],
+      "description": "As a developer, I want the spinner to handle edge cases correctly, so that display updates work reliably.",
+      "acceptanceCriteria": [
+        "Add nullish coalescing for frames[0] access in src/cli/components/Spinner.ts",
+        "Update substate change detection to compare full object, not just kind",
+        "Fix keyword matching priority so 'test' matches before 'api'",
+        "Example: const frame = frames[this.frameIndex] ?? '\u280b'",
+        "Negative case: 'API test failed' is classified as test_failure, not model_failure",
+        "Substate changes within same kind trigger display update"
+      ],
+      "startedAt": "2026-02-08T14:33:26.634183+00:00",
+      "completedAt": "2026-02-08T14:45:17.200526+00:00",
+      "updatedAt": "2026-02-08T14:45:17.200392+00:00"
+    },
+    {
+      "id": "US-017",
+      "title": "Fix protocol state handling",
+      "status": "done",
+      "dependsOn": [
+        "US-001"
+      ],
+      "description": "As a developer, I want protocol state to be handled correctly, so that blocking queries and checkpoints work reliably.",
+      "acceptanceCriteria": [
+        "Update resolved blocking queries to be removed from snapshot.blockingQueries",
+        "Remove or restructure unreachable stale state check in checkpoint.js",
+        "Remove DRY violation by using ERROR_KINDS constant instead of local validKinds",
+        "Example: state.snapshot.blockingQueries = state.snapshot.blockingQueries.filter(q => q.id !== resolution.queryId)",
+        "Negative case: Dead code is removed, not left unreachable",
+        "Error kind validation uses single source of truth"
+      ],
+      "startedAt": "2026-02-08T14:45:19.296250+00:00",
+      "completedAt": "2026-02-08T15:24:22.922230+00:00",
+      "updatedAt": "2026-02-08T15:24:22.921906+00:00"
+    },
+    {
+      "id": "US-018",
+      "title": "Fix async file operations and URL handling",
+      "status": "done",
+      "dependsOn": [
+        "US-010"
+      ],
+      "description": "As a developer, I want file operations to be async and URL handling to be efficient, so that the event loop isn't blocked.",
+      "acceptanceCriteria": [
+        "Replace existsSync with async stat() check in src/notifications/reminder.ts",
+        "Reuse URL object after validation instead of constructing twice",
+        "Remove redundant type assertion in webhook.ts else branch",
+        "Example: async fileExists(path) { try { await stat(path); return true; } catch { return false; } }",
+        "Negative case: No synchronous file system calls in async code paths",
+        "URL is validated once and reused for fetch call"
+      ],
+      "startedAt": "2026-02-08T15:24:25.006933+00:00",
+      "completedAt": "2026-02-08T15:45:51.522831+00:00",
+      "updatedAt": "2026-02-08T15:45:51.522700+00:00"
+    },
+    {
+      "id": "US-019",
+      "title": "Update example config and documentation",
+      "status": "done",
+      "dependsOn": [
+        "US-002"
+      ],
+      "description": "As a user, I want example configurations to reflect supported features, so that I don't try to use unsupported options.",
+      "acceptanceCriteria": [
+        "Comment out or add note about unsupported hooks section in examples/criticality.example.toml",
+        "Ensure all example event names use canonical format without 'on_' prefix",
+        "Example: '# NOTE: hooks are not supported in the current notification system'",
+        "Negative case: Users don't get silent failures from copying unsupported config",
+        "All markdown code blocks have language specifiers"
+      ],
+      "startedAt": "2026-02-08T15:45:53.606347+00:00",
+      "completedAt": "2026-02-08T15:51:59.639934+00:00",
+      "updatedAt": "2026-02-08T15:51:59.639798+00:00"
+    },
+    {
+      "id": "US-020",
+      "title": "Final verification and cleanup",
+      "status": "done",
+      "dependsOn": [
+        "US-001",
+        "US-002",
+        "US-003",
+        "US-004",
+        "US-005",
+        "US-006",
+        "US-007",
+        "US-008",
+        "US-009",
+        "US-010",
+        "US-011",
+        "US-012",
+        "US-013",
+        "US-014",
+        "US-015",
+        "US-016",
+        "US-017",
+        "US-018",
+        "US-019"
+      ],
+      "description": "As a developer, I want all quality gates to pass after fixes, so that the PR can be merged confidently.",
+      "acceptanceCriteria": [
+        "npm run test passes with all tests green",
+        "npm run lint passes with no errors or warnings",
+        "npm run typecheck passes with no errors",
+        "npm run build succeeds and outputs to dist/",
+        "No .js files exist in src/ directory",
+        "All 41 review comments from PR23_REVIEW_FIXES_GUIDE.md are addressed",
+        "Example: Full CI pipeline passes",
+        "Negative case: No regressions introduced by fixes"
+      ],
+      "startedAt": "2026-02-08T15:52:01.724218+00:00",
+      "completedAt": "2026-02-08T16:31:19.133715+00:00",
+      "updatedAt": "2026-02-08T16:31:19.133376+00:00"
+    }
+  ]
+}

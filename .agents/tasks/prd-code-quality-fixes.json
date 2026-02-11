@@ -1,0 +1,528 @@
+{
+  "version": 1,
+  "project": "Code Quality and Bug Fixes",
+  "overview": "Comprehensive cleanup of code quality issues, security vulnerabilities, documentation improvements, and bug fixes across the codebase.",
+  "goals": [
+    "Fix critical runtime bugs and race conditions",
+    "Address security vulnerabilities and unsafe operations",
+    "Improve code quality and remove technical debt",
+    "Fix markdown linting and documentation consistency",
+    "Add missing test coverage and fix test issues"
+  ],
+  "nonGoals": [
+    "No new features or functionality additions",
+    "No refactoring beyond the specific fixes described",
+    "No changes to the overall architecture or design patterns"
+  ],
+  "successMetrics": [
+    "All npm run lint, npm run typecheck, and npm run test commands pass",
+    "No security vulnerabilities remain in identified areas",
+    "All markdown files pass markdownlint validation",
+    "No TypeScript errors or warnings",
+    "All identified critical bugs are fixed"
+  ],
+  "openQuestions": [],
+  "stack": {
+    "framework": "TypeScript",
+    "hosting": "N/A",
+    "database": "N/A",
+    "auth": "N/A"
+  },
+  "routes": [],
+  "uiNotes": [],
+  "dataModel": [],
+  "importFormat": {
+    "description": "Not applicable",
+    "example": {}
+  },
+  "rules": [],
+  "qualityGates": [
+    "npm run test",
+    "npm run lint",
+    "npm run typecheck"
+  ],
+  "stories": [
+    {
+      "id": "US-001",
+      "title": "Fix circuit breaker max-attempts check",
+      "status": "done",
+      "dependsOn": [],
+      "description": "As a system administrator, I want the circuit breaker to trip when totalAttempts reaches the configured limit, not exceed it.",
+      "acceptanceCriteria": [
+        "Change the condition in circuit-breaker.ts around line 446-456 to use >= instead of > when checking funcState.totalAttempts against config.maxAttemptsPerFunction",
+        "When totalAttempts equals maxAttemptsPerFunction, the circuit trips with appropriate shouldTrip and tripReason",
+        "Example: maxAttempts=3, totalAttempts=3 -> circuit trips",
+        "Negative case: maxAttempts=3, totalAttempts=2 -> circuit does not trip"
+      ],
+      "startedAt": "2026-01-31T21:34:11.320710+00:00",
+      "completedAt": "2026-01-31T21:43:09.525272+00:00",
+      "updatedAt": "2026-01-31T21:43:09.525120+00:00"
+    },
+    {
+      "id": "US-002",
+      "title": "Fix unsafe process kill in start-server.ts",
+      "status": "done",
+      "dependsOn": [],
+      "description": "As a system administrator, I want process cleanup to verify targets are Chrome/Playwright processes before killing to avoid killing unrelated processes.",
+      "acceptanceCriteria": [
+        "Replace unconditional execSync(`kill -9 ${pid}`) with verification step using ps command",
+        "Check if process is Chrome/Playwright by matching output against known binaries/flags (chrome, chromium, chrome-wrapper, headless-chrome, playwright, --remote-debugging-port)",
+        "Only kill if verification passes, otherwise log warning or skip",
+        "Example: pid 1234 is 'node' -> log warning, do not kill",
+        "Negative case: pid 5678 is 'chrome --remote-debugging-port=9223' -> kill safely"
+      ],
+      "startedAt": "2026-01-31T21:43:11.607472+00:00",
+      "completedAt": "2026-01-31T21:46:12.759287+00:00",
+      "updatedAt": "2026-01-31T21:46:12.759146+00:00"
+    },
+    {
+      "id": "US-003",
+      "title": "Add PORT validation in start-relay.ts",
+      "status": "done",
+      "dependsOn": [],
+      "description": "As a developer, I want PORT to be validated as a finite integer within valid TCP range before server startup to prevent NaN or out-of-range values.",
+      "acceptanceCriteria": [
+        "Add validation after parseInt(process.env.PORT || \"9222\", 10) to check value is finite integer and within 1-65535",
+        "On validation failure, log clear error including raw process.env.PORT value and exit with non-zero status",
+        "Example: PORT='abc' -> log error 'Invalid PORT value: abc' and exit(1)",
+        "Negative case: PORT='3000' -> validation passes, server starts"
+      ],
+      "startedAt": "2026-01-31T21:46:14.847531+00:00",
+      "completedAt": "2026-01-31T23:08:18.607996+00:00",
+      "updatedAt": "2026-01-31T23:08:18.607873+00:00"
+    },
+    {
+      "id": "US-004",
+      "title": "Replace fixed sleep with polling in relay.ts",
+      "status": "done",
+      "dependsOn": [],
+      "description": "As a developer, I want to replace the fixed 200ms sleep with a bounded poll to avoid race conditions when checking connectedTargets.",
+      "acceptanceCriteria": [
+        "Replace fixed sleep with polling that checks connectedTargets every 50-100ms for matching target.targetId",
+        "Poll until found or timeout of 1-2s elapses",
+        "On success: perform same actions (namedPages.set, sendToExtension, return c.json)",
+        "On timeout: throw Error('Target created but not found in registry')",
+        "Example: targetId found after 50ms -> proceed immediately",
+        "Negative case: targetId not found after 2s -> throw timeout error"
+      ],
+      "startedAt": "2026-01-31T23:08:20.682301+00:00",
+      "completedAt": "2026-01-31T23:11:05.372387+00:00",
+      "updatedAt": "2026-01-31T23:11:05.372271+00:00"
+    },
+    {
+      "id": "US-005",
+      "title": "Replace eval-based injection in client.ts",
+      "status": "done",
+      "dependsOn": [],
+      "description": "As a security-conscious developer, I want to replace eval-based script injection with Playwright's page.addScriptTag to follow best practices.",
+      "acceptanceCriteria": [
+        "In getAISnapshot, replace eval injection with page.addScriptTag({ content: snapshotScript })",
+        "Check if window.__devBrowser_getAISnapshot is present before injecting (use page.evaluate or try-catch)",
+        "After injection, call page.evaluate(() => window.__devBrowser_getAISnapshot())",
+        "Remove all eval usage and related lint suppressions",
+        "Example: snapshot injected via addScriptTag, function invoked via evaluate",
+        "Negative case: if __devBrowser_getAISnapshot already exists, skip injection"
+      ],
+      "startedAt": "2026-01-31T23:11:07.458635+00:00",
+      "completedAt": "2026-01-31T23:14:00.679629+00:00",
+      "updatedAt": "2026-01-31T23:14:00.679465+00:00"
+    },
+    {
+      "id": "US-006",
+      "title": "Fix multiple issues in index.ts",
+      "status": "done",
+      "dependsOn": [],
+      "description": "As a developer, I want to add runtime type guards for CDP JSON, fix forEach lint issues, and remove improper async close in syncCleanup.",
+      "acceptanceCriteria": [
+        "Add type guard after fetchWithRetry: verify parsed.webSocketDebuggerUrl is string, otherwise throw error with details",
+        "Replace signals.forEach with for...of loops for process.on and process.off calls",
+        "Remove syncCleanup function or replace with synchronous close variant (context.browser()?.close({ process: true }))",
+        "Remove syncCleanup registration on 'exit' event if async close remains",
+        "Example: parsed webSocketDebuggerUrl is number -> throws 'Unexpected CDP response: ...'",
+        "Negative case: parsed webSocketDebuggerUrl is valid string -> proceeds normally"
+      ],
+      "startedAt": "2026-01-31T23:14:02.747304+00:00",
+      "completedAt": "2026-01-31T23:18:35.451501+00:00",
+      "updatedAt": "2026-01-31T23:18:35.451370+00:00"
+    },
+    {
+      "id": "US-007",
+      "title": "Implement failFastOnCritical in security-scanner.ts",
+      "status": "done",
+      "dependsOn": [],
+      "description": "As a security engineer, I want the scanner to short-circuit when a critical vulnerability is found and failFastOnCritical is true.",
+      "acceptanceCriteria": [
+        "Add check for this.failFastOnCritical in scanning entrypoints",
+        "When vulnerability with severity === 'critical' is found, immediately stop processing",
+        "Return failure result or throw clear Abort/FailFastError that propagates to caller",
+        "Apply same guard in all scan loops (around lines 147-149 and 367-369)",
+        "Example: failFastOnCritical=true, critical vulnerability found -> scanning stops immediately",
+        "Negative case: failFastOnCritical=false -> scanning continues through all files"
+      ],
+      "startedAt": "2026-01-31T23:18:37.515324+00:00",
+      "completedAt": "2026-01-31T23:25:08.296717+00:00",
+      "updatedAt": "2026-01-31T23:25:08.296315+00:00"
+    },
+    {
+      "id": "US-008",
+      "title": "Fail closed on security scan errors",
+      "status": "done",
+      "dependsOn": [],
+      "description": "As a security engineer, I want the scanner to fail closed on errors rather than returning a 'clean' result.",
+      "acceptanceCriteria": [
+        "Change catch block in security-scanner.ts to fail closed",
+        "Option A: Rethrow caught error after logging",
+        "Option B: Return result with hasCriticalVulnerabilities: true, hasVulnerabilities: true, vulnerabilities with scan error entry",
+        "Update catch that references logger and returned object",
+        "Example: scan throws error -> rethrows or returns result with vulnerability indicating scan_error",
+        "Negative case: scan succeeds with no vulnerabilities -> returns clean result"
+      ],
+      "startedAt": "2026-01-31T23:25:10.377560+00:00",
+      "completedAt": "2026-01-31T23:33:27.312667+00:00",
+      "updatedAt": "2026-01-31T23:33:27.312317+00:00"
+    },
+    {
+      "id": "US-009",
+      "title": "Add cd verification in server.sh",
+      "status": "done",
+      "dependsOn": [],
+      "description": "As a system administrator, I want the script to verify cd succeeded and exit with error if it failed.",
+      "acceptanceCriteria": [
+        "Add verification immediately after cd \"$SCRIPT_DIR\"",
+        "If cd fails, log clear error message and exit with non-zero status",
+        "Prevent further installs/launches when directory change fails",
+        "Example: SCRIPT_DIR='/nonexistent' -> log 'Failed to cd to /nonexistent' and exit 1",
+        "Negative case: cd succeeds -> script continues"
+      ],
+      "startedAt": "2026-01-31T23:33:29.401599+00:00",
+      "completedAt": "2026-01-31T23:35:37.585639+00:00",
+      "updatedAt": "2026-01-31T23:35:37.585396+00:00"
+    },
+    {
+      "id": "US-010",
+      "title": "Add security warnings to scraping.md",
+      "status": "done",
+      "dependsOn": [],
+      "description": "As a security-conscious developer, I want documentation to warn about storing sensitive headers to disk.",
+      "acceptanceCriteria": [
+        "Update scraping.md documentation to warn about storing full request headers with auth tokens/PII",
+        "Suggest redacting or stripping sensitive fields (Authorization, Cookie, set-cookie) before writing",
+        "Add instruction to exclude tmp/request-details.json from .gitignore",
+        "Add instruction to securely delete or rotate captured secrets after use",
+        "Example: documentation shows how to redact headers before writing to disk",
+        "Negative case: no changes to capture behavior itself, only documentation warnings"
+      ],
+      "startedAt": "2026-01-31T23:35:39.670662+00:00",
+      "completedAt": "2026-01-31T23:39:28.367076+00:00",
+      "updatedAt": "2026-01-31T23:39:28.366721+00:00"
+    },
+    {
+      "id": "US-011",
+      "title": "Fix security semantics and add retry loop in ralph-loop.ts",
+      "status": "done",
+      "dependsOn": [],
+      "description": "As a developer, I want security scan rejections to be properly categorized and add retry/escalation logic with circuit breaker integration.",
+      "acceptanceCriteria": [
+        "Add failureType or securityScanResult property to ImplementationAttempt shape",
+        "Inspect attempt.failureType or attempt.securityScanResult when building failure object",
+        "When security scan indicates rejection, set failure = { type: 'security', securityDetails: <info> } instead of { type: 'type' }",
+        "Replace single implementFunction call with retry/escalation loop that repeats up to maxAttemptsPerFunction",
+        "Call circuitBreaker.recordAttemptStart, recordEscalation, recordSuccess, recordFailure appropriately",
+        "Update implementedCount/failedCount per final outcome, not once per iteration",
+        "Example: security scan rejects -> maps to { type: 'security' } failure",
+        "Negative case: test failure -> maps to { type: 'test' } failure as before"
+      ],
+      "startedAt": "2026-01-31T23:39:30.459093+00:00",
+      "completedAt": "2026-02-01T00:03:15.430290+00:00",
+      "updatedAt": "2026-02-01T00:03:15.430171+00:00"
+    },
+    {
+      "id": "US-012",
+      "title": "Fix test expectations in prompt-generator.test.ts",
+      "status": "done",
+      "dependsOn": [],
+      "description": "As a developer, I want the large interface test to properly reflect exceeding token limits.",
+      "acceptanceCriteria": [
+        "Either update largeInterface creation to 4000+ fields to actually exceed 12k token threshold",
+        "Or rename test and assert exceedsTokenLimit === false with adjusted estimatedTokens",
+        "Update assertions around result.estimatedTokens and result.exceedsTokenLimit",
+        "Example: 4000 fields -> estimatedTokens ~12000, exceedsTokenLimit === true",
+        "Negative case: if keeping ~500 fields, test name should reflect actual behavior"
+      ],
+      "startedAt": "2026-02-01T00:03:17.495869+00:00",
+      "completedAt": "2026-02-01T00:06:34.150754+00:00",
+      "updatedAt": "2026-02-01T00:06:34.150616+00:00"
+    },
+    {
+      "id": "US-013",
+      "title": "Replace magic numbers in prompt-generator.test.ts",
+      "status": "done",
+      "dependsOn": [],
+      "description": "As a developer, I want compiler options to use ts-morph enum values instead of magic numbers.",
+      "acceptanceCriteria": [
+        "Add imports for ScriptTarget and ModuleKind from 'ts-morph'",
+        "Replace Project constructor target: 99 with target: ScriptTarget.ESNext",
+        "Replace module: 99 with module: ModuleKind.NodeNext",
+        "Example: Project({ target: ScriptTarget.ESNext, module: ModuleKind.NodeNext })",
+        "Negative case: no magic numbers remain in test file"
+      ],
+      "startedAt": "2026-02-01T00:06:36.228679+00:00",
+      "completedAt": "2026-02-01T00:08:38.741438+00:00",
+      "updatedAt": "2026-02-01T00:08:38.741313+00:00"
+    },
+    {
+      "id": "US-014",
+      "title": "Implement unused options in context-extractor.ts",
+      "status": "done",
+      "dependsOn": [],
+      "description": "As a developer, I want ContextExtractionOptions to actually control extraction behavior.",
+      "acceptanceCriteria": [
+        "Update extraction code to read options.includeTypeMembers and options.flattenCircularReferences",
+        "When includeTypeMembers is false, skip collecting/serializing type members",
+        "When flattenCircularReferences is true, detect cycles and replace with flattened/placeholder representation",
+        "Alternatively, remove these options from ContextExtractionOptions and all call sites if inappropriate",
+        "Example: includeTypeMembers=false -> members not in output",
+        "Negative case: includeTypeMembers=true (default) -> members included as before"
+      ],
+      "startedAt": "2026-02-01T00:08:40.827302+00:00",
+      "completedAt": "2026-02-01T00:13:43.969689+00:00",
+      "updatedAt": "2026-02-01T00:13:43.969557+00:00"
+    },
+    {
+      "id": "US-015",
+      "title": "Optimize findTypeDeclaration in context-extractor.ts",
+      "status": "done",
+      "dependsOn": [],
+      "description": "As a developer, I want findTypeDeclaration to use an indexed lookup instead of scanning all source files per query.",
+      "acceptanceCriteria": [
+        "Build per-project index Map<string, {kind, decl, sourceFile}> once during extraction",
+        "Index by iterating project.getSourceFiles() once, skipping node_modules and .d.ts",
+        "Register names from sourceFile.getTypeAliases(), getInterfaces(), getEnums(), getClasses() into map",
+        "Replace findTypeDeclaration body to read from map lookup instead of scanning",
+        "Example: 100 source files, 1000 type lookups -> O(files + lookups) instead of O(files \u00d7 lookups)",
+        "Negative case: no performance regression, same output"
+      ],
+      "startedAt": "2026-02-01T00:13:46.050731+00:00",
+      "completedAt": "2026-02-01T00:23:30.536106+00:00",
+      "updatedAt": "2026-02-01T00:23:30.535983+00:00"
+    },
+    {
+      "id": "US-016",
+      "title": "Extract method/constructor types in context-extractor.ts",
+      "status": "done",
+      "dependsOn": [],
+      "description": "As a developer, I want class extraction to include method and constructor parameter/return types.",
+      "acceptanceCriteria": [
+        "Update extractReferencedFromClass to inspect classDecl.getMethods()",
+        "For each method, inspect parameter type nodes and return type node",
+        "Call extractTypeNamesFromString on getText() for each type and add to Set",
+        "Handle classDecl.getConstructors() similarly for constructor parameter types",
+        "Optionally handle getGetAccessors()/getSetAccessors() for accessor types",
+        "Example: class with method 'process(data: Data): Result' -> includes 'Data' and 'Result'",
+        "Negative case: method without types -> adds nothing to set"
+      ],
+      "startedAt": "2026-02-01T00:23:32.627443+00:00",
+      "completedAt": "2026-02-01T00:28:36.663937+00:00",
+      "updatedAt": "2026-02-01T00:28:36.663819+00:00"
+    },
+    {
+      "id": "US-017",
+      "title": "Add TSX pattern support in test-executor.ts",
+      "status": "done",
+      "dependsOn": [],
+      "description": "As a developer, I want test discovery to include TSX files for React tests.",
+      "acceptanceCriteria": [
+        "Update candidates array in test-executor.ts to include TSX patterns",
+        "Add ${baseName}.test.tsx and ${baseName}.spec.tsx",
+        "Add __tests__ variants for TSX files",
+        "Example: Component.test.tsx is discovered by test discovery logic",
+        "Negative case: .test.ts and .spec.ts still work as before"
+      ],
+      "startedAt": "2026-02-01T00:28:38.751792+00:00",
+      "completedAt": "2026-02-01T00:37:48.287095+00:00",
+      "updatedAt": "2026-02-01T00:37:48.286975+00:00"
+    },
+    {
+      "id": "US-018",
+      "title": "Fix markdownlint errors in commit_examples.md",
+      "status": "done",
+      "dependsOn": [],
+      "description": "As a documentation maintainer, I want commit_examples.md to conform to markdownlint rules.",
+      "acceptanceCriteria": [
+        "Add language tags (e.g., 'text') to all fenced code blocks",
+        "Ensure blank line before and after each fenced block",
+        "Ensure blank lines around headings/fences",
+        "Apply to commit message example block and any other fenced blocks",
+        "Example: ```text\nfeat(validation): add URLValidator...\n``` with blank lines",
+        "Negative case: no markdownlint errors remain (MD040/MD022/MD031)"
+      ],
+      "startedAt": "2026-02-01T00:37:50.374517+00:00",
+      "completedAt": "2026-02-01T00:45:46.415567+00:00",
+      "updatedAt": "2026-02-01T00:45:46.415446+00:00"
+    },
+    {
+      "id": "US-019",
+      "title": "Fix MD060 errors in commit SKILL.md",
+      "status": "done",
+      "dependsOn": [],
+      "description": "As a documentation maintainer, I want table column spacing to conform to markdownlint MD060.",
+      "acceptanceCriteria": [
+        "Normalize pipe spacing in Type/Purpose table and example table",
+        "Ensure each pipe has single space on both sides (e.g., '| Type | Purpose |')",
+        "Alternatively run markdownlint --fix to auto-correct",
+        "Verify changes remove MD060 errors and keep table alignment intact",
+        "Example: '|Type|Purpose|' -> '| Type | Purpose |'",
+        "Negative case: no MD060 errors remain"
+      ],
+      "startedAt": "2026-02-01T00:45:48.502765+00:00",
+      "completedAt": "2026-02-01T00:57:09.273803+00:00",
+      "updatedAt": "2026-02-01T00:57:09.273688+00:00"
+    },
+    {
+      "id": "US-020",
+      "title": "Fix MD031/MD040 errors in commit SKILL.md",
+      "status": "done",
+      "dependsOn": [],
+      "description": "As a documentation maintainer, I want fenced code blocks to have language identifiers and blank lines.",
+      "acceptanceCriteria": [
+        "Add language tag 'bash' to git commit example blocks",
+        "Add language tag 'text' to non-code fenced blocks",
+        "Add blank line before and after all ``` fences",
+        "Apply to heredoc block starting with git commit -m \"$(cat <<'EOF')\"",
+        "Apply to other fenced examples and 'Example fix pattern' block",
+        "Example: ```bash\ngit commit -m \"fix(auth): use hmac.compare_digest...\"\n``` with blank lines",
+        "Negative case: no MD031/MD040 errors remain"
+      ],
+      "startedAt": "2026-02-01T00:57:11.362598+00:00",
+      "completedAt": "2026-02-01T01:02:36.583352+00:00",
+      "updatedAt": "2026-02-01T01:02:36.583233+00:00"
+    },
+    {
+      "id": "US-021",
+      "title": "Fix wording in dev-browser SKILL.md",
+      "status": "done",
+      "dependsOn": [],
+      "description": "As a documentation maintainer, I want wording to be concise and proper.",
+      "acceptanceCriteria": [
+        "Line 37: Replace 'inside of their browser' with 'inside their browser'",
+        "Lines 42-43: Add language specifier 'bash' to fenced code block with 'cd skills/dev-browser && npm i && npm run start-extension &'",
+        "Change opening backticks to ```bash",
+        "Example: '**Important**: The core flow is still the same. You create named pages inside their browser.'",
+        "Negative case: no other wording changes unless specified"
+      ],
+      "startedAt": "2026-02-01T01:02:38.680341+00:00",
+      "completedAt": "2026-02-01T01:07:06.869295+00:00",
+      "updatedAt": "2026-02-01T01:07:06.869178+00:00"
+    },
+    {
+      "id": "US-022",
+      "title": "Fix wording in prd SKILL.md",
+      "status": "done",
+      "dependsOn": [],
+      "description": "As a documentation maintainer, I want proper verb form and capitalization.",
+      "acceptanceCriteria": [
+        "Change 'the first story must be setup' to 'the first story must be set up'",
+        "Capitalize lowercase 'i' to 'I'",
+        "Update SKILL.md around lines 147-163 in '**Ordering**' bullet",
+        "Example: 'the first story must be set up'",
+        "Negative case: no other changes to ordering section"
+      ],
+      "startedAt": "2026-02-01T01:07:08.960208+00:00",
+      "completedAt": "2026-02-01T01:12:47.540761+00:00",
+      "updatedAt": "2026-02-01T01:12:47.540643+00:00"
+    },
+    {
+      "id": "US-023",
+      "title": "Add integration test to security-scanner.test.ts",
+      "status": "done",
+      "dependsOn": [],
+      "description": "As a developer, I want an integration test for runSecurityScan with a known vulnerable pattern.",
+      "acceptanceCriteria": [
+        "Create test that creates temporary file with vulnerable pattern (e.g., eval())",
+        "Call runSecurityScan with projectPath and files array pointing to temp file",
+        "Use spy logger similar to other tests",
+        "Assert result.vulnerabilities includes entry for eval usage",
+        "Assert result.hasVulnerabilities is true",
+        "Assert result.hasCriticalVulnerabilities as expected",
+        "Clean up temp file/dir after test",
+        "Example: file with eval('x') -> detects vulnerability",
+        "Negative case: clean file -> no vulnerabilities"
+      ],
+      "startedAt": "2026-02-01T09:11:48.247218+00:00",
+      "completedAt": "2026-02-01T09:14:45.122355+00:00",
+      "updatedAt": "2026-02-01T09:14:45.122235+00:00"
+    },
+    {
+      "id": "US-024",
+      "title": "Register security plugin in eslint.config.js",
+      "status": "done",
+      "dependsOn": [],
+      "description": "As a developer, I want the security plugin to be registered and rules enabled.",
+      "acceptanceCriteria": [
+        "Add 'security' to plugins collection in eslint.config.js exported config",
+        "Enable baseline security rules: security/detect-object-injection, security/detect-unsafe-regex, security/detect-non-literal-fs-filename, security/detect-child-process",
+        "Add any needed parserOptions or settings if rules require",
+        "Keep rule severities consistent with existing config",
+        "Example: config has 'security' in plugins array and rules object with security rules",
+        "Negative case: no linting errors from newly enabled rules on existing code"
+      ],
+      "startedAt": "2026-02-01T09:14:47.192975+00:00",
+      "completedAt": "2026-02-01T09:22:42.519809+00:00",
+      "updatedAt": "2026-02-01T09:22:42.519692+00:00"
+    },
+    {
+      "id": "US-025",
+      "title": "Replace eval-based injection in snapshot.test.ts",
+      "status": "done",
+      "dependsOn": [],
+      "description": "As a security-conscious developer, I want to replace eval-based injection in getSnapshot.",
+      "acceptanceCriteria": [
+        "In getSnapshot(), call getSnapshotScript() to obtain script content",
+        "Use page.addScriptTag({ content: script }) to inject script",
+        "Remove eval usage and related lint suppressions",
+        "Call page.evaluate(() => (globalThis as any).__devBrowser_getAISnapshot()) to return snapshot",
+        "Example: script injected via addScriptTag, function invoked via evaluate",
+        "Negative case: no eval usage remains in test file"
+      ],
+      "startedAt": "2026-02-01T09:22:44.609601+00:00",
+      "completedAt": "2026-02-01T09:27:34.411008+00:00",
+      "updatedAt": "2026-02-01T09:27:34.410886+00:00"
+    },
+    {
+      "id": "US-026",
+      "title": "Remove unused code in browser-script.ts",
+      "status": "done",
+      "dependsOn": [],
+      "description": "As a developer, I want to remove unused imports and variables from browser-script.ts.",
+      "acceptanceCriteria": [
+        "Remove unused fs and path imports from top of browser-script.ts",
+        "Remove snapshotDir variable calculation line from getSnapshotScript",
+        "Update surrounding comment if needed",
+        "Ensure only inlined function code and cachedScript logic remain",
+        "Run build/tsc to confirm no unresolved symbols",
+        "Example: no 'import fs from 'fs'' or 'import path from 'path'' lines",
+        "Negative case: no reference to snapshotDir remains"
+      ],
+      "startedAt": "2026-02-01T10:34:59.156384+00:00",
+      "completedAt": "2026-02-01T10:40:24.043969+00:00",
+      "updatedAt": "2026-02-01T10:40:24.043837+00:00"
+    },
+    {
+      "id": "US-027",
+      "title": "Clean up backup file circuit-breaker.ts.bak",
+      "status": "done",
+      "dependsOn": [],
+      "description": "As a developer, I want to remove the backup file and add pattern to .gitignore.",
+      "acceptanceCriteria": [
+        "Delete circuit-breaker.ts.bak from repository",
+        "Add *.bak pattern to .gitignore file",
+        "Ensure only canonical circuit-breaker.ts source remains in version control",
+        "Example: .gitignore contains '*.bak' line",
+        "Negative case: no .bak files in git status"
+      ],
+      "startedAt": "2026-02-01T10:40:26.124006+00:00",
+      "completedAt": "2026-02-01T10:43:27.845677+00:00",
+      "updatedAt": "2026-02-01T10:43:27.845561+00:00"
+    }
+  ]
+}

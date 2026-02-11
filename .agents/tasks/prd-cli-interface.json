@@ -1,0 +1,376 @@
+{
+  "version": 2,
+  "project": "Criticality Protocol CLI Interface (Phase 4.1) - Completion",
+  "overview": "Complete the Phase 4.1 CLI Interface with enhanced features: real-time spinners using @opentui/core, full hierarchical sub-state display, actual protocol tick loop execution in resume, inline telemetry in status, notification hooks via criticality.toml, live updating display during resume, and contextual error suggestions.",
+  "goals": [
+    "Add real-time spinners during protocol execution using @opentui/core",
+    "Display full hierarchical sub-state (phase > task > operation)",
+    "Execute actual protocol tick loop in resume command (not just display)",
+    "Show inline telemetry (model calls, tokens, timing) in status",
+    "Configure notification hooks in criticality.toml",
+    "Provide live updating display during resume execution",
+    "Show contextual error suggestions based on failure type",
+    "Update SPECIFICATION.md to document interactive resolve mode",
+    "Add decision to DECISIONS.toml for interactive resolve approach"
+  ],
+  "nonGoals": [
+    "Web dashboard (Phase 4.3)",
+    "Full notification system implementation (Phase 4.2 - only hooks here)",
+    "Argument-based resolve command (interactive mode only per user choice)"
+  ],
+  "successMetrics": [
+    "Resume command executes orchestrator tick loop until blocked or complete",
+    "Spinner shows current phase/substate during execution",
+    "Status displays telemetry inline with phase information",
+    "Notification hooks configurable and callable from CLI",
+    "Error messages include contextual suggestions for resolution",
+    "All quality gates pass: test, lint, typecheck, build"
+  ],
+  "openQuestions": [],
+  "stack": {
+    "framework": "TypeScript with @opentui/core",
+    "hosting": "Local CLI (npm package)",
+    "database": "File-based state persistence (existing)",
+    "auth": "N/A - local tool"
+  },
+  "routes": [],
+  "uiNotes": [
+    "Use @opentui/core Spinner component for execution progress",
+    "Hierarchical display: Phase > Task > Current Operation",
+    "Telemetry shown inline: model calls, tokens used, timing",
+    "Live updates during resume: spinner + substate changes",
+    "Error suggestions based on failure type (model failure, compilation, test, etc.)"
+  ],
+  "dataModel": [
+    {
+      "entity": "TelemetryData",
+      "fields": [
+        "modelCalls",
+        "tokensUsed",
+        "executionTime",
+        "phase",
+        "substate"
+      ]
+    },
+    {
+      "entity": "NotificationHook",
+      "fields": [
+        "event",
+        "command",
+        "enabled"
+      ]
+    },
+    {
+      "entity": "ErrorContext",
+      "fields": [
+        "errorType",
+        "phase",
+        "suggestions",
+        "recoverable"
+      ]
+    }
+  ],
+  "importFormat": {
+    "description": "Existing protocol state + new telemetry",
+    "example": {}
+  },
+  "rules": [
+    "Spinner component wraps orchestrator tick execution",
+    "Telemetry collected from ExternalOperations callbacks",
+    "Notification hooks defined in [notifications] section of criticality.toml",
+    "Error suggestions mapped from error type to actionable hints",
+    "Resume executes until: blocked, completed, or user interrupt (Ctrl+C)"
+  ],
+  "qualityGates": [
+    "npm run test",
+    "npm run lint",
+    "npm run typecheck",
+    "npm run build"
+  ],
+  "stories": [
+    {
+      "id": "US-019",
+      "title": "Update SPECIFICATION.md for interactive resolve mode",
+      "status": "done",
+      "dependsOn": [],
+      "description": "As a developer, I want the specification to accurately document that the resolve command uses interactive mode (arrow-key selection) rather than argument-based selection, so that the implementation matches the documented behavior.",
+      "acceptanceCriteria": [
+        "Update Section 9 (Human Interface) in SPECIFICATION.md",
+        "Document that resolve uses interactive arrow-key selection as primary mode",
+        "Remove or update references to argument-based option selection (e.g., `crit resolve --option 2`)",
+        "Document the interactive flow: display query -> arrow navigation -> Enter to confirm",
+        "Add note that numbered input is also supported as alternative",
+        "Example: Section shows 'crit resolve' launches interactive selection UI",
+        "Negative case: Do not remove existing valid documentation, only update resolve command section"
+      ],
+      "startedAt": "2026-02-07T15:32:23.816275+00:00",
+      "completedAt": "2026-02-07T15:35:52.581873+00:00",
+      "updatedAt": "2026-02-07T15:35:52.581685+00:00"
+    },
+    {
+      "id": "US-020",
+      "title": "Add decision for interactive resolve approach",
+      "status": "done",
+      "dependsOn": [
+        "US-019"
+      ],
+      "description": "As a developer, I want a decision recorded in DECISIONS.toml explaining the choice of interactive resolve over argument-based, so that future maintainers understand the rationale.",
+      "acceptanceCriteria": [
+        "Add new decision to DECISIONS.toml in appropriate section (cli or orch)",
+        "Decision ID follows existing pattern (e.g., cli_001 or orch_009)",
+        "Include rationale: interactive mode provides better UX for complex queries with implications",
+        "Include trade-off: less scriptable, but blocking queries require human attention anyway",
+        "Reference the spec section that was updated",
+        "Example: decision explains interactive mode enables showing full option implications before selection",
+        "Negative case: Do not duplicate existing decisions"
+      ],
+      "startedAt": "2026-02-07T15:45:50.155264+00:00",
+      "completedAt": "2026-02-07T15:48:55.551762+00:00",
+      "updatedAt": "2026-02-07T15:48:55.551595+00:00"
+    },
+    {
+      "id": "US-021",
+      "title": "Implement spinner component for protocol execution",
+      "status": "done",
+      "dependsOn": [],
+      "description": "As a user, I want to see a spinner with phase/substate updates during resume execution so that I know the protocol is actively running.",
+      "acceptanceCriteria": [
+        "Create src/cli/components/Spinner.ts using @opentui/core spinner utilities",
+        "Spinner displays current phase name and substate",
+        "Spinner updates when phase transitions occur",
+        "Support text updates: 'Executing Lattice phase... (analyzing dependencies)'",
+        "Handle terminal width constraints gracefully",
+        "Example: Spinner shows 'Injection \u280b compiling main.ts'",
+        "Negative case: Non-TTY environments fall back to simple text updates"
+      ],
+      "startedAt": "2026-02-07T15:48:57.640673+00:00",
+      "completedAt": "2026-02-07T16:24:13.869932+00:00",
+      "updatedAt": "2026-02-07T16:24:13.869768+00:00"
+    },
+    {
+      "id": "US-022",
+      "title": "Integrate orchestrator tick loop in resume command",
+      "status": "done",
+      "dependsOn": [
+        "US-021"
+      ],
+      "description": "As a user, I want the resume command to actually execute the protocol tick loop so that the protocol continues automatically after I resolve blocking queries.",
+      "acceptanceCriteria": [
+        "Import and use createOrchestrator from src/protocol/orchestrator.ts",
+        "Create ExternalOperations implementation with real model calls (or mock for now)",
+        "Call orchestrator.tick() in a loop until blocked or completed",
+        "Update spinner on each tick with current phase/substate",
+        "Persist state after each tick (atomic writes)",
+        "Handle Ctrl+C gracefully: save state and exit cleanly",
+        "Example: After resolving query, resume executes 5 ticks then blocks on new query",
+        "Negative case: Model call failure triggers circuit breaker and shows error with suggestions"
+      ],
+      "startedAt": "2026-02-07T16:43:04.020860+00:00",
+      "completedAt": "2026-02-07T17:00:16.406490+00:00",
+      "updatedAt": "2026-02-07T17:00:16.406345+00:00"
+    },
+    {
+      "id": "US-023",
+      "title": "Implement ExternalOperations for CLI context",
+      "status": "done",
+      "dependsOn": [
+        "US-022"
+      ],
+      "description": "As a developer, I want a CLI-specific ExternalOperations implementation so that the orchestrator can perform model calls, compilation, and tests.",
+      "acceptanceCriteria": [
+        "Create src/cli/operations.ts implementing ExternalOperations interface",
+        "callModel: integrate with Anthropic API using environment variable for API key",
+        "compileAndValidate: run tsc or appropriate build command",
+        "runTests: run npm test or configured test command",
+        "archiveCheckpoint: create timestamped backup of state",
+        "notifyHuman: trigger notification hooks (prepare for US-026)",
+        "Collect telemetry data from each operation for status display",
+        "Example: callModel returns response and records tokens used",
+        "Negative case: Missing API key shows clear error message with setup instructions"
+      ],
+      "startedAt": "2026-02-07T17:00:18.493922+00:00",
+      "completedAt": "2026-02-07T17:20:11.287993+00:00",
+      "updatedAt": "2026-02-07T17:20:11.287851+00:00"
+    },
+    {
+      "id": "US-024",
+      "title": "Add inline telemetry to status display",
+      "status": "done",
+      "dependsOn": [
+        "US-023"
+      ],
+      "description": "As a user, I want to see telemetry (model calls, tokens, timing) in the status display so that I understand resource usage.",
+      "acceptanceCriteria": [
+        "Create TelemetryCollector in src/cli/telemetry.ts",
+        "Track: total model calls, tokens (input/output), execution time per phase",
+        "Store telemetry in state file alongside protocol state",
+        "Display telemetry section in status output after phase info",
+        "Format: 'Telemetry: 5 model calls | 12,345 tokens | 45s execution'",
+        "Show per-phase breakdown if --verbose flag provided",
+        "Example: Status shows 'Lattice phase: 2 calls, 3,201 tokens, 8.2s'",
+        "Negative case: No telemetry yet shows 'Telemetry: No data collected'"
+      ],
+      "startedAt": "2026-02-07T17:20:13.367555+00:00",
+      "completedAt": "2026-02-07T17:48:00.496815+00:00",
+      "updatedAt": "2026-02-07T17:48:00.496652+00:00"
+    },
+    {
+      "id": "US-025",
+      "title": "Implement hierarchical sub-state display",
+      "status": "done",
+      "dependsOn": [
+        "US-024"
+      ],
+      "description": "As a user, I want to see the full hierarchy of current state (phase > task > operation) so that I understand exactly what the protocol is doing.",
+      "acceptanceCriteria": [
+        "Extend status display to show three levels: Phase > Task > Operation",
+        "Task level shows current activity within phase (e.g., 'analyzing file X')",
+        "Operation level shows current atomic action (e.g., 'calling architect_model')",
+        "Use indentation or tree-style display for hierarchy",
+        "Update display during watch mode as operations change",
+        "Example: 'Injection > compiling batch 3/5 > tsc --noEmit main.ts'",
+        "Negative case: If task/operation not available, show only available levels"
+      ],
+      "startedAt": "2026-02-07T17:48:02.591714+00:00",
+      "completedAt": "2026-02-07T18:04:15.252252+00:00",
+      "updatedAt": "2026-02-07T18:04:15.252116+00:00"
+    },
+    {
+      "id": "US-026",
+      "title": "Add notification hooks configuration",
+      "status": "done",
+      "dependsOn": [
+        "US-023"
+      ],
+      "description": "As a user, I want to configure notification hooks in criticality.toml so that I'm notified of important protocol events.",
+      "acceptanceCriteria": [
+        "Extend config schema to include [notifications] section",
+        "Support notification events: on_block, on_complete, on_error, on_phase_change",
+        "Each event can have a command to execute (shell command)",
+        "Support enabled/disabled flag per hook",
+        "Validate hook commands exist at config load time (warn if not found)",
+        "Example config: notifications.on_block = { command = 'notify-send \"Protocol blocked\"', enabled = true }",
+        "Example: on_block hook triggers when protocol enters blocking state",
+        "Negative case: Invalid command path shows warning but doesn't fail startup"
+      ],
+      "startedAt": "2026-02-07T18:04:17.348312+00:00",
+      "completedAt": "2026-02-07T18:33:21.173429+00:00",
+      "updatedAt": "2026-02-07T18:33:21.173286+00:00"
+    },
+    {
+      "id": "US-027",
+      "title": "Implement live updating display during resume",
+      "status": "done",
+      "dependsOn": [
+        "US-021",
+        "US-025"
+      ],
+      "description": "As a user, I want the display to update in real-time during resume execution so that I can see progress as it happens.",
+      "acceptanceCriteria": [
+        "Use @opentui/core for live terminal updates",
+        "Update spinner text on phase/task/operation changes",
+        "Show elapsed time counter updating every second",
+        "Display recent log entries (last 3-5 lines) below spinner",
+        "Clear and redraw efficiently to avoid flicker",
+        "Example: Display shows spinner, phase hierarchy, and scrolling log of recent actions",
+        "Negative case: On terminal resize, redraw display correctly"
+      ],
+      "startedAt": "2026-02-07T18:33:23.247089+00:00",
+      "completedAt": "2026-02-07T18:47:34.129242+00:00",
+      "updatedAt": "2026-02-07T18:47:34.129077+00:00"
+    },
+    {
+      "id": "US-028",
+      "title": "Add contextual error suggestions",
+      "status": "done",
+      "dependsOn": [
+        "US-023"
+      ],
+      "description": "As a user, I want to see contextual suggestions when errors occur so that I know how to fix issues.",
+      "acceptanceCriteria": [
+        "Create error suggestion mapping in src/cli/errors.ts",
+        "Map error types to suggestions: model_failure, compilation_error, test_failure, state_corruption",
+        "model_failure: suggest checking API key, rate limits, model availability",
+        "compilation_error: show file path, line number, suggest fix or rollback",
+        "test_failure: show which tests failed, suggest running specific test",
+        "state_corruption: offer recovery options (backup, reset, manual fix)",
+        "Display suggestions in yellow below error message",
+        "Example: 'Error: Model rate limit exceeded. Suggestions: 1. Wait 60 seconds 2. Use different model tier'",
+        "Negative case: Unknown error type shows generic 'Check logs for details' suggestion"
+      ],
+      "startedAt": "2026-02-07T18:47:36.226043+00:00",
+      "completedAt": "2026-02-07T19:03:12.712467+00:00",
+      "updatedAt": "2026-02-07T19:03:12.712316+00:00"
+    },
+    {
+      "id": "US-029",
+      "title": "Implement execution summary on completion or block",
+      "status": "done",
+      "dependsOn": [
+        "US-022",
+        "US-024"
+      ],
+      "description": "As a user, I want to see a summary when resume completes or blocks so that I understand what was accomplished.",
+      "acceptanceCriteria": [
+        "Display summary box when tick loop exits",
+        "Show: ticks executed, phases completed, decisions made, time elapsed",
+        "Show: reason for stopping (blocked, completed, error, user interrupt)",
+        "If blocked: show the blocking query briefly and hint to run 'crit resolve'",
+        "If completed: show artifact summary",
+        "If error: show error with suggestions per US-028",
+        "Example: 'Executed 12 ticks in 45s | Completed: Lattice -> Injection | Blocked: conflict_003'",
+        "Negative case: Zero ticks (immediate block) shows 'Already blocked, no ticks executed'"
+      ],
+      "startedAt": "2026-02-07T19:13:24.302782+00:00",
+      "completedAt": "2026-02-07T19:24:36.467111+00:00",
+      "updatedAt": "2026-02-07T19:24:36.466888+00:00"
+    },
+    {
+      "id": "US-030",
+      "title": "Implement graceful shutdown and state preservation",
+      "status": "done",
+      "dependsOn": [
+        "US-022"
+      ],
+      "description": "As a user, I want Ctrl+C to gracefully stop execution and save state so that I don't lose progress.",
+      "acceptanceCriteria": [
+        "Register SIGINT handler in resume command",
+        "On first Ctrl+C: set flag to stop after current tick completes",
+        "Show message: 'Stopping after current operation... (Ctrl+C again to force quit)'",
+        "On second Ctrl+C: force immediate exit with state save attempt",
+        "Save state atomically before exit",
+        "Show summary of progress before exit",
+        "Example: User presses Ctrl+C, sees 'Stopping...' then summary",
+        "Negative case: Force quit during write shows warning about potential state issues"
+      ],
+      "startedAt": "2026-02-07T19:24:38.566492+00:00",
+      "completedAt": "2026-02-07T19:36:56.715937+00:00",
+      "updatedAt": "2026-02-07T19:36:56.715740+00:00"
+    },
+    {
+      "id": "US-031",
+      "title": "Add integration tests for CLI commands",
+      "status": "done",
+      "dependsOn": [
+        "US-022",
+        "US-026",
+        "US-028"
+      ],
+      "description": "As a developer, I want integration tests for the CLI so that I can verify end-to-end behavior.",
+      "acceptanceCriteria": [
+        "Create tests/integration/cli.test.ts",
+        "Test status command with various state files (active, blocked, completed, empty)",
+        "Test resolve command with mock stdin for selection",
+        "Test resume command with mock orchestrator (verify tick loop execution)",
+        "Test notification hook triggering",
+        "Test error handling and suggestions",
+        "Test graceful shutdown behavior",
+        "Example: Test verifies resume executes ticks until mock orchestrator returns blocked",
+        "Negative case: Test verifies invalid input is handled gracefully"
+      ],
+      "startedAt": "2026-02-07T20:52:20.151265+00:00",
+      "completedAt": "2026-02-07T21:25:20.664458+00:00",
+      "updatedAt": "2026-02-07T21:25:20.664327+00:00"
+    }
+  ]
+}

@@ -1,0 +1,473 @@
+{
+  "version": 1,
+  "project": "Phase 3.6: Mass Defect Implementation",
+  "overview": "Implement the Mass Defect phase (Phase IV) of the Criticality Protocol - the final phase that reduces code mass while preserving semantics through smell-indexed pattern transformations. This completes Phase 3 of the ROADMAP.md.",
+  "goals": [
+    "Integrate complexity analysis tools (ESLint rules) for smell detection",
+    "Implement transformation catalog with TOML-based smell and pattern definitions",
+    "Implement pattern selection algorithm with risk-based ordering",
+    "Implement transformation application with LLM-generated refactoring",
+    "Implement semantic verification per risk level",
+    "Implement iteration loop until complexity targets are satisfied or no patterns remain"
+  ],
+  "nonGoals": [
+    "Multi-language support beyond TypeScript (Python/Go adapters are Phase 5)",
+    "GUI/dashboard visualization of transformations",
+    "Automatic pattern learning from codebase history",
+    "Custom user-defined patterns (use predefined catalog only)"
+  ],
+  "successMetrics": [
+    "All 14 initial patterns implemented and tested",
+    "Complexity metrics correctly detected via ESLint integration",
+    "Transformations preserve semantics (verified by risk-appropriate test suites)",
+    "Iteration converges when targets met: max_cyclomatic_complexity=10, max_function_length=50, max_nesting_depth=4",
+    "All quality gates pass: pnpm test, pnpm lint, pnpm typecheck, pnpm build"
+  ],
+  "openQuestions": [],
+  "stack": {
+    "framework": "TypeScript with ts-morph for AST manipulation",
+    "hosting": "N/A (CLI tool)",
+    "database": "N/A (file-based TOML catalogs)",
+    "auth": "N/A",
+    "testing": "Vitest for unit/integration, fast-check for property tests",
+    "linting": "ESLint with complexity rules for smell detection"
+  },
+  "routes": [],
+  "uiNotes": [],
+  "dataModel": [
+    {
+      "entity": "SmellDefinition",
+      "fields": [
+        "id",
+        "name",
+        "category",
+        "description",
+        "detection",
+        "applicablePatterns"
+      ]
+    },
+    {
+      "entity": "PatternDefinition",
+      "fields": [
+        "id",
+        "name",
+        "description",
+        "risk",
+        "riskRationale",
+        "verification",
+        "guards",
+        "enables",
+        "prompt"
+      ]
+    },
+    {
+      "entity": "DetectedSmell",
+      "fields": [
+        "smellId",
+        "severity",
+        "location"
+      ]
+    },
+    {
+      "entity": "FunctionContext",
+      "fields": [
+        "functionId",
+        "currentMetrics",
+        "previouslyAttempted"
+      ]
+    },
+    {
+      "entity": "TransformationType",
+      "fields": [
+        "patternId",
+        "smell",
+        "risk",
+        "prompt"
+      ]
+    },
+    {
+      "entity": "ComplexityMetrics",
+      "fields": [
+        "cyclomaticComplexity",
+        "functionLength",
+        "nestingDepth",
+        "testCoverage"
+      ]
+    }
+  ],
+  "importFormat": {
+    "description": "TOML files for smell and pattern definitions",
+    "example": {
+      "smell": {
+        "id": "deep-nesting",
+        "name": "Deep Nesting",
+        "category": "control-flow"
+      },
+      "pattern": {
+        "id": "early-return",
+        "name": "Early Return",
+        "risk": 2
+      }
+    }
+  },
+  "rules": [
+    "Risk Level 1 (Trivial): Compile-only verification",
+    "Risk Level 2 (Safe): Compile + unit tests for target function",
+    "Risk Level 3 (Moderate): Compile + unit tests + integration tests for module",
+    "Risk Level 4 (Structural): Full test suite verification",
+    "Pattern selection: Sort by risk ascending, then enables-count descending",
+    "Skip patterns already attempted on a function",
+    "Deduplicate patterns that address multiple smells (keep highest severity)",
+    "Iterate until metrics satisfied OR no applicable patterns remain",
+    "Model routing: worker_model for fast transforms, architect_model for complex refactoring"
+  ],
+  "qualityGates": [
+    "pnpm test",
+    "pnpm lint",
+    "pnpm typecheck",
+    "pnpm build"
+  ],
+  "stories": [
+    {
+      "id": "US-001",
+      "title": "Define Mass Defect types and interfaces",
+      "status": "done",
+      "dependsOn": [],
+      "description": "As a developer, I want TypeScript type definitions for the Mass Defect phase so that all components have type-safe interfaces.",
+      "acceptanceCriteria": [
+        "Create src/mass-defect/types.ts with all interfaces from SPECIFICATION.md Section 4 Mass Defect",
+        "Define SmellCategory union type: 'control-flow' | 'duplication' | 'idiom-violation' | 'dead-weight' | 'clarity-debt'",
+        "Define RiskLevel type: 1 | 2 | 3 | 4",
+        "Define RiskDefinition interface with level, name, verification",
+        "Define VerificationScope discriminated union with compile_only, unit_tests, integration_tests, full_test_suite",
+        "Define SmellDefinition interface with id, name, category, description, detection, applicablePatterns",
+        "Define DetectionCriteria interface with thresholds, tools, heuristics",
+        "Define PatternDefinition interface with id, name, description, risk, riskRationale, verification, guards, enables, prompt",
+        "Define TransformationCatalog interface with getSmell, getPattern, getSmellsByCategory, selectPatterns methods",
+        "Define DetectedSmell, FunctionContext, TransformationType, ComplexityMetrics interfaces",
+        "Define MassDefectConfig interface for complexity targets from criticality.toml",
+        "Example: SmellCategory type correctly restricts to 5 valid categories",
+        "Negative case: TypeScript compiler rejects invalid SmellCategory value 'invalid-category'",
+        "Export all types from src/mass-defect/index.ts"
+      ],
+      "startedAt": "2026-02-06T18:17:02.884510+00:00",
+      "completedAt": "2026-02-06T18:23:34.671884+00:00",
+      "updatedAt": "2026-02-06T18:23:34.671725+00:00"
+    },
+    {
+      "id": "US-002",
+      "title": "Implement TOML catalog parser for smells and patterns",
+      "status": "done",
+      "dependsOn": [
+        "US-001"
+      ],
+      "description": "As a developer, I want to load smell and pattern definitions from TOML files so that the transformation catalog is data-driven and extensible.",
+      "acceptanceCriteria": [
+        "Create src/mass-defect/catalog-parser.ts",
+        "Implement parseSmellDefinition(toml: string): SmellDefinition function",
+        "Implement parsePatternDefinition(toml: string): PatternDefinition function",
+        "Implement loadCatalog(catalogDir: string): TransformationCatalog function",
+        "Catalog loads all .toml files from smells/ and patterns/ subdirectories",
+        "Validate required fields are present in TOML files",
+        "Return typed errors for malformed TOML (missing fields, invalid types)",
+        "Example: Loading smells/control-flow/deep-nesting.toml returns valid SmellDefinition with id='deep-nesting'",
+        "Example: Loading patterns/early-return.toml returns valid PatternDefinition with risk=2",
+        "Negative case: Missing 'id' field in smell TOML returns descriptive CatalogParseError",
+        "Negative case: Invalid risk level (5) returns validation error",
+        "Create src/mass-defect/catalog-parser.test.ts with unit tests"
+      ],
+      "startedAt": "2026-02-06T18:23:36.759167+00:00",
+      "completedAt": "2026-02-06T18:44:17.051652+00:00",
+      "updatedAt": "2026-02-06T18:44:17.051491+00:00"
+    },
+    {
+      "id": "US-003",
+      "title": "Create initial smell definition TOML files",
+      "status": "done",
+      "dependsOn": [
+        "US-002"
+      ],
+      "description": "As a developer, I want the initial set of smell definitions as TOML files so that the Mass Defect phase can detect code smells.",
+      "acceptanceCriteria": [
+        "Create src/mass-defect/catalog/smells/ directory structure",
+        "Create control-flow/deep-nesting.toml with detection thresholds and applicable patterns (early-return, extract-conditional-body)",
+        "Create control-flow/high-cyclomatic-complexity.toml with max_cyclomatic_complexity=10 threshold",
+        "Create control-flow/long-function-body.toml with max_function_length_lines=50 threshold",
+        "Create duplication/repeated-code-blocks.toml with heuristics for duplicate detection",
+        "Create duplication/magic-values.toml for literal value detection",
+        "Create duplication/missing-type-abstraction.toml for repeated complex types",
+        "Create idiom-violation/imperative-loop.toml for transformable loops",
+        "Create idiom-violation/verbose-null-handling.toml for optional chaining candidates",
+        "Create dead-weight/unused-binding.toml with ESLint no-unused-vars rule",
+        "Create dead-weight/unreachable-code.toml with ESLint no-unreachable rule",
+        "Create clarity-debt/over-documentation.toml for comment-to-code ratio",
+        "Each smell file includes: id, name, category, description, detection criteria, applicable_patterns array",
+        "Example: deep-nesting.toml has detection.max_nesting_depth=3 and tools=[{name='eslint', rule='max-depth'}]",
+        "Negative case: Smell with no applicable_patterns is still valid (some smells may have no automated fix)"
+      ],
+      "startedAt": "2026-02-06T18:44:19.122269+00:00",
+      "completedAt": "2026-02-06T18:50:19.594744+00:00",
+      "updatedAt": "2026-02-06T18:50:19.594553+00:00"
+    },
+    {
+      "id": "US-004",
+      "title": "Create initial pattern definition TOML files",
+      "status": "done",
+      "dependsOn": [
+        "US-002"
+      ],
+      "description": "As a developer, I want the 14 initial transformation patterns as TOML files so that the Mass Defect phase can apply refactorings.",
+      "acceptanceCriteria": [
+        "Create src/mass-defect/catalog/patterns/ directory",
+        "Create early-return.toml with full prompt template including TypeScript and Python examples from SPECIFICATION.md",
+        "Create guard-clause.toml for precondition checks (risk=2)",
+        "Create extract-helper.toml for function extraction (risk=3)",
+        "Create loop-to-map.toml for functional transformation (risk=2)",
+        "Create loop-to-comprehension.toml for Python list comprehensions (risk=2)",
+        "Create remove-unused-binding.toml (risk=1, trivial)",
+        "Create remove-unreachable.toml (risk=1, trivial)",
+        "Create inline-single-use.toml (risk=1, trivial)",
+        "Create extract-magic-value.toml (risk=2)",
+        "Create introduce-type-alias.toml (risk=3)",
+        "Create optional-chaining.toml (risk=2)",
+        "Create nullish-coalescing.toml (risk=2)",
+        "Create rename-for-clarity.toml (risk=2)",
+        "Create extract-explanatory-variable.toml (risk=2)",
+        "Each pattern includes: id, name, description, risk, risk_rationale, verification, guards, enables, prompt.template",
+        "Example: early-return.toml has enables=['extract-helper', 'loop-to-functional'] and guards listing 4 conditions",
+        "Negative case: Pattern with empty guards array is valid (some patterns always apply)"
+      ],
+      "startedAt": "2026-02-06T18:50:21.677244+00:00",
+      "completedAt": "2026-02-06T18:56:55.891900+00:00",
+      "updatedAt": "2026-02-06T18:56:55.891746+00:00"
+    },
+    {
+      "id": "US-005",
+      "title": "Implement TransformationCatalog class",
+      "status": "done",
+      "dependsOn": [
+        "US-002",
+        "US-003",
+        "US-004"
+      ],
+      "description": "As a developer, I want a TransformationCatalog class that provides indexed access to smells and patterns so that the Mass Defect phase can efficiently look up transformations.",
+      "acceptanceCriteria": [
+        "Create src/mass-defect/catalog.ts implementing TransformationCatalog interface",
+        "Implement getSmell(id: string): SmellDefinition | null",
+        "Implement getPattern(id: string): PatternDefinition | null",
+        "Implement getSmellsByCategory(category: SmellCategory): SmellDefinition[]",
+        "Implement selectPatterns(detectedSmells, functionContext): TransformationType[] using algorithm from SPECIFICATION.md",
+        "Pattern selection: collect applicable patterns, skip already-attempted, deduplicate by patternId, sort by risk asc then enables desc",
+        "Catalog is immutable after construction (loaded once from TOML files)",
+        "Example: getSmellsByCategory('control-flow') returns [deep-nesting, high-cyclomatic-complexity, long-function-body]",
+        "Example: selectPatterns with deep-nesting smell returns early-return before extract-helper (lower risk first)",
+        "Negative case: selectPatterns with empty detectedSmells returns empty array",
+        "Negative case: selectPatterns skips patterns in functionContext.previouslyAttempted",
+        "Create src/mass-defect/catalog.test.ts with unit tests including deduplication and sorting"
+      ],
+      "startedAt": "2026-02-06T18:56:57.977020+00:00",
+      "completedAt": "2026-02-06T19:05:57.366342+00:00",
+      "updatedAt": "2026-02-06T19:05:57.366195+00:00"
+    },
+    {
+      "id": "US-006",
+      "title": "Implement comprehensive Smell Detector with ESLint and heuristics",
+      "status": "done",
+      "dependsOn": [
+        "US-001"
+      ],
+      "description": "As a developer, I want a smell detector that identifies code smells using ESLint rules AND custom heuristics so that the Mass Defect phase can identify functions needing transformation.",
+      "acceptanceCriteria": [
+        "Create src/mass-defect/complexity-analyzer.ts (or smell-detector.ts)",
+        "Implement analyzeComplexity(sourceFile: SourceFile): ComplexityMetrics function using ts-morph",
+        "Implement detectSmells(sourceFile: SourceFile, catalog: TransformationCatalog): DetectedSmell[] function",
+        "Integrate ESLint programmatically using @eslint/js and typescript-eslint",
+        "Detect cyclomatic complexity (complexity), nesting depth (max-depth), function length (max-lines-per-function)",
+        "Detect unused bindings (no-unused-vars) and unreachable code (no-unreachable)",
+        "Configure ESLint 'no-magic-numbers' rule for magic-values smell",
+        "Configure ESLint 'no-restricted-syntax' (ForStatement) for imperative-loop smell",
+        "Implement heuristic-based detection logic for smells that ESLint misses",
+        "Implement 'comment-to-code ratio' heuristic for over-documentation smell",
+        "Implement basic duplication detection (e.g., using 'jscpd' integration or internal AST hashing) for repeated-code-blocks",
+        "Ensure detectSmells aggregates results from all tools and heuristics",
+        "Map violations to DetectedSmell objects with smellId, severity, location",
+        "Example: Function with comment-to-code ratio > 0.5 returns DetectedSmell for 'over-documentation'",
+        "Example: Nested if at depth 5 with threshold 3 returns severity=2",
+        "Negative case: Function meeting all thresholds returns empty DetectedSmell array",
+        "Create src/mass-defect/complexity-analyzer.test.ts with test fixtures covering all smell types"
+      ],
+      "startedAt": "2026-02-06T19:05:59.443341+00:00",
+      "completedAt": "2026-02-06T19:27:35.568035+00:00",
+      "updatedAt": "2026-02-06T19:27:35.567861+00:00"
+    },
+    {
+      "id": "US-007",
+      "title": "Implement transformation applier with LLM integration",
+      "status": "done",
+      "dependsOn": [
+        "US-005",
+        "US-006"
+      ],
+      "description": "As a developer, I want a transformation applier that uses LLM to refactor code based on pattern prompts so that detected smells can be fixed automatically.",
+      "acceptanceCriteria": [
+        "Create src/mass-defect/transformation-applier.ts",
+        "Implement applyTransformation(functionCode: string, pattern: TransformationType, router: ModelRouter): Promise<TransformationResult>",
+        "Use worker_model (via existing ModelRouter) for risk levels 1-2",
+        "Use architect_model for risk levels 3-4",
+        "Render pattern prompt template with function code injected",
+        "Parse LLM response to extract transformed function code",
+        "Handle markdown code blocks in response (```typescript ... ```)",
+        "CRITICAL: Preserve JSDoc comments and Micro-Contracts (/// REQUIRES, etc.) when replacing function body",
+        "Verify that AST node replacement does not detach leading/trailing comments",
+        "Return TransformationResult with success/failure, originalCode, transformedCode, patternId",
+        "Example: Applying early-return pattern to deeply nested function returns flattened version",
+        "Example: Applying remove-unused-binding to function with unused var returns code without that var",
+        "Negative case: LLM returns malformed response -> return failure result with error message",
+        "Negative case: LLM returns unchanged code -> return failure (transformation had no effect)",
+        "Create src/mass-defect/transformation-applier.test.ts with mocked ModelRouter"
+      ],
+      "startedAt": "2026-02-06T19:27:37.636988+00:00",
+      "completedAt": "2026-02-06T19:42:38.662616+00:00",
+      "updatedAt": "2026-02-06T19:42:38.662280+00:00"
+    },
+    {
+      "id": "US-008",
+      "title": "Implement semantic verifier with risk-based test execution",
+      "status": "done",
+      "dependsOn": [
+        "US-007"
+      ],
+      "description": "As a developer, I want a semantic verifier that runs appropriate tests based on transformation risk level so that refactorings preserve program behavior.",
+      "acceptanceCriteria": [
+        "Create src/mass-defect/semantic-verifier.ts",
+        "Implement verifyTransformation(original: string, transformed: string, risk: RiskLevel, context: VerificationContext): Promise<VerificationResult>",
+        "Risk 1 (Trivial): Run tsc compilation only",
+        "Risk 2 (Safe): Run tsc + vitest for target function only",
+        "Risk 3 (Moderate): Run tsc + vitest for entire module",
+        "Risk 4 (Structural): Run full test suite",
+        "Reuse existing TypeScript adapter's typecheck.ts for compilation",
+        "Reuse existing testrunner.ts for test execution with appropriate filters",
+        "Return VerificationResult with passed: boolean, errors: string[], testsRun: number",
+        "On verification failure, provide clear error message for revert decision",
+        "Example: Risk 2 transformation compiles and function tests pass -> VerificationResult.passed=true",
+        "Example: Risk 3 transformation causes type error -> VerificationResult.passed=false with tsc error",
+        "Negative case: Risk 4 transformation breaks unrelated test -> detected and reported",
+        "Create src/mass-defect/semantic-verifier.test.ts"
+      ],
+      "startedAt": "2026-02-06T19:42:40.751342+00:00",
+      "completedAt": "2026-02-06T19:50:42.813409+00:00",
+      "updatedAt": "2026-02-06T19:50:42.813153+00:00"
+    },
+    {
+      "id": "US-009",
+      "title": "Implement Mass Defect iteration loop",
+      "status": "done",
+      "dependsOn": [
+        "US-006",
+        "US-007",
+        "US-008"
+      ],
+      "description": "As a developer, I want the Mass Defect iteration loop that repeatedly applies transformations until convergence so that code quality targets are achieved.",
+      "acceptanceCriteria": [
+        "Create src/mass-defect/mass-defect-loop.ts",
+        "Implement runMassDefect(sourceFiles: SourceFile[], catalog: TransformationCatalog, config: MassDefectConfig): Promise<MassDefectResult>",
+        "For each function exceeding complexity targets: detect smells, select patterns, apply transformations",
+        "Track previouslyAttempted patterns per function to avoid retry loops",
+        "After each successful transformation: re-analyze metrics, continue if still exceeding targets",
+        "Stop iteration when: all functions meet targets OR no more applicable patterns for any function",
+        "Apply transformations atomically: on verification failure, revert to original code",
+        "Record all transformation attempts in MassDefectResult for reporting",
+        "Respect config targets: max_cyclomatic_complexity, max_function_length_lines, max_nesting_depth",
+        "Example: Function with complexity 15 -> apply early-return -> complexity 8 -> done (meets target 10)",
+        "Example: Function with complexity 15 -> early-return fails verification -> try next pattern",
+        "Negative case: Function with complexity 15, all patterns fail -> mark as 'requires manual review'",
+        "Negative case: Circular enabling (pattern A enables B, B enables A) -> tracked in previouslyAttempted, terminates",
+        "Create src/mass-defect/mass-defect-loop.test.ts with integration tests"
+      ],
+      "startedAt": "2026-02-06T19:50:44.886168+00:00",
+      "completedAt": "2026-02-06T20:00:53.050770+00:00",
+      "updatedAt": "2026-02-06T20:00:53.050659+00:00"
+    },
+    {
+      "id": "US-010",
+      "title": "Implement Mass Defect reporting and module exports",
+      "status": "done",
+      "dependsOn": [
+        "US-009"
+      ],
+      "description": "As a developer, I want comprehensive reporting of Mass Defect results and clean module exports so that the phase integrates with the orchestrator.",
+      "acceptanceCriteria": [
+        "Create src/mass-defect/reporter.ts",
+        "Implement formatMassDefectReport(result: MassDefectResult): string for human-readable output",
+        "Report shows: functions transformed, patterns applied, metrics before/after, functions requiring manual review",
+        "Implement generateMassDefectSummary(result: MassDefectResult): MassDefectSummary for orchestrator",
+        "Summary includes: totalFunctions, transformedCount, failedCount, metricsImprovement, convergenceStatus",
+        "Update src/mass-defect/index.ts to export all public APIs",
+        "Export: TransformationCatalog, loadCatalog, analyzeComplexity, detectSmells, runMassDefect, formatMassDefectReport",
+        "Export all types from types.ts",
+        "Add TSDoc comments to all exported functions",
+        "Example: Report for 10 functions shows '7 transformed, 2 already optimal, 1 requires review'",
+        "Example: Summary shows metricsImprovement: {avgComplexity: {before: 12.5, after: 7.3}}",
+        "Negative case: Empty result (no functions analyzed) returns valid but minimal report",
+        "Create src/mass-defect/reporter.test.ts"
+      ],
+      "startedAt": "2026-02-06T20:00:55.136539+00:00",
+      "completedAt": "2026-02-06T20:13:51.913746+00:00",
+      "updatedAt": "2026-02-06T20:13:51.913620+00:00"
+    },
+    {
+      "id": "US-011",
+      "title": "Add Mass Defect configuration to criticality.toml schema",
+      "status": "done",
+      "dependsOn": [
+        "US-001"
+      ],
+      "description": "As a developer, I want Mass Defect configuration in criticality.toml so that complexity targets are project-configurable.",
+      "acceptanceCriteria": [
+        "Update src/config/types.ts to add MassDefectConfig interface",
+        "Add mass_defect section to CriticalityConfig with targets and catalog_path",
+        "Default targets: max_cyclomatic_complexity=10, max_function_length_lines=50, max_nesting_depth=4, min_test_coverage=0.80",
+        "Default catalog_path: './mass-defect-catalog' (relative to project root)",
+        "Update src/config/parser.ts to parse [mass_defect] section from TOML",
+        "Update src/config/defaults.ts with default MassDefectConfig values",
+        "Update src/config/validator.ts to validate mass_defect config",
+        "Example: criticality.toml with [mass_defect.targets] max_cyclomatic_complexity=8 overrides default",
+        "Example: Omitting [mass_defect] section uses all defaults",
+        "Negative case: Invalid target value (negative number) returns validation error",
+        "Update existing config tests to cover mass_defect parsing"
+      ],
+      "startedAt": "2026-02-06T20:13:54.004720+00:00",
+      "completedAt": "2026-02-06T20:23:42.709538+00:00",
+      "updatedAt": "2026-02-06T20:23:42.709425+00:00"
+    },
+    {
+      "id": "US-012",
+      "title": "Integrate Mass Defect phase into protocol orchestrator",
+      "status": "done",
+      "dependsOn": [
+        "US-009",
+        "US-010",
+        "US-011"
+      ],
+      "description": "As a developer, I want the Mass Defect phase integrated into the protocol orchestrator so that it runs after Mesoscopic verification completes.",
+      "acceptanceCriteria": [
+        "Update src/protocol/types.ts to add 'mass_defect' phase and sub-states",
+        "Add MassDefectPhaseState: 'analyzing' | 'transforming' | 'verifying' | 'converged' | 'manual_review_required'",
+        "Update src/protocol/transitions.ts with Mesoscopic -> MassDefect transition",
+        "Add guard: all clusters passed in Mesoscopic -> transition to MassDefect.analyzing",
+        "Implement MassDefect phase execution in orchestrator",
+        "Phase loads catalog, runs mass defect loop, generates report",
+        "On convergence (all targets met): transition to Complete",
+        "On manual_review_required: transition to BLOCKED with report",
+        "Update telemetry to log mass defect transformations",
+        "Example: Successful Mesoscopic -> MassDefect runs -> all functions optimized -> Complete",
+        "Example: MassDefect finds function needing manual review -> BLOCKED state with context",
+        "Negative case: MassDefect with empty source files -> immediate transition to Complete",
+        "Update src/protocol/transitions.test.ts with Mass Defect transition tests"
+      ],
+      "startedAt": "2026-02-06T20:23:44.791773+00:00",
+      "completedAt": "2026-02-06T20:41:19.541698+00:00",
+      "updatedAt": "2026-02-06T20:41:19.541585+00:00"
+    }
+  ]
+}

@@ -1,0 +1,398 @@
+{
+  "version": 1,
+  "project": "Fix ESLint Security Warnings",
+  "overview": "Eliminate 488 ESLint security warnings across the criticality codebase by refactoring file system operations to use validated paths and replacing object injection patterns with type-safe Map wrappers, improving both security posture and developer experience.",
+  "goals": [
+    "Achieve zero ESLint warnings across the codebase",
+    "Improve actual security by validating file paths before use",
+    "Replace unsafe object indexing with type-safe Map patterns",
+    "Maintain full test coverage and type safety throughout refactoring"
+  ],
+  "nonGoals": [
+    "Changing application behavior or functionality",
+    "Adding new features",
+    "Refactoring code beyond what's needed to fix warnings",
+    "Disabling ESLint rules globally"
+  ],
+  "successMetrics": [
+    "npm run lint reports 0 warnings",
+    "npm run typecheck passes with no errors",
+    "npm test passes with all existing tests",
+    "No new eslint-disable comments without justification"
+  ],
+  "openQuestions": [],
+  "stack": {
+    "framework": "Node.js + TypeScript",
+    "hosting": "N/A (CLI tool)",
+    "database": "N/A",
+    "auth": "N/A"
+  },
+  "routes": [],
+  "uiNotes": [],
+  "dataModel": [],
+  "importFormat": {
+    "description": "Not applicable",
+    "example": {}
+  },
+  "rules": [
+    "All file path operations must use path.resolve + path.isAbsolute validation",
+    "Object indexing with dynamic keys must use typed Map wrappers",
+    "eslint-disable comments require inline justification explaining why the code is safe",
+    "Test files follow same rigor as source files"
+  ],
+  "qualityGates": [
+    "npm run lint",
+    "npm run typecheck",
+    "npm test"
+  ],
+  "stories": [
+    {
+      "id": "US-001",
+      "title": "Create validated file path utility module",
+      "status": "done",
+      "dependsOn": [],
+      "description": "As a developer, I want a utility module for validated file system operations so that all fs calls use safe, validated paths.",
+      "acceptanceCriteria": [
+        "Create src/utils/safe-fs.ts with wrapper functions for common fs operations",
+        "Implement validatePath function using path.resolve + path.isAbsolute checks",
+        "Export safe versions: safeReadFile, safeWriteFile, safeExists, safeMkdir, safeReaddir, safeStat, safeUnlink, safeRename",
+        "Each wrapper validates path before delegating to node:fs/promises",
+        "Example: safeReadFile('/valid/path.txt') -> resolves path, validates, calls fs.readFile",
+        "Negative case: safeReadFile('') -> throws validation error",
+        "Include JSDoc comments explaining security rationale",
+        "npm run typecheck passes"
+      ],
+      "startedAt": "2026-02-01T21:18:18.610480+00:00",
+      "completedAt": "2026-02-01T21:42:11.096480+00:00",
+      "updatedAt": "2026-02-01T21:42:11.096313+00:00"
+    },
+    {
+      "id": "US-002",
+      "title": "Create type-safe Map wrapper utilities",
+      "status": "done",
+      "dependsOn": [],
+      "description": "As a developer, I want type-safe Map wrapper utilities so that dynamic key access is safe and ESLint-compliant.",
+      "acceptanceCriteria": [
+        "Create src/utils/typed-map.ts with TypedMap class",
+        "TypedMap<K, V> wraps Map with enforced key/value types",
+        "Implement get, set, has, delete, entries, keys, values, forEach methods",
+        "Add fromObject<K, V>(obj) static factory for migration from plain objects",
+        "Add toObject() method for cases where plain object is needed",
+        "Example: TypedMap.fromObject({ a: 1, b: 2 }) -> TypedMap with entries",
+        "Negative case: TypedMap<string, number>.set(123, 'value') -> TypeScript compile error",
+        "npm run typecheck passes"
+      ],
+      "startedAt": "2026-02-01T21:42:13.174101+00:00",
+      "completedAt": "2026-02-01T21:48:22.111186+00:00",
+      "updatedAt": "2026-02-01T21:48:22.110806+00:00"
+    },
+    {
+      "id": "US-003",
+      "title": "Fix fs-filename warnings in adapters/typescript/ast.ts",
+      "status": "done",
+      "dependsOn": [
+        "US-001"
+      ],
+      "description": "As a developer, I want ast.ts to use validated file paths so that ESLint fs-filename warnings are resolved.",
+      "acceptanceCriteria": [
+        "Replace existsSync calls with safe-fs equivalents or add eslint-disable with justification",
+        "Fix warnings at lines 51, 363, 422 (approximately)",
+        "For object injection warnings, evaluate if Map refactor applies",
+        "Example: existsSync(dynamicPath) -> safeExistsSync(dynamicPath) with validation",
+        "Negative case: if path validation fails, operation throws descriptive error",
+        "npm run lint src/adapters/typescript/ast.ts shows 0 warnings",
+        "npm run typecheck passes",
+        "npm test passes"
+      ],
+      "startedAt": "2026-02-01T21:48:24.196477+00:00",
+      "completedAt": "2026-02-01T21:58:48.689882+00:00",
+      "updatedAt": "2026-02-01T21:58:48.689737+00:00"
+    },
+    {
+      "id": "US-004",
+      "title": "Fix fs-filename warnings in adapters/typescript/index.ts",
+      "status": "done",
+      "dependsOn": [
+        "US-001"
+      ],
+      "description": "As a developer, I want index.ts to use validated file paths so that ESLint fs-filename warnings are resolved.",
+      "acceptanceCriteria": [
+        "Replace ~16 existsSync, readFileSync, readdirSync calls with safe-fs equivalents",
+        "Fix warnings at lines 240, 246, 471, 506, 508, 531, 533, 566, 567, 574, 576, 582, 597, 599, 605, 621",
+        "Example: readFileSync(configPath) -> safeReadFileSync(configPath)",
+        "Negative case: invalid path throws before fs operation attempted",
+        "npm run lint src/adapters/typescript/index.ts shows 0 warnings",
+        "npm run typecheck passes",
+        "npm test passes"
+      ],
+      "startedAt": "2026-02-01T21:58:50.779536+00:00",
+      "completedAt": "2026-02-01T22:19:11.740836+00:00",
+      "updatedAt": "2026-02-01T22:19:11.740692+00:00"
+    },
+    {
+      "id": "US-005",
+      "title": "Fix fs-filename warnings in adapters/typescript test files",
+      "status": "done",
+      "dependsOn": [
+        "US-001"
+      ],
+      "description": "As a developer, I want adapter test files to use validated file paths so that ESLint warnings are resolved.",
+      "acceptanceCriteria": [
+        "Fix warnings in ast.test.ts (~10 warnings)",
+        "Fix warnings in claims.test.ts (~2 warnings)",
+        "Fix warnings in index.test.ts (~50+ warnings)",
+        "Use safe-fs wrappers or eslint-disable with justification for test temp directories",
+        "Example: writeFileSync(tempPath, content) -> safeWriteFileSync(tempPath, content)",
+        "Negative case: test with invalid path input validates error handling",
+        "npm run lint src/adapters/typescript/*.test.ts shows 0 warnings",
+        "npm test passes"
+      ],
+      "startedAt": "2026-02-01T22:19:13.828057+00:00",
+      "completedAt": "2026-02-01T22:31:53.601775+00:00",
+      "updatedAt": "2026-02-01T22:31:53.601628+00:00"
+    },
+    {
+      "id": "US-006",
+      "title": "Fix object-injection warnings in adapters/typescript module",
+      "status": "done",
+      "dependsOn": [
+        "US-002"
+      ],
+      "description": "As a developer, I want to replace object indexing with TypedMap in adapters/typescript so that object-injection warnings are resolved.",
+      "acceptanceCriteria": [
+        "Refactor ast.ts lines 363, 422 to use TypedMap",
+        "Refactor contracts.ts line 277 to use TypedMap",
+        "Refactor invariant-test-generator.ts line 149 to use TypedMap",
+        "Example: results[key] = value -> resultsMap.set(key, value)",
+        "Negative case: accessing non-existent key returns undefined (Map semantics)",
+        "npm run lint src/adapters/typescript/*.ts shows 0 object-injection warnings",
+        "npm run typecheck passes",
+        "npm test passes"
+      ],
+      "startedAt": "2026-02-01T22:31:55.703390+00:00",
+      "completedAt": "2026-02-01T22:43:12.078056+00:00",
+      "updatedAt": "2026-02-01T22:43:12.077902+00:00"
+    },
+    {
+      "id": "US-007",
+      "title": "Fix fs-filename warnings in interview module",
+      "status": "done",
+      "dependsOn": [
+        "US-001"
+      ],
+      "description": "As a developer, I want interview module to use validated file paths so that ESLint warnings are resolved.",
+      "acceptanceCriteria": [
+        "Fix warnings in auditor.ts, auditor.test.ts",
+        "Fix warnings in cli.ts, cli.test.ts",
+        "Fix warnings in engine.ts",
+        "Fix warnings in persistence.ts, persistence.test.ts",
+        "Fix warnings in spec-generator.ts, spec-generator.test.ts",
+        "Fix warnings in structure.ts",
+        "Example: await writeFile(outputPath, content) -> await safeWriteFile(outputPath, content)",
+        "Negative case: persistence with invalid path throws validation error",
+        "npm run lint src/interview/*.ts shows 0 fs-filename warnings",
+        "npm run typecheck passes",
+        "npm test passes"
+      ],
+      "startedAt": "2026-02-02T00:06:28.915742+00:00",
+      "completedAt": "2026-02-02T00:18:30.242028+00:00",
+      "updatedAt": "2026-02-02T00:18:30.241886+00:00"
+    },
+    {
+      "id": "US-008",
+      "title": "Fix fs-filename warnings in injection module",
+      "status": "done",
+      "dependsOn": [
+        "US-001"
+      ],
+      "description": "As a developer, I want injection module to use validated file paths so that ESLint warnings are resolved.",
+      "acceptanceCriteria": [
+        "Fix warnings in escalation.ts",
+        "Fix warnings in ralph-loop.ts, ralph-loop.test.ts",
+        "Fix warnings in security-scanner.ts, security-scanner.test.ts",
+        "Fix warnings in test-executor.test.ts",
+        "Example: await readFile(scanPath) -> await safeReadFile(scanPath)",
+        "Negative case: scanner with non-existent path handles error gracefully",
+        "npm run lint src/injection/*.ts shows 0 fs-filename warnings",
+        "npm run typecheck passes",
+        "npm test passes"
+      ],
+      "startedAt": "2026-02-02T00:18:32.335613+00:00",
+      "completedAt": "2026-02-02T01:18:17.585764+00:00",
+      "updatedAt": "2026-02-02T01:18:17.585609+00:00"
+    },
+    {
+      "id": "US-009",
+      "title": "Fix fs-filename warnings in protocol module",
+      "status": "done",
+      "dependsOn": [
+        "US-001"
+      ],
+      "description": "As a developer, I want protocol module to use validated file paths so that ESLint warnings are resolved.",
+      "acceptanceCriteria": [
+        "Fix warnings in checkpoint.ts, checkpoint.test.ts",
+        "Fix warnings in cli.ts, cli.test.ts",
+        "Fix warnings in orchestrator.test.ts",
+        "Fix warnings in persistence.ts, persistence.test.ts",
+        "Fix warnings in blocking-constraints.test.ts",
+        "Example: await mkdir(checkpointDir) -> await safeMkdir(checkpointDir)",
+        "Negative case: checkpoint with read-only path throws appropriate error",
+        "npm run lint src/protocol/*.ts shows 0 fs-filename warnings",
+        "npm run typecheck passes",
+        "npm test passes"
+      ],
+      "startedAt": "2026-02-02T01:18:19.686561+00:00",
+      "completedAt": "2026-02-02T01:41:13.644044+00:00",
+      "updatedAt": "2026-02-02T01:41:13.643897+00:00"
+    },
+    {
+      "id": "US-010",
+      "title": "Fix fs-filename warnings in composition-audit module",
+      "status": "done",
+      "dependsOn": [
+        "US-001"
+      ],
+      "description": "As a developer, I want composition-audit module to use validated file paths so that ESLint warnings are resolved.",
+      "acceptanceCriteria": [
+        "Fix warnings in detector.ts",
+        "Fix warnings in phase-regression.ts",
+        "Fix warnings in prompts.ts",
+        "Fix warnings in report-parser.ts, report-parser.test.ts",
+        "Fix warnings in report-storage.ts, report-storage.test.ts",
+        "Fix warnings in types.test.ts",
+        "Example: await writeFile(reportPath, json) -> await safeWriteFile(reportPath, json)",
+        "Negative case: report storage with invalid path fails validation",
+        "npm run lint src/composition-audit/*.ts shows 0 fs-filename warnings",
+        "npm run typecheck passes",
+        "npm test passes"
+      ],
+      "startedAt": "2026-02-02T09:32:02.486111+00:00",
+      "completedAt": "2026-02-02T10:08:57.201409+00:00",
+      "updatedAt": "2026-02-02T10:08:57.201054+00:00"
+    },
+    {
+      "id": "US-011",
+      "title": "Fix fs-filename warnings in router module",
+      "status": "done",
+      "dependsOn": [
+        "US-001"
+      ],
+      "description": "As a developer, I want router module to use validated file paths so that ESLint warnings are resolved.",
+      "acceptanceCriteria": [
+        "Fix warnings in claude-code-client.ts, claude-code-client.test.ts",
+        "Fix warnings in opencode-client.ts, opencode-client.test.ts",
+        "Fix warnings in context.ts",
+        "Fix warnings in logging.ts, logging.test.ts",
+        "Fix warnings in routing.ts, routing.test.ts",
+        "Example: await readFile(configPath) -> await safeReadFile(configPath)",
+        "Negative case: client with missing config file returns appropriate error",
+        "npm run lint src/router/*.ts shows 0 fs-filename warnings",
+        "npm run typecheck passes",
+        "npm test passes"
+      ],
+      "startedAt": "2026-02-02T10:52:08.728842+00:00",
+      "completedAt": "2026-02-02T11:31:51.632632+00:00",
+      "updatedAt": "2026-02-02T11:31:51.632168+00:00"
+    },
+    {
+      "id": "US-012",
+      "title": "Fix fs-filename warnings in servers module",
+      "status": "done",
+      "dependsOn": [
+        "US-001"
+      ],
+      "description": "As a developer, I want servers module to use validated file paths so that ESLint warnings are resolved.",
+      "acceptanceCriteria": [
+        "Fix warnings in artifact/cli.ts, artifact/server.ts, artifact/server.test.ts",
+        "Fix warnings in toolchain/cli.ts, toolchain/server.ts, toolchain/server.test.ts",
+        "Example: await stat(filePath) -> await safeStat(filePath)",
+        "Negative case: server with non-existent artifact path returns 404-equivalent error",
+        "npm run lint src/servers/**/*.ts shows 0 fs-filename warnings",
+        "npm run typecheck passes",
+        "npm test passes"
+      ],
+      "startedAt": "2026-02-02T11:31:53.709078+00:00",
+      "completedAt": "2026-02-02T11:50:08.412333+00:00",
+      "updatedAt": "2026-02-02T11:50:08.412104+00:00"
+    },
+    {
+      "id": "US-013",
+      "title": "Fix fs-filename warnings in remaining modules",
+      "status": "done",
+      "dependsOn": [
+        "US-001"
+      ],
+      "description": "As a developer, I want all remaining modules to use validated file paths so that ESLint warnings are resolved.",
+      "acceptanceCriteria": [
+        "Fix warnings in config/env.ts, config/validator.ts",
+        "Fix warnings in agents/swarm/loader.ts",
+        "Fix warnings in lattice/*.ts (compilation-verifier, contract-attacher, function-generator, module-generator, type-generator, witness-generator)",
+        "Fix warnings in ledger/ledger.ts, ledger/persistence.ts, ledger/persistence.test.ts",
+        "Fix warnings in spec/parser.ts, spec/parser.test.ts",
+        "Example: await readdir(modulePath) -> await safeReaddir(modulePath)",
+        "Negative case: lattice with invalid output dir fails validation before generation",
+        "npm run lint on all affected files shows 0 fs-filename warnings",
+        "npm run typecheck passes",
+        "npm test passes"
+      ],
+      "startedAt": "2026-02-02T14:22:52.371345+00:00",
+      "completedAt": "2026-02-02T14:44:00.000000+00:00",
+      "updatedAt": "2026-02-02T14:44:00.000000+00:00"
+    },
+    {
+      "id": "US-014",
+      "title": "Fix object-injection warnings in remaining modules",
+      "status": "done",
+      "dependsOn": [
+        "US-002"
+      ],
+      "description": "As a developer, I want all remaining object-injection warnings fixed using TypedMap so that ESLint warnings are resolved.",
+      "acceptanceCriteria": [
+        "Refactor spec/parser.ts lines 342, 430, 512, 640, 798 to use TypedMap",
+        "Refactor spec/parser.test.ts line 964 to use TypedMap",
+        "Refactor servers/toolchain/server.ts line 1042 to use TypedMap",
+        "Refactor any remaining object-injection warnings across codebase",
+        "Example: parsed[section] = value -> parsedMap.set(section, value)",
+        "Negative case: parser accessing unknown section returns undefined safely",
+        "npm run lint shows 0 object-injection warnings",
+        "npm run typecheck passes",
+        "npm test passes"
+      ],
+      "startedAt": "2026-02-02T14:48:16.139986+00:00",
+      "completedAt": "2026-02-02T15:07:38.809073+00:00",
+      "updatedAt": "2026-02-02T15:07:38.808908+00:00"
+    },
+    {
+      "id": "US-015",
+      "title": "Final verification and cleanup",
+      "status": "done",
+      "dependsOn": [
+        "US-003",
+        "US-004",
+        "US-005",
+        "US-006",
+        "US-007",
+        "US-008",
+        "US-009",
+        "US-010",
+        "US-011",
+        "US-012",
+        "US-013",
+        "US-014"
+      ],
+      "description": "As a developer, I want to verify zero warnings and clean up any remaining issues so that the codebase is fully compliant.",
+      "acceptanceCriteria": [
+        "Run npm run lint and confirm 0 problems (0 errors, 0 warnings)",
+        "Run npm run typecheck and confirm no errors",
+        "Run npm test and confirm all tests pass",
+        "Review any eslint-disable comments have proper justifications",
+        "Example: npm run lint outputs '0 problems'",
+        "Negative case: if any warning remains, investigate and fix before completing",
+        "Update CI configuration if needed to enforce zero-warning policy"
+      ],
+      "startedAt": "2026-02-02T15:23:42.838151+00:00",
+      "completedAt": "2026-02-02T15:28:47.286576+00:00",
+      "updatedAt": "2026-02-02T15:28:47.286401+00:00"
+    }
+  ]
+}

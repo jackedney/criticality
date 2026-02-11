@@ -1,0 +1,208 @@
+{
+  "version": 1,
+  "project": "Lattice Codebase Bug Fixes",
+  "overview": "Fix multiple bugs across the lattice codebase including logic leakage detection, type generation improvements, path normalization, and report formatting issues.",
+  "goals": [
+    "Fix TODO-body masking real logic in AST inspection",
+    "Improve type generation with proper spec-to-TypeScript mapping",
+    "Fix relative path handling in compilation verifier",
+    "Enhance complexity inference with better pattern matching",
+    "Fix nested generics parsing for Result types",
+    "Handle Map/Set generic parameters correctly",
+    "Fix Range type name sanitization for invalid identifiers",
+    "Include warnings in witness generation output",
+    "Conditionally import fast-check only when needed"
+  ],
+  "nonGoals": [
+    "No new feature development",
+    "No architectural changes",
+    "No performance optimizations beyond bug fixes"
+  ],
+  "successMetrics": [
+    "All quality gates pass (typecheck, lint, test)",
+    "Logic leakage detection correctly identifies real logic",
+    "Type generation emits valid TypeScript types",
+    "Relative paths resolve correctly in applyRepairs",
+    "Report output is properly aligned regardless of content length",
+    "Fast-check import is only emitted when arbitraries are generated"
+  ],
+  "openQuestions": [
+    "Are there dependencies between type-generator changes and files that use generated types?",
+    "Should AST fixes be done before compilation-verifier changes?",
+    "Do existing tests need to be updated for new behavior or just added to?"
+  ],
+  "stack": {
+    "framework": "TypeScript",
+    "hosting": "N/A",
+    "database": "N/A",
+    "auth": "N/A"
+  },
+  "routes": [],
+  "uiNotes": [],
+  "dataModel": [],
+  "importFormat": {
+    "description": "Not applicable",
+    "example": {}
+  },
+  "rules": [
+    "TODO markers should not mask real logic leakage",
+    "Logic pattern keys must be unique across the entire project",
+    "File paths must be normalized relative to projectPath",
+    "Type identifiers must be valid TypeScript identifiers",
+    "Generics parsing must handle nested angle brackets correctly"
+  ],
+  "qualityGates": [
+    "npm run typecheck",
+    "npm run lint",
+    "npm run test"
+  ],
+  "stories": [
+    {
+      "id": "US-001",
+      "title": "Fix AST TODO-body guard and logic pattern filtering",
+      "status": "done",
+      "dependsOn": [],
+      "description": "As a developer, I want the AST inspection to correctly identify TODO-only bodies so real logic is properly checked for leakage and logic patterns are tracked with unique context keys.",
+      "acceptanceCriteria": [
+        "Compute strict isTodoBody by testing body.getText() against TODO-only patterns (throw-new-Error('TODO') and empty-body patterns)",
+        "Run LOGIC_LEAKAGE_PATTERNS scan only when not isTodoBody",
+        "Use unique context key including file path and line (e.g., `${filePath}:${startLine}:${name}`) instead of just function name",
+        "Example: function with TODO marker and real logic -> logic leakage is detected",
+        "Example: function with only TODO marker (no real logic) -> leakage check is skipped",
+        "Negative case: same-named functions in different files -> have unique context keys",
+        "Update existing tests to reflect new TODO-only detection behavior"
+      ],
+      "startedAt": "2026-01-31T00:32:25.520472+00:00",
+      "completedAt": "2026-01-31T00:59:14.415175+00:00",
+      "updatedAt": "2026-01-31T00:59:14.415063+00:00"
+    },
+    {
+      "id": "US-002",
+      "title": "Fix compilation-verifier file handling and path normalization",
+      "status": "done",
+      "dependsOn": [],
+      "description": "As a developer, I want the compilation verifier to derive file lists from project path when files is undefined and normalize relative paths for consistent file I/O operations.",
+      "acceptanceCriteria": [
+        "When this.options.files is undefined, compute files from this.options.projectPath or this.options.tsconfigPath",
+        "Throw clear error when files cannot be resolved",
+        "Normalize each file path against this.options.projectPath before fs.readFile/fs.writeFile",
+        "Use normalized paths when building addressedErrors and applied entries",
+        "Example: applying repairs with relative path './src/file.ts' -> resolves to absolute path correctly",
+        "Example: running with only projectPath -> derives file list and runs AST inspection",
+        "Negative case: undefined projectPath without files -> throws clear error",
+        "Update existing tests to cover path normalization scenarios"
+      ],
+      "startedAt": "2026-01-31T00:59:16.491839+00:00",
+      "completedAt": "2026-01-31T01:08:47.681962+00:00",
+      "updatedAt": "2026-01-31T01:08:47.681844+00:00"
+    },
+    {
+      "id": "US-003",
+      "title": "Enhance contract-attacher complexity inference and report formatting",
+      "status": "done",
+      "dependsOn": [],
+      "description": "As a developer, I want complexity inference to detect common method variants and report formatting to dynamically calculate padding for proper alignment.",
+      "acceptanceCriteria": [
+        "Update complexity inference to use pattern matching (startsWith/includes) for find/filter/map methods",
+        "Build contractBase immutably using spread + conditional spreads instead of type casts",
+        "Introduce BOX_WIDTH constant (80) and compute padding dynamically from box width",
+        "Apply dynamic padding to coverage line, unmatched claims lines, and summary line",
+        "Example: method named findById -> detected as find variant and returns 'O(n)'",
+        "Example: method named filterItems -> detected as filter variant and returns 'O(n)'",
+        "Example: report with long unmatched claim message -> properly aligned within box",
+        "Negative case: method not matching patterns -> falls through to existing complexity logic",
+        "Update existing tests for complexity inference and report formatting"
+      ],
+      "startedAt": "2026-01-31T01:08:49.760976+00:00",
+      "completedAt": "2026-01-31T01:15:17.090286+00:00",
+      "updatedAt": "2026-01-31T01:15:17.090154+00:00"
+    },
+    {
+      "id": "US-004",
+      "title": "Fix function-generator nested generics parsing for Result types",
+      "status": "done",
+      "dependsOn": [],
+      "description": "As a developer, I want parseSpecReturnType to correctly handle nested generic types in Result<T, E> wrappers so inner types are properly extracted and mapped.",
+      "acceptanceCriteria": [
+        "Detect Result<> wrapper via prefix check",
+        "Extract inner generic contents between outer angle brackets",
+        "Call splitGenericArgs(inner) to split two generic arguments with nested commas/angles",
+        "Map each arg with mapSpecTypeToTypeScript",
+        "Return ParsedReturnType with isResult=true, successType, and errorType",
+        "Example: Result<User, Error> -> successType='User', errorType='Error'",
+        "Example: Result<Map<string, number>, string[]> -> correctly splits nested Map generic",
+        "Negative case: non-Result type -> isResult=false",
+        "Update existing tests for nested Result type parsing"
+      ],
+      "startedAt": "2026-01-31T01:15:19.166505+00:00",
+      "completedAt": "2026-01-31T01:19:15.549559+00:00",
+      "updatedAt": "2026-01-31T01:19:15.549431+00:00"
+    },
+    {
+      "id": "US-005",
+      "title": "Fix module-generator type mapping for raw spec types",
+      "status": "done",
+      "dependsOn": [
+        "US-004"
+      ],
+      "description": "As a developer, I want generateTypesFile and generateInterfacesFile to map spec types (decimal, datetime, uuid) to valid TypeScript types using the proper mapping functions.",
+      "acceptanceCriteria": [
+        "Import mapSpecTypeToTypeScript, parseSpecParameter, and parseSpecReturnType from function-generator.js",
+        "In generateTypesFile, map each field.type through mapSpecTypeToTypeScript before writing property signature",
+        "In generateInterfacesFile, use parseSpecParameter to split params and map types via mapSpecTypeToTypeScript",
+        "Use parseSpecReturnType + mapSpecTypeToTypeScript for method.returns",
+        "Example: spec type 'decimal' -> mapped to TypeScript 'number'",
+        "Example: spec type 'datetime' -> mapped to TypeScript 'Date'",
+        "Negative case: unknown spec type -> passes through as-is or throws error",
+        "Update existing tests for generated interface/type files"
+      ],
+      "startedAt": "2026-01-31T01:19:17.628672+00:00",
+      "completedAt": "2026-01-31T01:26:01.491005+00:00",
+      "updatedAt": "2026-01-31T01:26:01.490780+00:00"
+    },
+    {
+      "id": "US-006",
+      "title": "Fix type-generator filtering and Range name sanitization",
+      "status": "done",
+      "dependsOn": [],
+      "description": "As a developer, I want generateDomainTypeDefinitions to filter enums and witnesses by domain, and Range type names to be sanitized for invalid TypeScript identifiers (negatives, decimals).",
+      "acceptanceCriteria": [
+        "Filter spec.enums and spec.witnesses by provided domainModels in generateDomainTypeDefinitions",
+        "Implement sanitizeNumberForIdentifier helper that converts '-' and '.' to identifier-safe tokens",
+        "Use sanitized min/max values in Range type name generation",
+        "Update Map and Set branches to parse inner generics using findTopLevelComma and recursive mapping",
+        "Example: domain filtering -> only relevant enums/witnesses appear in generated types",
+        "Example: Range{-5}To10.5 -> 'RangeNeg5To10P5' (sanitized identifier)",
+        "Example: Map<string, User> -> 'Map<string, User>' with proper inner type mapping",
+        "Example: Set<number> -> 'Set<number>' with proper inner type mapping",
+        "Negative case: invalid characters in identifier -> sanitized to valid tokens",
+        "Update existing tests for domain filtering, Range sanitization, and Map/Set generics"
+      ],
+      "startedAt": "2026-01-31T01:26:03.584000+00:00",
+      "completedAt": "2026-01-31T01:37:19.996717+00:00",
+      "updatedAt": "2026-01-31T01:37:19.996606+00:00"
+    },
+    {
+      "id": "US-007",
+      "title": "Fix witness-generator warnings output and fast-check import",
+      "status": "done",
+      "dependsOn": [],
+      "description": "As a developer, I want witness warnings to be included in the final result/report and fast-check import to only be emitted when arbitraries are generated.",
+      "acceptanceCriteria": [
+        "Set result.warnings = warnings and report.warnings = warnings in final result/report construction",
+        "Ensure aggregated counts (fallbackCount, tierBreakdown) include warnings before report is finalized",
+        "Only add fast-check import to codeLines when options.generateArbitraries !== false && results.length > 0",
+        "Remove unconditional fc import from initial codeLines array",
+        "Insert fast-check import before 'Fast-Check Arbitraries' header within arbitraries generation condition",
+        "Example: witness generation with fallbacks -> warnings appear in output report",
+        "Example: generating arbitraries -> fast-check import is emitted",
+        "Example: no arbitraries generated -> fast-check import is not emitted",
+        "Negative case: arbitraries disabled -> no fast-check import regardless of results",
+        "Update existing tests for witness warnings and conditional import behavior"
+      ],
+      "startedAt": "2026-01-31T01:37:22.077892+00:00",
+      "completedAt": "2026-01-31T01:43:40.483616+00:00",
+      "updatedAt": "2026-01-31T01:43:40.483463+00:00"
+    }
+  ]
+}

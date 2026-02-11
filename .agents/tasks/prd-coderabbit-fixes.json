@@ -1,0 +1,277 @@
+{
+  "version": 1,
+  "project": "CodeRabbit PR Review Fixes",
+  "overview": "Address all 10 CodeRabbit review comments on PR #6 (Phase 3.1: Ignition). Fixes include wiring timeout support, fixing delegation bugs, race condition prevention, validation improvements, and code quality enhancements.",
+  "goals": [
+    "Fix all 4 major issues identified by CodeRabbit",
+    "Address all 2 minor issues for validation and robustness",
+    "Implement all 4 trivial improvements for code quality",
+    "Ensure all quality gates pass after changes"
+  ],
+  "nonGoals": [
+    "Refactoring beyond what CodeRabbit identified",
+    "Adding new features not related to the review comments",
+    "Changing public API signatures unnecessarily"
+  ],
+  "successMetrics": [
+    "All 10 CodeRabbit comments addressed",
+    "npm test passes",
+    "npm run lint passes",
+    "npm run typecheck passes",
+    "No regressions in existing functionality"
+  ],
+  "openQuestions": [],
+  "stack": {
+    "framework": "TypeScript/Node.js",
+    "hosting": "CLI tool",
+    "database": "File-based persistence (JSONL, TOML)",
+    "auth": "N/A"
+  },
+  "routes": [],
+  "uiNotes": [],
+  "dataModel": [
+    {
+      "entity": "InterviewState",
+      "fields": [
+        "version",
+        "projectId",
+        "currentPhase",
+        "completedPhases",
+        "extractedRequirements",
+        "features",
+        "delegationPoints",
+        "transcriptEntryCount",
+        "createdAt",
+        "updatedAt"
+      ]
+    },
+    {
+      "entity": "Feature",
+      "fields": [
+        "id",
+        "name",
+        "description",
+        "classification",
+        "sourcePhase",
+        "identifiedAt",
+        "classificationRationale"
+      ]
+    },
+    {
+      "entity": "AuditorOptions",
+      "fields": [
+        "timeoutMs",
+        "maxRetries",
+        "modelRouter"
+      ]
+    }
+  ],
+  "importFormat": {
+    "description": "Not applicable - fixing existing code",
+    "example": {}
+  },
+  "rules": [
+    "timeoutMs must be passed through to ModelRouter.prompt() calls",
+    "Exclusive file creation (flag: 'wx') must be used for proposal versioning",
+    "transcriptEntryCount must be incremented after each append",
+    "Feature classification types must have single source of truth in interview/types.ts"
+  ],
+  "qualityGates": [
+    "npm test",
+    "npm run lint",
+    "npm run typecheck"
+  ],
+  "stories": [
+    {
+      "id": "US-001",
+      "title": "Wire timeoutMs into ModelRouter calls",
+      "status": "done",
+      "dependsOn": [],
+      "description": "As a developer, I want the AuditorOptions.timeoutMs to actually be used in ModelRouter.prompt() calls so that LLM latency can be bounded.",
+      "acceptanceCriteria": [
+        "Extend ModelRouter.prompt() interface to accept optional timeoutMs parameter",
+        "Pass options.timeoutMs from Auditor.auditRequirements() to modelRouter.prompt()",
+        "Pass options.timeoutMs from Auditor.getArchitectResponses() to modelRouter.prompt()",
+        "Example: calling auditRequirements with timeoutMs: 5000 passes timeout to prompt()",
+        "Negative case: if timeoutMs is undefined, prompt() uses default behavior (no timeout)",
+        "Update any other ModelRouter.prompt() callers to handle the new optional parameter"
+      ],
+      "startedAt": "2026-01-30T16:09:37.997728+00:00",
+      "completedAt": "2026-01-30T16:19:53.109579+00:00",
+      "updatedAt": "2026-01-30T16:19:53.109290+00:00"
+    },
+    {
+      "id": "US-002",
+      "title": "Fix delegation 'Continue' recording bug",
+      "status": "done",
+      "dependsOn": [],
+      "description": "As a user, I want the interview CLI to re-prompt me for my actual answer when I choose 'Continue' in a delegable phase, instead of recording the literal 'continue' as my requirement.",
+      "acceptanceCriteria": [
+        "When parseDelegationCommand returns delegation.decision === 'Continue', re-prompt the user",
+        "The re-prompt should ask for the actual answer without delegation hints",
+        "The actual user response (not 'continue') should be recorded in the transcript",
+        "Handle quit gracefully if user quits during re-prompt",
+        "Example: user types 'continue' -> gets re-prompted -> types 'I want feature X' -> 'I want feature X' is recorded",
+        "Negative case: user types 'delegate' -> delegation flow proceeds (no re-prompt)",
+        "Existing delegation flows (Delegate, DelegateWithNotes) remain unchanged"
+      ],
+      "startedAt": "2026-01-30T16:19:55.198685+00:00",
+      "completedAt": "2026-01-30T16:34:53.180560+00:00",
+      "updatedAt": "2026-01-30T16:34:53.180356+00:00"
+    },
+    {
+      "id": "US-003",
+      "title": "Keep transcriptEntryCount aligned with appended entries",
+      "status": "done",
+      "dependsOn": [],
+      "description": "As a developer, I want transcriptEntryCount to accurately reflect the number of transcript entries so that state and JSONL transcript stay synchronized.",
+      "acceptanceCriteria": [
+        "After each appendTranscriptEntry() call, increment state.transcriptEntryCount",
+        "After each append, update state.updatedAt to current timestamp",
+        "Persist state after incrementing count (call saveInterviewState)",
+        "Fix in engine.ts line 685 (interview started entry)",
+        "Fix in engine.ts line 1235 (resume entry)",
+        "Fix any other append sites (delegation Continue path)",
+        "Example: starting interview appends 1 entry -> transcriptEntryCount becomes 1",
+        "Negative case: if appendTranscriptEntry fails, count should not increment",
+        "Consider creating helper function appendAndPersistTranscriptEntry() to centralize logic"
+      ],
+      "startedAt": "2026-01-30T16:34:55.273325+00:00",
+      "completedAt": "2026-01-30T16:52:31.865630+00:00",
+      "updatedAt": "2026-01-30T16:52:31.865385+00:00"
+    },
+    {
+      "id": "US-004",
+      "title": "Fix race condition in proposal version allocation",
+      "status": "done",
+      "dependsOn": [],
+      "description": "As a developer, I want proposal version allocation to be atomic so that parallel callers cannot overwrite each other's proposals.",
+      "acceptanceCriteria": [
+        "Use exclusive file creation (flag: 'wx') in saveProposal()",
+        "Implement retry loop (max 5 attempts) when EEXIST error occurs",
+        "On EEXIST, re-compute next version and retry with new filename",
+        "Throw SpecGeneratorError after max attempts exhausted",
+        "Example: two parallel saveProposal calls -> both succeed with different version numbers",
+        "Negative case: non-EEXIST errors (permission denied) should throw immediately without retry",
+        "Preserve existing validation and serialization logic"
+      ],
+      "startedAt": "2026-01-30T16:52:33.950426+00:00",
+      "completedAt": "2026-01-30T16:59:43.734860+00:00",
+      "updatedAt": "2026-01-30T16:59:43.734637+00:00"
+    },
+    {
+      "id": "US-005",
+      "title": "Add 'features' field validation in persistence",
+      "status": "done",
+      "dependsOn": [],
+      "description": "As a developer, I want the features field to be validated during InterviewState deserialization so that malformed state files are rejected.",
+      "acceptanceCriteria": [
+        "Add 'features' to requiredFields array in persistence.ts",
+        "Add validation that obj.features is an array",
+        "Throw InterviewPersistenceError with 'schema_error' if features is missing or not an array",
+        "Example: state file without 'features' field -> throws schema_error",
+        "Negative case: state file with features: [] (empty array) -> passes validation",
+        "Optionally validate each feature element structure"
+      ],
+      "startedAt": "2026-01-30T16:59:45.827219+00:00",
+      "completedAt": "2026-01-30T17:05:47.488431+00:00",
+      "updatedAt": "2026-01-30T17:05:47.488274+00:00"
+    },
+    {
+      "id": "US-006",
+      "title": "Normalize derived system names for validation",
+      "status": "done",
+      "dependsOn": [],
+      "description": "As a developer, I want derived systemName values to always pass validateSpec() so that proposal generation doesn't fail unexpectedly.",
+      "acceptanceCriteria": [
+        "Normalize systemName: lowercase, replace non-alphanumeric with '-'",
+        "Trim leading and trailing dashes from normalized name",
+        "If result doesn't start with a letter, prefix with 'project-'",
+        "If result is empty after normalization, use 'project-spec'",
+        "Example: projectId '123-test' -> systemName 'project-123-test'",
+        "Example: projectId 'My App' -> systemName 'my-app'",
+        "Negative case: projectId '---' -> systemName 'project-spec'"
+      ],
+      "startedAt": "2026-01-30T17:05:49.583524+00:00",
+      "completedAt": "2026-01-30T17:10:33.570455+00:00",
+      "updatedAt": "2026-01-30T17:10:33.570077+00:00"
+    },
+    {
+      "id": "US-007",
+      "title": "Use createInitialInterviewState in CLI startNew",
+      "status": "done",
+      "dependsOn": [],
+      "description": "As a developer, I want CLI.startNew() to use the shared createInitialInterviewState() factory so that version and defaults stay in sync.",
+      "acceptanceCriteria": [
+        "Import createInitialInterviewState from './types.js' in cli.ts",
+        "Replace hardcoded state object in startNew() with createInitialInterviewState(this.projectId)",
+        "Remove the literal '1.0.0' version string",
+        "Example: changing INTERVIEW_STATE_VERSION in types.ts automatically updates CLI behavior",
+        "Negative case: startNew() no longer has any hardcoded state fields"
+      ],
+      "startedAt": "2026-01-30T17:10:35.660147+00:00",
+      "completedAt": "2026-01-30T17:13:13.433170+00:00",
+      "updatedAt": "2026-01-30T17:13:13.433010+00:00"
+    },
+    {
+      "id": "US-008",
+      "title": "Add feature classification test coverage",
+      "status": "done",
+      "dependsOn": [],
+      "description": "As a developer, I want a unit test that verifies InterviewState.features are correctly mapped to spec.features so that the feature conversion behavior is locked in.",
+      "acceptanceCriteria": [
+        "Add new test case in spec-generator.test.ts",
+        "Create mock InterviewState with features array containing test feature",
+        "Call generateSpec(state) and verify spec.features contains the feature",
+        "Assert feature id is preserved",
+        "Assert classification value is preserved",
+        "Assert rationale text is preserved (if present)",
+        "Example: feature with id 'feature_123', classification 'core' -> appears in spec.features with same values",
+        "Negative case: feature without rationale -> classificationRationale is undefined in spec"
+      ],
+      "startedAt": "2026-01-30T17:13:15.520890+00:00",
+      "completedAt": "2026-01-30T17:17:03.487696+00:00",
+      "updatedAt": "2026-01-30T17:17:03.487509+00:00"
+    },
+    {
+      "id": "US-009",
+      "title": "Use crypto.randomUUID for feature IDs",
+      "status": "done",
+      "dependsOn": [],
+      "description": "As a developer, I want feature IDs to use crypto.randomUUID() for more robust ID generation that won't collide under rapid successive calls.",
+      "acceptanceCriteria": [
+        "Import randomUUID from 'node:crypto' in types.ts",
+        "Replace Date.now() + Math.random() pattern with randomUUID() in createFeature()",
+        "Keep 'feature_' prefix: id becomes 'feature_${randomUUID()}'",
+        "Example: createFeature() returns id like 'feature_550e8400-e29b-41d4-a716-446655440000'",
+        "Negative case: rapid successive calls always produce unique IDs",
+        "Existing tests still pass with new ID format"
+      ],
+      "startedAt": "2026-01-30T17:33:02.099852+00:00",
+      "completedAt": "2026-01-30T17:39:26.547086+00:00",
+      "updatedAt": "2026-01-30T17:39:26.546700+00:00"
+    },
+    {
+      "id": "US-010",
+      "title": "Consolidate feature classification type source",
+      "status": "done",
+      "dependsOn": [
+        "US-009"
+      ],
+      "description": "As a developer, I want a single source of truth for feature classification types so that interview/types.ts and spec/types.ts stay in sync.",
+      "acceptanceCriteria": [
+        "Keep FEATURE_CLASSIFICATIONS and FeatureClassification type in interview/types.ts",
+        "Export FeatureClassification type from interview/types.ts",
+        "Update spec/types.ts to import FeatureClassification from interview/types.js",
+        "Remove duplicate SpecFeatureClassification type definition from spec/types.ts",
+        "Update SpecFeature interface to use imported FeatureClassification type",
+        "Example: changing classification values in interview/types.ts updates both modules",
+        "Negative case: no duplicate type definitions exist after change",
+        "All existing imports and usages continue to work"
+      ],
+      "startedAt": "2026-01-30T17:39:28.641026+00:00",
+      "completedAt": "2026-01-30T17:46:06.345407+00:00",
+      "updatedAt": "2026-01-30T17:46:06.345051+00:00"
+    }
+  ]
+}
