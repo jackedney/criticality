@@ -416,7 +416,7 @@
     {
       "id": "US-014",
       "title": "Deep verify Mass Defect phase implementation vs spec",
-      "status": "in_progress",
+      "status": "done",
       "dependsOn": [
         "US-004",
         "US-005"
@@ -438,13 +438,13 @@
         "Negative case: If pattern selection sorts by risk descending instead of ascending, document as critical discrepancy"
       ],
       "startedAt": "2026-02-11T01:10:34.247240+00:00",
-      "completedAt": null,
-      "updatedAt": "2026-02-11T01:10:34.247412+00:00"
+      "completedAt": "2026-02-11T01:20:26.244364+00:00",
+      "updatedAt": "2026-02-11T01:20:26.244181+00:00"
     },
     {
       "id": "US-015",
       "title": "Deep verify Orchestrator state machine vs spec section 9",
-      "status": "open",
+      "status": "in_progress",
       "dependsOn": [
         "US-004",
         "US-005"
@@ -465,7 +465,10 @@
         "Verify orchestrator does classification not reasoning per decision orch_003",
         "Example: If BlockReason includes all 5 variants from spec including 'user_requested', mark conformant",
         "Negative case: If Guard type is missing 'circuitBreakerTripped' variant, document as warning discrepancy"
-      ]
+      ],
+      "startedAt": "2026-02-11T01:20:28.325163+00:00",
+      "completedAt": null,
+      "updatedAt": "2026-02-11T01:20:28.325355+00:00"
     },
     {
       "id": "US-016",
