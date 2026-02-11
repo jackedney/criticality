@@ -388,7 +388,7 @@
     {
       "id": "US-013",
       "title": "Deep verify Mesoscopic phase implementation vs spec",
-      "status": "in_progress",
+      "status": "done",
       "dependsOn": [
         "US-004",
         "US-005"
@@ -410,13 +410,13 @@
         "Negative case: If re-injection targets entire cluster instead of only CLAIM_REF-linked functions, document as critical discrepancy"
       ],
       "startedAt": "2026-02-11T00:58:34.721003+00:00",
-      "completedAt": null,
-      "updatedAt": "2026-02-11T00:58:34.721196+00:00"
+      "completedAt": "2026-02-11T01:10:32.179205+00:00",
+      "updatedAt": "2026-02-11T01:10:32.179049+00:00"
     },
     {
       "id": "US-014",
       "title": "Deep verify Mass Defect phase implementation vs spec",
-      "status": "open",
+      "status": "in_progress",
       "dependsOn": [
         "US-004",
         "US-005"
@@ -436,7 +436,10 @@
         "Verify ESLint integration for static analysis per spec",
         "Example: If transformation catalog TOML contains all 14 patterns with correct risk levels matching spec table, mark conformant",
         "Negative case: If pattern selection sorts by risk descending instead of ascending, document as critical discrepancy"
-      ]
+      ],
+      "startedAt": "2026-02-11T01:10:34.247240+00:00",
+      "completedAt": null,
+      "updatedAt": "2026-02-11T01:10:34.247412+00:00"
     },
     {
       "id": "US-015",
