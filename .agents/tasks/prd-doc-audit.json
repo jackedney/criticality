@@ -444,7 +444,7 @@
     {
       "id": "US-015",
       "title": "Deep verify Orchestrator state machine vs spec section 9",
-      "status": "in_progress",
+      "status": "done",
       "dependsOn": [
         "US-004",
         "US-005"
@@ -467,13 +467,13 @@
         "Negative case: If Guard type is missing 'circuitBreakerTripped' variant, document as warning discrepancy"
       ],
       "startedAt": "2026-02-11T01:20:28.325163+00:00",
-      "completedAt": null,
-      "updatedAt": "2026-02-11T01:20:28.325355+00:00"
+      "completedAt": "2026-02-11T01:27:55.649109+00:00",
+      "updatedAt": "2026-02-11T01:27:55.648685+00:00"
     },
     {
       "id": "US-016",
       "title": "Verify CLI (Phase 4.1) completeness and Phase 4.2/4.3 status",
-      "status": "open",
+      "status": "in_progress",
       "dependsOn": [
         "US-001",
         "US-004"
@@ -494,7 +494,10 @@
         "For Phase 4.3: verify web dashboard is not implemented (correct status: deferred/optional), confirm ROADMAP accurately reflects this",
         "Example: If resolve command implements arrow-key navigation per cli_001, mark Phase 4.1 'option selection' as conformant",
         "Negative case: If resume command doesn't actually call orchestrator.tick() in a loop, document as critical discrepancy"
-      ]
+      ],
+      "startedAt": "2026-02-11T01:27:57.732064+00:00",
+      "completedAt": null,
+      "updatedAt": "2026-02-11T01:27:57.732237+00:00"
     },
     {
       "id": "US-017",
