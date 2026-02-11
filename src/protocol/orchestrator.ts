@@ -337,7 +337,7 @@ export async function executeTick(context: TickContext, statePath: string): Prom
 
   // Check if in blocking state
   if (isBlockedState(state)) {
-    const blockedState = state as BlockedState;
+    const blockedState = state;
 
     // Warn about unexpected blocking in Complete phase
     if (getPhase(state) === 'Complete') {
@@ -559,7 +559,7 @@ export async function createOrchestrator(options: OrchestratorOptions): Promise<
       !isBlockedState(orchestratorState.previousSnapshot.state)
     ) {
       try {
-        const blockedState = result.snapshot.state as BlockedState;
+        const blockedState = result.snapshot.state;
         const { phase, query, blockedAt, options, timeoutMs } = blockedState;
         const blockingRecord: BlockingRecord = {
           id: `blocking-${phase}`,
@@ -673,7 +673,7 @@ export function getProtocolStatus(snapshot: ProtocolStateSnapshot): {
   let failed: { error: string; recoverable: boolean } | undefined;
 
   if (isBlockedState(state)) {
-    const blockedState = state as BlockedState;
+    const blockedState = state;
     blocking = {
       query: blockedState.query,
       blockedAt: blockedState.blockedAt,
