@@ -473,7 +473,7 @@
     {
       "id": "US-016",
       "title": "Verify CLI (Phase 4.1) completeness and Phase 4.2/4.3 status",
-      "status": "in_progress",
+      "status": "done",
       "dependsOn": [
         "US-001",
         "US-004"
@@ -496,13 +496,13 @@
         "Negative case: If resume command doesn't actually call orchestrator.tick() in a loop, document as critical discrepancy"
       ],
       "startedAt": "2026-02-11T01:27:57.732064+00:00",
-      "completedAt": null,
-      "updatedAt": "2026-02-11T01:27:57.732237+00:00"
+      "completedAt": "2026-02-11T01:34:06.667545+00:00",
+      "updatedAt": "2026-02-11T01:34:06.667094+00:00"
     },
     {
       "id": "US-017",
       "title": "Deep verify cross-cutting concerns vs spec section 5",
-      "status": "open",
+      "status": "in_progress",
       "dependsOn": [
         "US-004",
         "US-005"
@@ -523,7 +523,10 @@
         "Verify signature complexity formula per decision routing_005: genericParams*2 + unionMembers + lifetimeParams*2 + nestedTypeDepth + paramCount*0.5",
         "Example: If ledger's supersede operation creates new entry and marks old as 'superseded' per ledger_004, mark conformant",
         "Negative case: If escalation table is missing 'Security | Any | 1 | Escalate to architect_model immediately' row, document as critical discrepancy"
-      ]
+      ],
+      "startedAt": "2026-02-11T01:34:08.749626+00:00",
+      "completedAt": null,
+      "updatedAt": "2026-02-11T01:34:08.749810+00:00"
     },
     {
       "id": "US-018",
