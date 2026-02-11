@@ -105,7 +105,7 @@
     {
       "id": "US-001",
       "title": "Define 3-tier type system in new file",
-      "status": "in_progress",
+      "status": "done",
       "dependsOn": [],
       "description": "As a developer, I want the new 3-tier protocol state types defined so that the migration can reference them. Create types-v2.ts with all types, factory functions, type guards, and comprehensive tests. This is additive only \u2014 no existing code changes.",
       "acceptanceCriteria": [
@@ -124,13 +124,13 @@
         "Negative case: createBlockedState with missing reason field should be caught by TypeScript compiler (verify in test)"
       ],
       "startedAt": "2026-02-11T11:41:30.851092+00:00",
-      "completedAt": null,
-      "updatedAt": "2026-02-11T11:41:30.851297+00:00"
+      "completedAt": "2026-02-11T16:39:46.317908+00:00",
+      "updatedAt": "2026-02-11T16:39:46.317781+00:00"
     },
     {
       "id": "US-002",
       "title": "Migrate protocol core to 3-tier types",
-      "status": "open",
+      "status": "in_progress",
       "dependsOn": [
         "US-001"
       ],
@@ -148,7 +148,10 @@
         "All modified protocol source files compile individually with tsc --noEmit",
         "Example: orchestrator.ts getProtocolStatus returns { phase: getPhase(state), kind: state.kind, ... } instead of { phase: state.phase, substate: state.substate.kind }",
         "Negative case: Attempting to access state.substate directly on new ProtocolState should be a compile error (it's now state.phase.substate for Active states only)"
-      ]
+      ],
+      "updatedAt": "2026-02-11T17:20:52.952612+00:00",
+      "startedAt": "2026-02-11T17:20:52.952436+00:00",
+      "completedAt": null
     },
     {
       "id": "US-003",

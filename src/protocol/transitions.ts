@@ -1,7 +1,7 @@
 /**
  * Phase transition logic for the Criticality Protocol.
  *
- * Implements the state machine for phase transitions, including:
+ * Implements of state machine for phase transitions, including:
  * - Valid forward transitions (Ignition → Lattice → CompositionAudit → ...)
  * - Failure transitions (rollback to earlier phases)
  * - Artifact validation for transitions
@@ -14,8 +14,12 @@ import {
   type ProtocolPhase,
   type ProtocolState,
   canTransition,
+  getPhase,
+  isFailedState,
+  isBlockedState,
   createActiveState,
   getPhaseIndex,
+  type PhaseState,
 } from './types.js';
 
 /**
@@ -36,7 +40,7 @@ export const FORWARD_TRANSITIONS: ReadonlyMap<ProtocolPhase, ProtocolPhase> = ne
 /**
  * Valid failure transitions as defined in SPECIFICATION.md.
  *
- * Each entry maps a source phase to the phases it can transition
+ * Each entry maps a source phase to phases it can transition
  * to upon failure/rollback.
  */
 export const FAILURE_TRANSITIONS: ReadonlyMap<ProtocolPhase, readonly ProtocolPhase[]> = new Map([
@@ -64,7 +68,7 @@ export type ArtifactType =
 /**
  * Artifact requirements for forward transitions.
  *
- * Maps each transition to the artifacts required from the previous phase.
+ * Maps each transition to artifacts required from the previous phase.
  */
 export const REQUIRED_ARTIFACTS: ReadonlyMap<ProtocolPhase, readonly ArtifactType[]> = new Map([
   ['Lattice', ['spec']], // Ignition → Lattice requires spec.toml
@@ -110,7 +114,7 @@ export function createTransitionArtifacts(artifacts: readonly ArtifactType[]): T
 export type TransitionErrorCode =
   | 'INVALID_TRANSITION' // Target phase is not reachable from current phase
   | 'MISSING_ARTIFACTS' // Required artifacts not provided
-  | 'STATE_NOT_ACTIVE' // Current state is not in Active substate
+  | 'STATE_NOT_ACTIVE' // Current state is not in Active state
   | 'ALREADY_COMPLETE' // Protocol already in Complete phase
   | 'BLOCKED_STATE' // Current state is blocked awaiting intervention
   | 'FAILED_STATE'; // Current state has failed
@@ -209,14 +213,14 @@ export function isValidFailureTransition(from: ProtocolPhase, to: ProtocolPhase)
  *
  * @param from - Source phase.
  * @param to - Target phase.
- * @returns True if the transition is valid.
+ * @returns True if transition is valid.
  */
 export function isValidTransition(from: ProtocolPhase, to: ProtocolPhase): boolean {
   return isValidForwardTransition(from, to) || isValidFailureTransition(from, to);
 }
 
 /**
- * Gets the required artifacts for a transition.
+ * Gets required artifacts for a transition.
  *
  * @param from - Source phase.
  * @param to - Target phase.
@@ -278,7 +282,7 @@ export function shedContext(fromPhase: ProtocolPhase, toPhase: ProtocolPhase): b
   // 3. Record the transition in telemetry
   // 4. Return only the Decision Ledger and phase artifacts
 
-  // For now, we just acknowledge the transition happened
+  // For now, we just acknowledge that the transition happened
   void fromPhase;
   void toPhase;
 
@@ -326,7 +330,7 @@ function getInvalidTransitionMessage(from: ProtocolPhase, to: ProtocolPhase): st
  * Options for performing a transition.
  */
 export interface TransitionOptions {
-  /** Artifacts available for the transition. */
+  /** Artifacts available for transition. */
   readonly artifacts?: TransitionArtifacts;
   /** Whether this is a failure transition (rollback). */
   readonly isFailure?: boolean;
@@ -336,7 +340,7 @@ export interface TransitionOptions {
  * Attempts to transition the protocol to a new phase.
  *
  * This function validates:
- * 1. The current state allows transitions (Active substate, not terminal)
+ * 1. The current state allows transitions (Active state, not terminal)
  * 2. The target phase is reachable from the current phase
  * 3. All required artifacts are present
  *
@@ -350,16 +354,18 @@ export interface TransitionOptions {
  * @example
  * ```typescript
  * // Successful forward transition
- * const state = createActiveState('Ignition');
+ * const phase = getPhase(currentState);
  * const artifacts = createTransitionArtifacts(['spec']);
- * const result = transition(state, 'Lattice', { artifacts });
+ * if (phase !== undefined) {
+ *   const result = transition(currentState, 'Lattice', { artifacts });
  *
- * if (result.success) {
- *   console.log(`Transitioned to ${result.state.phase}`);
+ *   if (result.success) {
+ *     console.log(`Transitioned to ${result.state}`);
+ *   }
  * }
  *
  * // Invalid transition returns descriptive error
- * const badResult = transition(state, 'Injection');
+ * const badResult = transition(currentState, 'Injection');
  * if (!badResult.success) {
  *   console.log(badResult.error.message);
  *   // "Cannot skip phases: transition from 'Ignition' to 'Injection' is not allowed"
@@ -371,12 +377,24 @@ export function transition(
   targetPhase: ProtocolPhase,
   options?: TransitionOptions
 ): TransitionResult {
-  const fromPhase = currentState.phase;
+  const fromPhase = getPhase(currentState);
+
+  // If current state is complete or has no phase, we can't transition
+  if (fromPhase === undefined) {
+    return errorResult(
+      createTransitionError(
+        'STATE_NOT_ACTIVE',
+        `Cannot transition: state is not in an active phase`,
+        'Ignition',
+        targetPhase
+      )
+    );
+  }
 
   // Check if current state allows transitions
   if (!canTransition(currentState)) {
-    // Determine specific error based on substate
-    if (currentState.substate.kind === 'Blocking') {
+    // Determine specific error based on state
+    if (isBlockedState(currentState)) {
       return errorResult(
         createTransitionError(
           'BLOCKED_STATE',
@@ -387,7 +405,7 @@ export function transition(
       );
     }
 
-    if (currentState.substate.kind === 'Failed') {
+    if (isFailedState(currentState)) {
       return errorResult(
         createTransitionError(
           'FAILED_STATE',
@@ -459,8 +477,16 @@ export function transition(
   // Perform context shedding
   const contextShed = shedContext(fromPhase, targetPhase);
 
-  // Create new state
-  const newState = createActiveState(targetPhase);
+  // Create new state with a default substate for the target phase
+  // Note: In a full implementation, the phase substate would be more context-aware
+  // For now, we use a default Ignition substate as a placeholder
+  const defaultSubstate = {
+    step: 'interviewing' as const,
+    interviewPhase: 'Discovery' as const,
+    questionIndex: 0,
+  };
+  const phaseState: PhaseState = { phase: targetPhase as any, substate: defaultSubstate };
+  const newState = createActiveState(phaseState);
 
   return successResult(newState, contextShed);
 }

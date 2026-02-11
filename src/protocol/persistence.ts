@@ -13,29 +13,25 @@ import { randomUUID } from 'node:crypto';
 import type {
   ProtocolPhase,
   ProtocolState,
-  ProtocolSubstate,
-  ActiveSubstate,
-  BlockingSubstate,
-  FailedSubstate,
+  PhaseState,
+  BlockReason,
+  ArtifactType,
 } from './types.js';
-import type { ArtifactType } from './transitions.js';
 import type { BlockingRecord } from './blocking.js';
-import { PROTOCOL_PHASES, isValidPhase } from './types.js';
 
 /**
  * Persisted state data structure.
  *
- * This is the JSON-serializable representation of protocol state.
+ * This is the JSON-serializable representation of protocol state
+ * using the new 3-tier type system.
  */
 export interface PersistedStateData {
   /** Schema version for future compatibility. */
   readonly version: string;
   /** Timestamp when state was persisted (ISO 8601). */
   readonly persistedAt: string;
-  /** Current protocol phase. */
-  readonly phase: ProtocolPhase;
-  /** Current substate data. */
-  readonly substate: PersistedSubstateData;
+  /** The protocol state (3-tier discriminated union). */
+  readonly state: PersistedProtocolState;
   /** Available artifacts from completed phases. */
   readonly artifacts: readonly ArtifactType[];
   /** Active blocking queries, if any. */
@@ -43,25 +39,146 @@ export interface PersistedStateData {
 }
 
 /**
- * Serialized substate data.
+ * Persisted protocol state - JSON-serializable version of ProtocolState.
  */
-export type PersistedSubstateData =
-  | { readonly kind: 'Active' }
+export type PersistedProtocolState =
+  | PersistedActiveState
+  | PersistedBlockedState
+  | PersistedFailedState
+  | PersistedCompleteState;
+
+/**
+ * Persisted ActiveState with nested PhaseState.
+ */
+export type PersistedActiveState = {
+  readonly kind: 'Active';
+  readonly phase: PersistedPhaseState;
+};
+
+/**
+ * Persisted PhaseState variants.
+ */
+export type PersistedPhaseState =
+  | { readonly phase: 'Ignition'; readonly substate: PersistedIgnitionSubState }
+  | { readonly phase: 'Lattice'; readonly substate: PersistedLatticeSubState }
   | {
-      readonly kind: 'Blocking';
-      readonly query: string;
-      readonly options?: readonly string[];
-      readonly blockedAt: string;
-      readonly timeoutMs?: number;
+      readonly phase: 'CompositionAudit';
+      readonly substate: PersistedCompositionAuditSubState;
+    }
+  | { readonly phase: 'Injection'; readonly substate: PersistedInjectionSubState }
+  | { readonly phase: 'Mesoscopic'; readonly substate: PersistedMesoscopicSubState }
+  | { readonly phase: 'MassDefect'; readonly substate: PersistedMassDefectSubState };
+
+/**
+ * Persisted substate types for each phase.
+ */
+export type PersistedIgnitionSubState =
+  | {
+      readonly step: 'interviewing';
+      readonly interviewPhase: 'Discovery' | 'Requirements' | 'Architecture';
+      readonly questionIndex: number;
+    }
+  | { readonly step: 'synthesizing'; readonly progress: number }
+  | { readonly step: 'awaitingApproval' };
+
+export type PersistedLatticeSubState =
+  | { readonly step: 'generatingStructure'; readonly currentModule?: string }
+  | { readonly step: 'compilingCheck'; readonly attempt: number }
+  | {
+      readonly step: 'repairingStructure';
+      readonly errors: readonly string[];
+      readonly repairAttempt: number;
+    };
+
+export type PersistedCompositionAuditSubState =
+  | { readonly step: 'auditing'; readonly auditorsCompleted: number }
+  | {
+      readonly step: 'reportingContradictions';
+      readonly severity: 'low' | 'medium' | 'high' | 'critical';
+    };
+
+export type PersistedInjectionSubState =
+  | { readonly step: 'selectingFunction' }
+  | {
+      readonly step: 'implementing';
+      readonly functionId: string;
+      readonly attempt: number;
+    }
+  | { readonly step: 'verifying'; readonly functionId: string }
+  | {
+      readonly step: 'escalating';
+      readonly functionId: string;
+      readonly fromTier:
+        | 'Ignition'
+        | 'Lattice'
+        | 'CompositionAudit'
+        | 'Injection'
+        | 'Mesoscopic'
+        | 'MassDefect';
+      readonly toTier:
+        | 'Ignition'
+        | 'Lattice'
+        | 'CompositionAudit'
+        | 'Injection'
+        | 'Mesoscopic'
+        | 'MassDefect';
+    };
+
+export type PersistedMesoscopicSubState =
+  | { readonly step: 'generatingTests'; readonly clusterId?: string }
+  | {
+      readonly step: 'executingCluster';
+      readonly clusterId: string;
+      readonly progress: number;
     }
   | {
-      readonly kind: 'Failed';
-      readonly error: string;
-      readonly code?: string;
-      readonly failedAt: string;
-      readonly recoverable: boolean;
-      readonly context?: string;
+      readonly step: 'handlingVerdict';
+      readonly clusterId: string;
+      readonly passed: boolean;
     };
+
+export type PersistedMassDefectSubState =
+  | { readonly step: 'analyzingComplexity' }
+  | {
+      readonly step: 'applyingTransform';
+      readonly patternId: string;
+      readonly functionId: string;
+    }
+  | { readonly step: 'verifyingSemantics'; readonly transformId: string };
+
+/**
+ * Persisted BlockedState.
+ */
+export type PersistedBlockedState = {
+  readonly kind: 'Blocked';
+  readonly reason: BlockReason;
+  readonly phase: ProtocolPhase;
+  readonly query: string;
+  readonly options?: readonly string[];
+  readonly blockedAt: string;
+  readonly timeoutMs?: number;
+};
+
+/**
+ * Persisted FailedState.
+ */
+export type PersistedFailedState = {
+  readonly kind: 'Failed';
+  readonly phase: ProtocolPhase;
+  readonly error: string;
+  readonly code?: string;
+  readonly failedAt: string;
+  readonly recoverable: boolean;
+  readonly context?: string;
+};
+
+/**
+ * Persisted CompleteState.
+ */
+export type PersistedCompleteState = {
+  readonly kind: 'Complete';
+  readonly artifacts: readonly ArtifactType[];
+};
 
 /**
  * Error type for state persistence operations.
@@ -107,7 +224,7 @@ export class StatePersistenceError extends Error {
 /**
  * Current schema version for persisted state.
  */
-export const PERSISTED_STATE_VERSION = '1.0.0';
+export const PERSISTED_STATE_VERSION = '2.0.0';
 
 /**
  * Options for saving protocol state.
@@ -135,32 +252,37 @@ export interface ProtocolStateSnapshot {
 }
 
 /**
- * Serializes a substate to its persisted form.
+ * Serializes a ProtocolState to its persisted form.
  *
- * @param substate - The substate to serialize.
- * @returns The persisted substate data.
+ * @param state - The protocol state to serialize.
+ * @returns The persisted protocol state.
  */
-function serializeSubstate(substate: ProtocolSubstate): PersistedSubstateData {
-  switch (substate.kind) {
-    case 'Active':
-      return { kind: 'Active' };
+function serializeProtocolState(state: ProtocolState): PersistedProtocolState {
+  switch (state.kind) {
+    case 'Active': {
+      return {
+        kind: 'Active',
+        phase: serializePhaseState(state.phase),
+      };
+    }
 
-    case 'Blocking': {
+    case 'Blocked': {
       const base = {
-        kind: 'Blocking' as const,
-        query: substate.query,
-        blockedAt: substate.blockedAt,
+        kind: 'Blocked' as const,
+        reason: state.reason,
+        phase: state.phase,
+        query: state.query,
+        blockedAt: state.blockedAt,
       };
 
-      // Handle optional fields for exactOptionalPropertyTypes
-      if (substate.options !== undefined && substate.timeoutMs !== undefined) {
-        return { ...base, options: substate.options, timeoutMs: substate.timeoutMs };
+      if (state.options !== undefined && state.timeoutMs !== undefined) {
+        return { ...base, options: state.options, timeoutMs: state.timeoutMs };
       }
-      if (substate.options !== undefined) {
-        return { ...base, options: substate.options };
+      if (state.options !== undefined) {
+        return { ...base, options: state.options };
       }
-      if (substate.timeoutMs !== undefined) {
-        return { ...base, timeoutMs: substate.timeoutMs };
+      if (state.timeoutMs !== undefined) {
+        return { ...base, timeoutMs: state.timeoutMs };
       }
       return base;
     }
@@ -168,91 +290,163 @@ function serializeSubstate(substate: ProtocolSubstate): PersistedSubstateData {
     case 'Failed': {
       const base = {
         kind: 'Failed' as const,
-        error: substate.error,
-        failedAt: substate.failedAt,
-        recoverable: substate.recoverable,
+        phase: state.phase,
+        error: state.error,
+        failedAt: state.failedAt,
+        recoverable: state.recoverable,
       };
 
-      // Handle optional fields for exactOptionalPropertyTypes
-      if (substate.code !== undefined && substate.context !== undefined) {
-        return { ...base, code: substate.code, context: substate.context };
+      if (state.code !== undefined && state.context !== undefined) {
+        return { ...base, code: state.code, context: state.context };
       }
-      if (substate.code !== undefined) {
-        return { ...base, code: substate.code };
+      if (state.code !== undefined) {
+        return { ...base, code: state.code };
       }
-      if (substate.context !== undefined) {
-        return { ...base, context: substate.context };
+      if (state.context !== undefined) {
+        return { ...base, context: state.context };
       }
       return base;
+    }
+
+    case 'Complete': {
+      return {
+        kind: 'Complete',
+        artifacts: state.artifacts,
+      };
+    }
+
+    default: {
+      const _exhaustive: never = state;
+      throw new StatePersistenceError(
+        `Unknown protocol state kind: ${JSON.stringify(_exhaustive)}`,
+        'schema_error'
+      );
     }
   }
 }
 
 /**
- * Deserializes substate data to a ProtocolSubstate.
+ * Serializes a PhaseState to its persisted form.
  *
- * @param data - The persisted substate data.
- * @returns The deserialized substate.
+ * @param phaseState - The phase state to serialize.
+ * @returns The persisted phase state.
+ */
+function serializePhaseState(phaseState: PhaseState): PersistedPhaseState {
+  switch (phaseState.phase) {
+    case 'Ignition':
+      return { phase: 'Ignition', substate: phaseState.substate };
+    case 'Lattice':
+      return { phase: 'Lattice', substate: phaseState.substate };
+    case 'CompositionAudit':
+      return { phase: 'CompositionAudit', substate: phaseState.substate };
+    case 'Injection':
+      return { phase: 'Injection', substate: phaseState.substate };
+    case 'Mesoscopic':
+      return { phase: 'Mesoscopic', substate: phaseState.substate };
+    case 'MassDefect':
+      return { phase: 'MassDefect', substate: phaseState.substate };
+  }
+}
+
+/**
+ * Deserializes persisted protocol state data to a ProtocolState.
+ *
+ * @param data - The persisted protocol state data.
+ * @returns The deserialized protocol state.
  * @throws StatePersistenceError if the data is invalid.
  */
-function deserializeSubstate(data: PersistedSubstateData): ProtocolSubstate {
+function deserializeProtocolState(data: PersistedProtocolState): ProtocolState {
   switch (data.kind) {
-    case 'Active':
-      return { kind: 'Active' } satisfies ActiveSubstate;
+    case 'Active': {
+      return {
+        kind: 'Active',
+        phase: deserializePhaseState(data.phase),
+      };
+    }
 
-    case 'Blocking': {
+    case 'Blocked': {
       const base = {
-        kind: 'Blocking' as const,
+        kind: 'Blocked' as const,
+        reason: data.reason,
+        phase: data.phase,
         query: data.query,
         blockedAt: data.blockedAt,
       };
 
-      // Handle optional fields for exactOptionalPropertyTypes
       if (data.options !== undefined && data.timeoutMs !== undefined) {
         return {
           ...base,
           options: data.options,
           timeoutMs: data.timeoutMs,
-        } satisfies BlockingSubstate;
+        };
       }
       if (data.options !== undefined) {
-        return { ...base, options: data.options } satisfies BlockingSubstate;
+        return { ...base, options: data.options };
       }
       if (data.timeoutMs !== undefined) {
-        return { ...base, timeoutMs: data.timeoutMs } satisfies BlockingSubstate;
+        return { ...base, timeoutMs: data.timeoutMs };
       }
-      return base satisfies BlockingSubstate;
+      return base;
     }
 
     case 'Failed': {
       const base = {
         kind: 'Failed' as const,
+        phase: data.phase,
         error: data.error,
         failedAt: data.failedAt,
         recoverable: data.recoverable,
       };
 
-      // Handle optional fields for exactOptionalPropertyTypes
       if (data.code !== undefined && data.context !== undefined) {
-        return { ...base, code: data.code, context: data.context } satisfies FailedSubstate;
+        return { ...base, code: data.code, context: data.context };
       }
       if (data.code !== undefined) {
-        return { ...base, code: data.code } satisfies FailedSubstate;
+        return { ...base, code: data.code };
       }
       if (data.context !== undefined) {
-        return { ...base, context: data.context } satisfies FailedSubstate;
+        return { ...base, context: data.context };
       }
-      return base satisfies FailedSubstate;
+      return base;
+    }
+
+    case 'Complete': {
+      return {
+        kind: 'Complete',
+        artifacts: data.artifacts,
+      };
     }
 
     default: {
-      // Type-safe exhaustive check
       const _exhaustive: never = data;
       throw new StatePersistenceError(
-        `Unknown substate kind: ${JSON.stringify(_exhaustive)}`,
+        `Unknown persisted protocol state kind: ${JSON.stringify(_exhaustive)}`,
         'schema_error'
       );
     }
+  }
+}
+
+/**
+ * Deserializes persisted phase state data to a PhaseState.
+ *
+ * @param data - The persisted phase state data.
+ * @returns The deserialized phase state.
+ */
+function deserializePhaseState(data: PersistedPhaseState): PhaseState {
+  switch (data.phase) {
+    case 'Ignition':
+      return { phase: 'Ignition', substate: data.substate };
+    case 'Lattice':
+      return { phase: 'Lattice', substate: data.substate };
+    case 'CompositionAudit':
+      return { phase: 'CompositionAudit', substate: data.substate };
+    case 'Injection':
+      return { phase: 'Injection', substate: data.substate };
+    case 'Mesoscopic':
+      return { phase: 'Mesoscopic', substate: data.substate };
+    case 'MassDefect':
+      return { phase: 'MassDefect', substate: data.substate };
   }
 }
 
@@ -280,13 +474,12 @@ export function serializeState(
   const data: PersistedStateData = {
     version: PERSISTED_STATE_VERSION,
     persistedAt: new Date().toISOString(),
-    phase: snapshot.state.phase,
-    substate: serializeSubstate(snapshot.state.substate),
+    state: serializeProtocolState(snapshot.state),
     artifacts: snapshot.artifacts,
     blockingQueries: snapshot.blockingQueries,
   };
 
-  const pretty = options?.pretty !== false; // Default to true
+  const pretty = options?.pretty !== false;
   const indent = options?.indent ?? 2;
 
   if (pretty) {
@@ -333,14 +526,7 @@ export function deserializeState(json: string): ProtocolStateSnapshot {
   const obj = data as Record<string, unknown>;
 
   // Check for required top-level fields
-  const requiredFields = [
-    'version',
-    'persistedAt',
-    'phase',
-    'substate',
-    'artifacts',
-    'blockingQueries',
-  ];
+  const requiredFields = ['version', 'persistedAt', 'state', 'artifacts', 'blockingQueries'];
   for (const field of requiredFields) {
     if (!(field in obj)) {
       throw new StatePersistenceError(
@@ -364,87 +550,35 @@ export function deserializeState(json: string): ProtocolStateSnapshot {
     throw new StatePersistenceError(
       `Invalid state format: version "${obj.version}" does not match semver pattern`,
       'schema_error',
-      { details: 'Version must be in format X.Y.Z (e.g., "1.0.0")' }
+      { details: 'Version must be in format X.Y.Z (e.g., "2.0.0")' }
     );
   }
 
-  // Validate phase
-  if (typeof obj.phase !== 'string') {
-    throw new StatePersistenceError('Invalid state format: phase must be a string', 'schema_error');
-  }
-
-  if (!isValidPhase(obj.phase)) {
+  // Validate state
+  if (obj.state === null || typeof obj.state !== 'object') {
     throw new StatePersistenceError(
-      `Invalid state format: phase "${obj.phase}" is not a valid protocol phase`,
-      'validation_error',
-      { details: `Valid phases: ${PROTOCOL_PHASES.join(', ')}` }
-    );
-  }
-
-  const phase = obj.phase;
-
-  // Validate substate
-  if (obj.substate === null || typeof obj.substate !== 'object') {
-    throw new StatePersistenceError(
-      'Invalid state format: substate must be an object',
+      'Invalid state format: state must be an object',
       'schema_error'
     );
   }
 
-  const substateObj = obj.substate as Record<string, unknown>;
-  if (!('kind' in substateObj) || typeof substateObj.kind !== 'string') {
+  const stateObj = obj.state as Record<string, unknown>;
+  if (!('kind' in stateObj) || typeof stateObj.kind !== 'string') {
     throw new StatePersistenceError(
-      'Invalid state format: substate must have a "kind" field',
+      'Invalid state format: state must have a "kind" field',
       'schema_error'
     );
   }
 
-  if (!['Active', 'Blocking', 'Failed'].includes(substateObj.kind)) {
+  if (!['Active', 'Blocked', 'Failed', 'Complete'].includes(stateObj.kind)) {
     throw new StatePersistenceError(
-      `Invalid state format: substate kind "${substateObj.kind}" is not valid`,
+      `Invalid state format: state kind "${stateObj.kind}" is not valid`,
       'validation_error',
-      { details: 'Valid kinds: Active, Blocking, Failed' }
+      { details: 'Valid kinds: Active, Blocked, Failed, Complete' }
     );
   }
 
-  // Validate substate-specific fields
-  if (substateObj.kind === 'Blocking') {
-    if (typeof substateObj.query !== 'string') {
-      throw new StatePersistenceError(
-        'Invalid state format: Blocking substate must have a "query" string',
-        'schema_error'
-      );
-    }
-    if (typeof substateObj.blockedAt !== 'string') {
-      throw new StatePersistenceError(
-        'Invalid state format: Blocking substate must have a "blockedAt" string',
-        'schema_error'
-      );
-    }
-  }
-
-  if (substateObj.kind === 'Failed') {
-    if (typeof substateObj.error !== 'string') {
-      throw new StatePersistenceError(
-        'Invalid state format: Failed substate must have an "error" string',
-        'schema_error'
-      );
-    }
-    if (typeof substateObj.failedAt !== 'string') {
-      throw new StatePersistenceError(
-        'Invalid state format: Failed substate must have a "failedAt" string',
-        'schema_error'
-      );
-    }
-    if (typeof substateObj.recoverable !== 'boolean') {
-      throw new StatePersistenceError(
-        'Invalid state format: Failed substate must have a "recoverable" boolean',
-        'schema_error'
-      );
-    }
-  }
-
-  const substate = deserializeSubstate(obj.substate as PersistedSubstateData);
+  const state = deserializeProtocolState(obj.state as PersistedProtocolState);
 
   // Validate artifacts
   if (!Array.isArray(obj.artifacts)) {
@@ -517,7 +651,7 @@ export function deserializeState(json: string): ProtocolStateSnapshot {
   const blockingQueries = obj.blockingQueries as BlockingRecord[];
 
   return {
-    state: { phase, substate },
+    state,
     artifacts,
     blockingQueries,
   };
@@ -660,11 +794,18 @@ export async function stateFileExists(filePath: string): Promise<boolean> {
  * @returns A new state snapshot at the beginning of protocol execution.
  */
 export function createInitialStateSnapshot(): ProtocolStateSnapshot {
-  return {
-    state: {
-      phase: 'Ignition',
-      substate: { kind: 'Active' },
+  const phaseState = {
+    phase: 'Ignition' as const,
+    substate: {
+      step: 'interviewing' as const,
+      interviewPhase: 'Discovery' as const,
+      questionIndex: 0,
     },
+  };
+  const state = { kind: 'Active' as const, phase: phaseState };
+
+  return {
+    state,
     artifacts: [],
     blockingQueries: [],
   };

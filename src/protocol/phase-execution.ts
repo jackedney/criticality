@@ -22,6 +22,7 @@ import {
   formatMassDefectReport,
 } from '../mass-defect/index.js';
 import type { ModelRouter } from '../router/types.js';
+import { getPhase } from './types.js';
 
 const logger = new Logger({ component: 'MassDefectPhase', debugMode: false });
 
@@ -59,7 +60,7 @@ export async function executeMassDefectPhase(
   const { config, projectRoot, router } = massDefectContext;
 
   logger.info('mass_defect_started', {
-    phase: snapshot.state.phase,
+    phase: getPhase(snapshot.state),
   });
 
   try {

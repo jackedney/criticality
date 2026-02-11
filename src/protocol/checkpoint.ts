@@ -2,7 +2,7 @@
  * Protocol checkpoint and resume module.
  *
  * Provides functionality to detect existing state on startup, validate state
- * integrity, resume protocol execution from the last checkpoint, and handle
+ * integrity, resume protocol execution from last checkpoint, and handle
  * stale or corrupted state gracefully.
  *
  * @packageDocumentation
@@ -17,7 +17,16 @@ import {
   StatePersistenceError,
   PERSISTED_STATE_VERSION,
 } from './persistence.js';
-import { isValidPhase, PROTOCOL_PHASES, type ProtocolPhase } from './types.js';
+import {
+  isValidPhase,
+  PROTOCOL_PHASES,
+  type ProtocolPhase,
+  getPhase,
+  isFailedState,
+  isBlockedState,
+  type BlockedState,
+  type FailedState,
+} from './types.js';
 import type { ArtifactType } from './transitions.js';
 
 /**
@@ -31,7 +40,7 @@ export type StateDetectionResult =
  * Result of state integrity validation.
  */
 export interface StateValidationResult {
-  /** Whether the state is valid and safe to resume. */
+  /** Whether state is valid and safe to resume. */
   readonly valid: boolean;
   /** Validation errors if state is invalid. */
   readonly errors: readonly StateValidationError[];
@@ -69,7 +78,7 @@ export interface StateValidationWarning {
 export type StateValidationErrorCode =
   | 'INVALID_VERSION'
   | 'INVALID_PHASE'
-  | 'INVALID_SUBSTATE'
+  | 'INVALID_STATE'
   | 'MISSING_ARTIFACTS'
   | 'CORRUPTED_STRUCTURE'
   | 'FUTURE_VERSION';
@@ -285,17 +294,17 @@ function getRequiredArtifactsForPhase(phase: ProtocolPhase): ReadonlySet<Artifac
 }
 
 /**
- * Validates the integrity of a state snapshot before resuming.
+ * Validates integrity of a state snapshot before resuming.
  *
  * Performs comprehensive validation including:
  * - Version compatibility check
  * - Phase validity check
- * - Substate structure validation
+ * - State kind validation
  * - Required artifacts validation
  * - Staleness check
  *
  * @param snapshot - The state snapshot to validate.
- * @param persistedAt - When the state was persisted (from the file).
+ * @param persistedAt - When state was persisted (from the file).
  * @param options - Validation options.
  * @returns Validation result with errors and warnings.
  *
@@ -318,71 +327,70 @@ export function validateStateIntegrity(
   const maxAgeMs = options.maxAgeMs ?? DEFAULT_MAX_STATE_AGE_MS;
   const allowStaleState = options.allowStaleState !== false;
 
+  const state = snapshot.state;
+  const phase = getPhase(state);
+
   // 1. Validate phase
-  if (!isValidPhase(snapshot.state.phase)) {
+  if (phase !== undefined && !isValidPhase(phase)) {
     errors.push({
       code: 'INVALID_PHASE',
-      message: `Invalid protocol phase: "${String(snapshot.state.phase)}"`,
+      message: `Invalid protocol phase: "${String(phase)}"`,
       details: `Valid phases are: ${PROTOCOL_PHASES.join(', ')}`,
     });
   }
 
-  // 2. Validate substate structure
-  const substate = snapshot.state.substate;
-  if (typeof substate !== 'object') {
+  // 2. Validate state kind
+  if (!['Active', 'Blocked', 'Failed', 'Complete'].includes(state.kind)) {
     errors.push({
-      code: 'INVALID_SUBSTATE',
-      message: 'Missing or invalid substate',
-    });
-  } else if (!['Active', 'Blocking', 'Failed'].includes(substate.kind)) {
-    errors.push({
-      code: 'INVALID_SUBSTATE',
-      message: `Invalid substate kind: "${substate.kind}"`,
-      details: 'Valid kinds are: Active, Blocking, Failed',
+      code: 'INVALID_STATE',
+      message: `Invalid state kind: "${state.kind}"`,
+      details: 'Valid kinds are: Active, Blocked, Failed, Complete',
     });
   }
 
-  // 3. Validate blocking substate has required fields
-  if (substate.kind === 'Blocking') {
-    if (typeof substate.query !== 'string' || substate.query.length === 0) {
+  // 3. Validate blocked state has required fields
+  if (isBlockedState(state)) {
+    const blockedState = state as BlockedState;
+    if (typeof blockedState.query !== 'string' || blockedState.query.length === 0) {
       errors.push({
         code: 'CORRUPTED_STRUCTURE',
-        message: 'Blocking substate missing query',
+        message: 'Blocked state missing query',
       });
     }
-    if (typeof substate.blockedAt !== 'string') {
+    if (typeof blockedState.blockedAt !== 'string') {
       errors.push({
         code: 'CORRUPTED_STRUCTURE',
-        message: 'Blocking substate missing blockedAt timestamp',
+        message: 'Blocked state missing blockedAt timestamp',
       });
     }
 
     // Check if blocking timeout has expired
-    if (substate.timeoutMs !== undefined && typeof substate.blockedAt === 'string') {
-      const blockedAt = new Date(substate.blockedAt).getTime();
+    if (blockedState.timeoutMs !== undefined && typeof blockedState.blockedAt === 'string') {
+      const blockedAt = new Date(blockedState.blockedAt).getTime();
       const elapsed = Date.now() - blockedAt;
-      if (elapsed > substate.timeoutMs) {
+      if (elapsed > blockedState.timeoutMs) {
         warnings.push({
           code: 'BLOCKING_TIMEOUT_EXPIRED',
           message: 'Blocking state timeout has expired',
-          details: `Blocked at ${substate.blockedAt}, timeout was ${String(substate.timeoutMs)}ms, elapsed: ${String(elapsed)}ms`,
+          details: `Blocked at ${blockedState.blockedAt}, timeout was ${String(blockedState.timeoutMs)}ms, elapsed: ${String(elapsed)}ms`,
         });
       }
     }
   }
 
-  // 4. Validate failed substate has required fields
-  if (substate.kind === 'Failed') {
-    if (typeof substate.error !== 'string') {
+  // 4. Validate failed state has required fields
+  if (isFailedState(state)) {
+    const failedState = state as FailedState;
+    if (typeof failedState.error !== 'string') {
       errors.push({
         code: 'CORRUPTED_STRUCTURE',
-        message: 'Failed substate missing error message',
+        message: 'Failed state missing error message',
       });
     }
-    if (typeof substate.recoverable !== 'boolean') {
+    if (typeof failedState.recoverable !== 'boolean') {
       errors.push({
         code: 'CORRUPTED_STRUCTURE',
-        message: 'Failed substate missing recoverable flag',
+        message: 'Failed state missing recoverable flag',
       });
     }
   }
@@ -400,13 +408,13 @@ export function validateStateIntegrity(
       warnings.push({
         code: 'UNKNOWN_ARTIFACTS',
         message: `Unknown artifact types: ${unknownArtifacts.join(', ')}`,
-        details: 'These may be from a newer version of the protocol',
+        details: 'These may be from a newer version of protocol',
       });
     }
 
     // Check for missing required artifacts based on current phase
-    if (isValidPhase(snapshot.state.phase)) {
-      const required = getRequiredArtifactsForPhase(snapshot.state.phase);
+    if (phase !== undefined && isValidPhase(phase)) {
+      const required = getRequiredArtifactsForPhase(phase);
       const artifactSet = new Set(snapshot.artifacts);
       const missing: string[] = [];
 
@@ -419,8 +427,8 @@ export function validateStateIntegrity(
       if (missing.length > 0) {
         errors.push({
           code: 'MISSING_ARTIFACTS',
-          message: `Missing required artifacts for phase ${snapshot.state.phase}: ${missing.join(', ')}`,
-          details: `Phase ${snapshot.state.phase} requires: ${[...required].join(', ')}`,
+          message: `Missing required artifacts for phase ${phase}: ${missing.join(', ')}`,
+          details: `Phase ${phase} requires: ${[...required].join(', ')}`,
         });
       }
     }
@@ -527,14 +535,7 @@ export function validatePersistedStructure(data: unknown): StateValidationResult
   }
 
   // Check required fields exist
-  const requiredFields = [
-    'version',
-    'persistedAt',
-    'phase',
-    'substate',
-    'artifacts',
-    'blockingQueries',
-  ];
+  const requiredFields = ['version', 'persistedAt', 'state', 'artifacts', 'blockingQueries'];
   for (const field of requiredFields) {
     if (!(field in obj)) {
       errors.push({
@@ -681,7 +682,7 @@ export async function resumeFromCheckpoint(
  * ```typescript
  * const { snapshot, resumed, warnings } = await getStartupState('./state.json');
  * if (resumed) {
- *   console.log(`Resumed from ${snapshot.state.phase}`);
+ *   console.log(`Resumed from ${snapshot.state.kind}`);
  * } else {
  *   console.log('Starting fresh from Ignition');
  * }
