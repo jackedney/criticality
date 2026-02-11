@@ -19,6 +19,7 @@ import { transition, getValidTransitions, REQUIRED_ARTIFACTS } from './transitio
 import { checkTimeout } from './blocking.js';
 import { saveState } from './persistence.js';
 import { getStartupState } from './checkpoint.js';
+import * as path from 'node:path';
 import {
   createActiveState,
   createFailedState,
@@ -508,10 +509,14 @@ export async function executeTick(context: TickContext, statePath: string): Prom
   }
 
   // Check for valid forward transition based on artifacts
+  // Derive projectRoot from statePath (assuming <projectRoot>/.criticality/state.json)
+  const criticalityDir = path.dirname(statePath);
+  const projectRoot = path.dirname(criticalityDir);
+
   for (const targetPhase of validTargets) {
     if (hasRequiredArtifacts(targetPhase, context.artifacts)) {
       // Attempt transition
-      const transitionResult = transition(state, targetPhase, {
+      const transitionResult = await transition(state, targetPhase, projectRoot, {
         artifacts: { available: context.artifacts },
       });
 

@@ -23,6 +23,9 @@ import {
   getPhaseIndex,
   type PhaseState,
 } from './types.js';
+import { safeMkdir } from '../utils/safe-fs.js';
+import { Logger } from '../utils/logger.js';
+import * as path from 'node:path';
 
 /**
  * Creates a default PhaseState for a given target phase.
@@ -335,18 +338,38 @@ export function validateArtifacts(
  * @param toPhase - The phase being entered.
  * @returns True when context shedding is complete.
  */
-export function shedContext(fromPhase: ProtocolPhase, toPhase: ProtocolPhase): boolean {
-  // Placeholder: In the full implementation, this would:
-  // 1. Archive any conversation artifacts that should be preserved
-  // 2. Clear all LLM conversation state
-  // 3. Record the transition in telemetry
-  // 4. Return only the Decision Ledger and phase artifacts
+const contextLogger = new Logger({ component: 'ContextShed', debugMode: false });
 
-  // For now, we just acknowledge that the transition happened
-  void fromPhase;
-  void toPhase;
+export async function shedContext(
+  fromPhase: ProtocolPhase,
+  toPhase: ProtocolPhase,
+  projectRoot: string
+): Promise<boolean> {
+  const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+  const archiveDirName = `${fromPhase}-to-${toPhase}-${timestamp}`;
+  const archivePath = path.join(projectRoot, '.criticality', 'archives', archiveDirName);
 
-  return true;
+  try {
+    await safeMkdir(archivePath, { recursive: true });
+
+    contextLogger.info('context_shed', {
+      fromPhase,
+      toPhase,
+      archivePath,
+      timestamp: new Date().toISOString(),
+    });
+
+    return true;
+  } catch (error) {
+    contextLogger.warn('context_shed_failed', {
+      fromPhase,
+      toPhase,
+      archivePath,
+      error: error instanceof Error ? error.message : String(error),
+    });
+
+    return false;
+  }
 }
 
 /**
@@ -408,8 +431,9 @@ export interface TransitionOptions {
  *
  * @param currentState - The current protocol state.
  * @param targetPhase - The phase to transition to.
+ * @param projectRoot - The root directory of the project for context shedding.
  * @param options - Optional transition options.
- * @returns A TransitionResult indicating success or failure.
+ * @returns A Promise resolving to a TransitionResult indicating success or failure.
  *
  * @example
  * ```typescript
@@ -417,7 +441,7 @@ export interface TransitionOptions {
  * const phase = getPhase(currentState);
  * const artifacts = createTransitionArtifacts(['spec']);
  * if (phase !== undefined) {
- *   const result = transition(currentState, 'Lattice', { artifacts });
+ *   const result = await transition(currentState, 'Lattice', '/path/to/project', { artifacts });
  *
  *   if (result.success) {
  *     console.log(`Transitioned to ${result.state}`);
@@ -425,18 +449,19 @@ export interface TransitionOptions {
  * }
  *
  * // Invalid transition returns descriptive error
- * const badResult = transition(currentState, 'Injection');
+ * const badResult = await transition(currentState, 'Injection', '/path/to/project');
  * if (!badResult.success) {
  *   console.log(badResult.error.message);
  *   // "Cannot skip phases: transition from 'Ignition' to 'Injection' is not allowed"
  * }
  * ```
  */
-export function transition(
+export async function transition(
   currentState: ProtocolState,
   targetPhase: ProtocolPhase,
+  projectRoot: string,
   options?: TransitionOptions
-): TransitionResult {
+): Promise<TransitionResult> {
   // CompleteState has no phase field accessible via getPhase, handle it first
   if (isCompleteState(currentState)) {
     return errorResult(
@@ -547,7 +572,7 @@ export function transition(
   }
 
   // Perform context shedding
-  const contextShed = shedContext(fromPhase, targetPhase);
+  const contextShed = await shedContext(fromPhase, targetPhase, projectRoot);
 
   // Create new state: CompleteState for Complete phase, ActiveState for all others
   if (targetPhase === 'Complete') {
