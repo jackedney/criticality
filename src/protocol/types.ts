@@ -798,3 +798,35 @@ export function isTerminalState(state: ProtocolState): boolean {
 export function canTransition(state: ProtocolState): boolean {
   return isActiveState(state) && !isTerminalState(state);
 }
+
+/**
+ * Human-readable labels for BlockReason values.
+ */
+const BLOCK_REASON_LABELS: Readonly<Record<BlockReason, string>> = {
+  canonical_conflict: 'Canonical Conflict',
+  unresolved_contradiction: 'Unresolved Contradiction',
+  circuit_breaker: 'Circuit Breaker',
+  security_review: 'Security Review',
+  user_requested: 'User Requested',
+};
+
+/**
+ * Gets a human-readable label for a BlockReason.
+ *
+ * @param reason - The block reason.
+ * @returns The formatted label (e.g., 'Circuit Breaker').
+ */
+export function formatBlockReasonLabel(reason: BlockReason): string {
+  return BLOCK_REASON_LABELS[reason];
+}
+
+/**
+ * Formats a camelCase step name as a human-readable Title Case string.
+ *
+ * @param step - The step name (e.g., 'generatingStructure').
+ * @returns The formatted step name (e.g., 'Generating Structure').
+ */
+export function formatStepName(step: string): string {
+  const words = step.replace(/([A-Z])/g, ' $1');
+  return words.charAt(0).toUpperCase() + words.slice(1);
+}

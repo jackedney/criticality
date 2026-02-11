@@ -9,11 +9,19 @@ import { describe, it, expect } from 'vitest';
 import {
   createActiveState,
   createBlockedState,
+  createCompleteState,
   createInjectionImplementing,
   createLatticeCompilingCheck,
+  createLatticeGeneratingStructure,
   createMassDefectApplyingTransform,
+  createIgnitionInterviewing,
   getPhase,
+  getStep,
+  isActiveState,
   isBlockedState,
+  isCompleteState,
+  formatStepName,
+  formatBlockReasonLabel,
 } from '../../protocol/types.js';
 import type { ProtocolStateSnapshot } from '../../protocol/persistence.js';
 import type { BlockingRecord } from '../../protocol/blocking.js';
@@ -231,6 +239,79 @@ describe('Pending Queries Display (US-004)', () => {
     };
 
     expect(noOptions.options).toBeUndefined();
+  });
+});
+
+describe('3-Tier Display Format (US-004)', () => {
+  it('should format step names as Title Case for active states', () => {
+    expect(formatStepName('interviewing')).toBe('Interviewing');
+    expect(formatStepName('generatingStructure')).toBe('Generating Structure');
+    expect(formatStepName('compilingCheck')).toBe('Compiling Check');
+    expect(formatStepName('applyingTransform')).toBe('Applying Transform');
+    expect(formatStepName('verifyingSemantics')).toBe('Verifying Semantics');
+  });
+
+  it('should format BlockReason labels for blocked states', () => {
+    expect(formatBlockReasonLabel('circuit_breaker')).toBe('Circuit Breaker');
+    expect(formatBlockReasonLabel('user_requested')).toBe('User Requested');
+    expect(formatBlockReasonLabel('canonical_conflict')).toBe('Canonical Conflict');
+    expect(formatBlockReasonLabel('unresolved_contradiction')).toBe('Unresolved Contradiction');
+    expect(formatBlockReasonLabel('security_review')).toBe('Security Review');
+  });
+
+  it('should show substep name from phase substate when active', () => {
+    const state = createActiveState({
+      phase: 'Lattice',
+      substate: createLatticeGeneratingStructure(),
+    });
+
+    expect(isActiveState(state)).toBe(true);
+    if (isActiveState(state)) {
+      const step = getStep(state);
+      expect(step).toBe('generatingStructure');
+      expect(step).toBeDefined();
+      if (step !== undefined) {
+        expect(formatStepName(step)).toBe('Generating Structure');
+      }
+    }
+  });
+
+  it('should show Ignition: Interviewing format for Ignition phase', () => {
+    const state = createActiveState({
+      phase: 'Ignition',
+      substate: createIgnitionInterviewing('Discovery', 0),
+    });
+
+    const phase = getPhase(state);
+    const step = getStep(state);
+    expect(phase).toBe('Ignition');
+    expect(step).toBe('interviewing');
+    expect(step).toBeDefined();
+    expect(phase).toBeDefined();
+    if (phase !== undefined && step !== undefined) {
+      expect(`${phase}: ${formatStepName(step)}`).toBe('Ignition: Interviewing');
+    }
+  });
+
+  it('should show Complete without trying to access phase.substate', () => {
+    const state = createCompleteState(['spec', 'latticeCode']);
+
+    expect(isCompleteState(state)).toBe(true);
+    expect(getPhase(state)).toBeUndefined();
+    expect(getStep(state)).toBeUndefined();
+  });
+
+  it('should show BlockReason label when state is blocked', () => {
+    const state = createBlockedState({
+      reason: 'circuit_breaker',
+      phase: 'Injection',
+      query: 'Too many failures',
+    });
+
+    expect(isBlockedState(state)).toBe(true);
+    if (isBlockedState(state)) {
+      expect(formatBlockReasonLabel(state.reason)).toBe('Circuit Breaker');
+    }
   });
 });
 

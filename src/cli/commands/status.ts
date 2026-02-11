@@ -16,6 +16,8 @@ import {
   isFailedState,
   getPhase,
   PROTOCOL_PHASES,
+  formatStepName,
+  formatBlockReasonLabel,
 } from '../../protocol/types.js';
 import type { BlockingRecord } from '../../protocol/blocking.js';
 import { loadLedger } from '../../ledger/persistence.js';
@@ -174,7 +176,9 @@ function formatHierarchicalState(state: ProtocolState, options: StatusDisplayOpt
   const parts: string[] = [phaseWithState];
 
   if (isActiveState(state)) {
-    parts.push(state.phase.substate.step);
+    parts.push(formatStepName(state.phase.substate.step));
+  } else if (isBlockedState(state)) {
+    parts.push(`Blocked: ${formatBlockReasonLabel(state.reason)}`);
   }
 
   return parts.join(` ${dimCode}>${resetCode} `);

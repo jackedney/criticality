@@ -12,6 +12,8 @@ import {
   isActiveState,
   isBlockedState,
   isFailedState,
+  formatStepName,
+  formatBlockReasonLabel,
 } from '../../protocol/types.js';
 
 /**
@@ -110,14 +112,13 @@ export class Spinner {
     if (isActiveState(state)) {
       const step = getStep(state);
       if (step !== undefined) {
-        return step;
+        return formatStepName(step);
       }
       return 'active';
     }
 
     if (isBlockedState(state)) {
-      const query = state.query;
-      return `blocked: ${query.substring(0, 30)}${query.length > 30 ? '...' : ''}`;
+      return `Blocked: ${formatBlockReasonLabel(state.reason)}`;
     }
 
     if (isFailedState(state)) {
@@ -125,7 +126,7 @@ export class Spinner {
       return `failed: ${error.substring(0, 30)}${error.length > 30 ? '...' : ''}`;
     }
 
-    return 'complete';
+    return 'Complete';
   }
 
   /**
@@ -138,7 +139,7 @@ export class Spinner {
     const phase = getPhase(this.state.protocolState) ?? 'Complete';
     const stateText = this.formatState(this.state.protocolState);
 
-    const text = `${frame} ${phase}${stateText !== 'active' ? ' > ' + stateText : ''}`;
+    const text = `${frame} ${phase}${stateText !== 'active' ? ': ' + stateText : ''}`;
 
     if (text.length > MAX_TEXT_WIDTH) {
       return text.substring(0, MAX_TEXT_WIDTH - 3) + '...';

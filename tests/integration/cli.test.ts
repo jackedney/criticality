@@ -117,7 +117,7 @@ describe('CLI Integration Tests', () => {
   }
 
   describe('Status Command', () => {
-    it('displays active state with phase and progress', async () => {
+    it('displays active state with phase, progress, and substep name', async () => {
       const state = createActiveSnapshot();
       await saveState(state, statePath);
 
@@ -128,9 +128,10 @@ describe('CLI Integration Tests', () => {
       expect(consoleLogSpy).toHaveBeenCalled();
       expect(consoleLogSpy).toHaveBeenCalledWith(expect.stringContaining('Phase:'));
       expect(consoleLogSpy).toHaveBeenCalledWith(expect.stringContaining('Lattice (Active)'));
+      expect(consoleLogSpy).toHaveBeenCalledWith(expect.stringContaining('Compiling Check'));
     });
 
-    it('displays blocked state with query and options', async () => {
+    it('displays blocked state with query, BlockReason label, and options', async () => {
       const state = createBlockedSnapshot();
       await saveState(state, statePath);
 
@@ -140,6 +141,9 @@ describe('CLI Integration Tests', () => {
       expect(result.exitCode).toBe(0);
       expect(consoleLogSpy).toHaveBeenCalled();
       expect(consoleLogSpy).toHaveBeenCalledWith(expect.stringContaining('Lattice (Blocked)'));
+      expect(consoleLogSpy).toHaveBeenCalledWith(
+        expect.stringContaining('Blocked: User Requested')
+      );
       expect(consoleLogSpy).toHaveBeenCalledWith(expect.stringContaining('Blocking'));
       expect(consoleLogSpy).toHaveBeenCalledWith(
         expect.stringContaining('Should we use TypeScript strict mode?')
@@ -311,22 +315,26 @@ on_complete = { command = "notify-send 'Protocol complete'", enabled = true }
       expect(consoleLogSpy).toHaveBeenCalledWith(expect.stringContaining('Protocol Complete'));
     });
 
-    it('handles active state with progress display', async () => {
+    it('handles active state with progress display and substep name', async () => {
       const state = createActiveSnapshot();
       await saveState(state, statePath);
 
       const statusResult = await handleStatusCommand(createMockContext({ args: ['status'] }));
       expect(statusResult.exitCode).toBe(0);
       expect(consoleLogSpy).toHaveBeenCalledWith(expect.stringContaining('Lattice (Active)'));
+      expect(consoleLogSpy).toHaveBeenCalledWith(expect.stringContaining('Compiling Check'));
     });
 
-    it('handles blocked state status display', async () => {
+    it('handles blocked state status display with BlockReason', async () => {
       const state = createBlockedSnapshot();
       await saveState(state, statePath);
 
       const statusResult = await handleStatusCommand(createMockContext({ args: ['status'] }));
       expect(statusResult.exitCode).toBe(0);
       expect(consoleLogSpy).toHaveBeenCalledWith(expect.stringContaining('Lattice (Blocked)'));
+      expect(consoleLogSpy).toHaveBeenCalledWith(
+        expect.stringContaining('Blocked: User Requested')
+      );
     });
   });
 });

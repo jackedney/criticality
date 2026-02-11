@@ -18,6 +18,8 @@ import {
   isActiveState,
   isBlockedState,
   isFailedState,
+  formatStepName,
+  formatBlockReasonLabel,
 } from '../../protocol/types.js';
 
 /**
@@ -144,7 +146,7 @@ export class LiveDisplay {
   updatePhase(state: ProtocolState): void {
     this.protocolState = state;
     const phase = getPhase(state) ?? 'Complete';
-    this.addLog(`Phase: ${phase} > ${this.formatState(state)}`);
+    this.addLog(`Phase: ${phase}: ${this.formatState(state)}`);
     this.render();
   }
 
@@ -236,7 +238,7 @@ export class LiveDisplay {
   private getStaticDisplay(): string {
     const phase = getPhase(this.protocolState) ?? 'Complete';
     const timeLine = this.getElapsedTimeLine();
-    return `${phase} > ${this.formatState(this.protocolState)}\n${timeLine}`;
+    return `${phase}: ${this.formatState(this.protocolState)}\n${timeLine}`;
   }
 
   /**
@@ -250,7 +252,7 @@ export class LiveDisplay {
     const phase = getPhase(this.protocolState) ?? 'Complete';
     const stateText = this.formatState(this.protocolState);
 
-    return `${frame} ${phase}${stateText !== 'active' ? ' > ' + stateText : ''}`;
+    return `${frame} ${phase}${stateText !== 'active' ? ': ' + stateText : ''}`;
   }
 
   /**
@@ -307,14 +309,13 @@ export class LiveDisplay {
     if (isActiveState(state)) {
       const step = getStep(state);
       if (step !== undefined) {
-        return step;
+        return formatStepName(step);
       }
       return 'active';
     }
 
     if (isBlockedState(state)) {
-      const query = state.query;
-      return `blocked: ${query.substring(0, 30)}${query.length > 30 ? '...' : ''}`;
+      return `Blocked: ${formatBlockReasonLabel(state.reason)}`;
     }
 
     if (isFailedState(state)) {
@@ -322,6 +323,6 @@ export class LiveDisplay {
       return `failed: ${error.substring(0, 30)}${error.length > 30 ? '...' : ''}`;
     }
 
-    return 'complete';
+    return 'Complete';
   }
 }
