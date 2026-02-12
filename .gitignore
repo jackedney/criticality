@@ -52,6 +52,7 @@ src/**/*.js.map
 logs/
 
 # Local agent and AI tool metadata
+.agents/
 .ralph/
 .serena/
 .claude/
