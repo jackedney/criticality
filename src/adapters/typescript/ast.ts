@@ -223,6 +223,63 @@ function collectFunctions(sourceFile: SourceFile): FunctionLike[] {
 }
 
 /**
+ * Optimized function collection specifically for finding TODO functions.
+ * Instead of traversing the entire AST, it scans the file text for TODO patterns
+ * and only traverses up from the matches to find the enclosing functions.
+ *
+ * @param sourceFile - The source file to scan.
+ * @returns Array of function-like nodes containing TODO markers.
+ */
+function collectTodoFunctions(sourceFile: SourceFile): FunctionLike[] {
+  const functions = new Set<FunctionLike>();
+  const text = sourceFile.getFullText();
+
+  for (const pattern of TODO_PATTERNS) {
+    // Create a global regex to find all occurrences
+    const flags = pattern.flags.includes('g') ? pattern.flags : pattern.flags + 'g';
+    const globalRegex = new RegExp(pattern.source, flags);
+
+    let match;
+    while ((match = globalRegex.exec(text)) !== null) {
+      const index = match.index;
+
+      // Find the node at the match position
+      // getDescendantAtPos finds the most specific node at the given position.
+      // If the match is in a comment (trivia), this will return the comment itself
+      // or the adjacent token/node, both of which are descendants of the containing function.
+      const node = sourceFile.getDescendantAtPos(index);
+
+      if (!node) {
+        continue;
+      }
+
+      // Walk up to find the enclosing function
+      let current: Node | undefined = node;
+      while (current) {
+        const kind = current.getKind();
+        if (
+          kind === SyntaxKind.FunctionDeclaration ||
+          kind === SyntaxKind.MethodDeclaration ||
+          kind === SyntaxKind.ArrowFunction ||
+          kind === SyntaxKind.FunctionExpression
+        ) {
+          functions.add(current as FunctionLike);
+        }
+
+        // Stop if we reach the source file
+        if (kind === SyntaxKind.SourceFile) {
+          break;
+        }
+
+        current = current.getParent();
+      }
+    }
+  }
+
+  return Array.from(functions);
+}
+
+/**
  * Builds a call graph for the given functions.
  * Returns a map of function name to the names of functions it calls.
  *
@@ -872,7 +929,8 @@ export function findTodoFunctions(project: Project): TodoFunction[] {
       continue;
     }
 
-    const functions = collectFunctions(sourceFile);
+    // Optimization: Use regex pre-scan to find candidate functions instead of full AST traversal
+    const functions = collectTodoFunctions(sourceFile);
 
     for (const func of functions) {
       // Optimization: Extract body text from already loaded fileText to avoid internal getText() calls
