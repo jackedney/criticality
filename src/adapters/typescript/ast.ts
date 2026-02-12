@@ -13,6 +13,7 @@ import {
   type FunctionExpression,
   SyntaxKind,
   type SourceFile,
+  type Node,
 } from 'ts-morph';
 import * as path from 'node:path';
 import { safeExistsSync } from '../../utils/safe-fs.js';
@@ -459,6 +460,70 @@ function topologicalSort(
 }
 
 /**
+ * Finds a function-like declaration at a specific line number.
+ *
+ * @param sourceFile - The source file to search in.
+ * @param line - The line number (1-indexed).
+ * @param name - The expected function name.
+ * @returns The function-like node if found and name matches, undefined otherwise.
+ */
+function findFunctionAtLine(
+  sourceFile: SourceFile,
+  line: number,
+  name: string
+): FunctionLike | undefined {
+  const lineIndex = line - 1;
+  const startPos = sourceFile.compilerNode.getPositionOfLineAndCharacter(lineIndex, 0);
+
+  // Handle indentation: finding the first non-whitespace character on the line
+  const fullText = sourceFile.getFullText();
+  const nextNewLine = fullText.indexOf('\n', startPos);
+  const endPos = nextNewLine === -1 ? fullText.length : nextNewLine;
+  const lineContent = fullText.substring(startPos, endPos);
+  const firstNonWhitespace = lineContent.search(/\S/);
+
+  if (firstNonWhitespace === -1) {
+    return undefined;
+  }
+
+  const exactPos = startPos + firstNonWhitespace;
+
+  // Try to find a node at this position
+  // getDescendantAtPos finds the most specific node at the given position.
+  // For a function declaration, this is often the 'function' keyword or identifier.
+  const node = sourceFile.getDescendantAtPos(exactPos);
+
+  if (!node) {
+    return undefined;
+  }
+
+  // Walk up to find the function declaration
+  let current: Node | undefined = node;
+  while (current) {
+    const kind = current.getKind();
+    if (
+      kind === SyntaxKind.FunctionDeclaration ||
+      kind === SyntaxKind.MethodDeclaration ||
+      kind === SyntaxKind.ArrowFunction ||
+      kind === SyntaxKind.FunctionExpression
+    ) {
+      const func = current as FunctionLike;
+      if (getFunctionName(func) === name) {
+        return func;
+      }
+    }
+
+    // Stop if we go too far up (e.g., to SourceFile)
+    if (kind === SyntaxKind.SourceFile) {
+      break;
+    }
+    current = current.getParent();
+  }
+
+  return undefined;
+}
+
+/**
  * Orders functions by their dependencies using topological sort.
  * Functions are returned with leaves first (functions that don't depend on other TODO functions).
  * This enables injection to proceed from independent functions to those that depend on them.
@@ -485,21 +550,52 @@ export function orderByDependency(functions: TodoFunction[], project: Project): 
 
   // Optimize: Only analyze files that contain the TODO functions we are interested in
   // instead of scanning the entire project. This significantly reduces AST traversal overhead.
-  const relevantFiles = new Set(functions.map((f) => f.filePath));
-  const functionNames = new Set(functions.map((f) => f.name));
+
+  // Group functions by file path to process each file once
+  const funcsByFile = new Map<string, TodoFunction[]>();
+  for (const func of functions) {
+    const existing = funcsByFile.get(func.filePath) ?? [];
+    existing.push(func);
+    funcsByFile.set(func.filePath, existing);
+  }
+
   const relevantAstNodes: FunctionLike[] = [];
 
-  for (const filePath of relevantFiles) {
+  for (const [filePath, fileFuncs] of funcsByFile) {
     const sourceFile = project.getSourceFile(filePath);
     if (!sourceFile) {
       continue;
     }
 
-    // Collect all functions in the file, but only keep the ones we care about for the call graph
-    const fileFunctions = collectFunctions(sourceFile);
-    for (const func of fileFunctions) {
-      if (functionNames.has(getFunctionName(func))) {
-        relevantAstNodes.push(func);
+    // Optimization: Try to find functions directly by line number first.
+    // This avoids traversing the entire file with collectFunctions(), which is O(N) where N is file size.
+    // Looking up by line is much faster (O(depth)).
+    let foundAllInFile = true;
+    const foundNodes: FunctionLike[] = [];
+
+    for (const func of fileFuncs) {
+      const node = findFunctionAtLine(sourceFile, func.line, func.name);
+      if (node) {
+        foundNodes.push(node);
+      } else {
+        // If we fail to find even one function by line (e.g. slight line mismatch, complex formatting),
+        // we fall back to full scan for this file to ensure correctness.
+        foundAllInFile = false;
+        break;
+      }
+    }
+
+    if (foundAllInFile) {
+      relevantAstNodes.push(...foundNodes);
+    } else {
+      // Fallback: Full scan of the file
+      // Collect all functions in the file, but only keep the ones we care about for the call graph
+      const functionNames = new Set(fileFuncs.map((f) => f.name));
+      const fileFunctions = collectFunctions(sourceFile);
+      for (const func of fileFunctions) {
+        if (functionNames.has(getFunctionName(func))) {
+          relevantAstNodes.push(func);
+        }
       }
     }
   }
