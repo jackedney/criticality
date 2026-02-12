@@ -105,6 +105,18 @@ export interface Decision {
 }
 
 /**
+ * Proof that a suspended decision has been re-validated.
+ */
+export interface ValidationProof {
+  /** Why the decision is being reinstated. */
+  reason: string;
+  /** Who or what validated the reinstatement. */
+  validator: string;
+  /** When the validation occurred (ISO 8601). */
+  timestamp: string;
+}
+
+/**
  * Ledger metadata.
  */
 export interface LedgerMeta {
