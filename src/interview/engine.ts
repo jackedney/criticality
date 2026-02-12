@@ -45,6 +45,13 @@ import {
   isDelegablePhase,
   createFeatureClassificationTranscriptEntries,
 } from './structure.js';
+import { Ledger, fromData } from '../ledger/ledger.js';
+import type { LedgerData } from '../ledger/types.js';
+import { safeReadFile, safeWriteFile, safeRename, safeUnlink } from '../utils/safe-fs.js';
+import { join, dirname } from 'node:path';
+import { randomUUID } from 'node:crypto';
+import TOML from '@iarna/toml';
+import { Logger } from '../utils/logger.js';
 
 /**
  * Error type codes for interview engine errors.
@@ -623,6 +630,8 @@ function validateAnswerResponseShape(
  */
 export class InterviewEngine {
   private readonly projectId: string;
+  private readonly projectRoot: string | undefined;
+  private readonly logger: Logger;
   private state: InterviewState | undefined;
   private currentQuestion: CurrentQuestion | undefined;
   private started = false;
@@ -631,8 +640,9 @@ export class InterviewEngine {
    * Creates a new InterviewEngine instance.
    *
    * @param projectId - The project identifier.
+   * @param options - Optional configuration including projectRoot for ledger integration.
    */
-  constructor(projectId: string) {
+  constructor(projectId: string, options?: { projectRoot?: string }) {
     if (typeof projectId !== 'string' || projectId.trim() === '') {
       throw new InterviewEngineError(
         'Project ID must be a non-empty string',
@@ -650,6 +660,8 @@ export class InterviewEngine {
       );
     }
     this.projectId = projectId.trim();
+    this.projectRoot = options?.projectRoot;
+    this.logger = new Logger({ component: 'InterviewEngine' });
   }
 
   /**
@@ -1009,6 +1021,86 @@ export class InterviewEngine {
   }
 
   /**
+   * Writes conditional approval conditions to the decision ledger.
+   * Best-effort operation - logs warning on failure but doesn't throw.
+   */
+  private async writeConditionalApprovalToLedger(conditions: readonly string[]): Promise<void> {
+    if (this.projectRoot === undefined) {
+      return;
+    }
+
+    if (conditions.length === 0) {
+      return;
+    }
+
+    const ledgerPath = join(this.projectRoot, 'DECISIONS.toml');
+
+    try {
+      let ledger: Ledger;
+
+      try {
+        const content = await safeReadFile(ledgerPath, 'utf-8');
+        const tomlData = TOML.parse(content) as Record<string, unknown>;
+        const rawDecisions = tomlData.decisions as LedgerData['decisions'] | undefined;
+        const ledgerData: LedgerData = {
+          meta: tomlData.meta as LedgerData['meta'],
+          decisions: rawDecisions ?? [],
+        };
+        ledger = fromData(ledgerData);
+      } catch (readError) {
+        if (
+          readError instanceof Error &&
+          'code' in readError &&
+          (readError as NodeJS.ErrnoException).code === 'ENOENT'
+        ) {
+          ledger = new Ledger({ project: this.projectId });
+        } else {
+          throw readError;
+        }
+      }
+
+      for (const condition of conditions) {
+        ledger.append({
+          category: 'phase_structure',
+          source: 'human_resolution',
+          confidence: 'provisional',
+          phase: 'ignition',
+          constraint: condition,
+          rationale: 'Conditional approval from user during Ignition interview',
+        });
+      }
+
+      const updatedData = ledger.toData();
+      const tomlContent = TOML.stringify(updatedData as unknown as TOML.JsonMap);
+      const tempPath = join(dirname(ledgerPath), `.decisions-${randomUUID()}.tmp`);
+
+      try {
+        await safeWriteFile(tempPath, tomlContent, 'utf-8');
+        await safeRename(tempPath, ledgerPath);
+      } catch (writeError) {
+        try {
+          await safeUnlink(tempPath);
+        } catch {
+          // Ignore cleanup errors
+        }
+        throw writeError;
+      }
+
+      this.logger.info('conditional_approval_ledger_written', {
+        conditionsCount: conditions.length,
+        ledgerPath,
+      });
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      this.logger.warn('conditional_approval_ledger_write_failed', {
+        error: errorMessage,
+        conditionsCount: conditions.length,
+        ledgerPath,
+      });
+    }
+  }
+
+  /**
    * Processes an approval response.
    */
   private async processApprovalResponse(response: ApprovalAnswerResponse): Promise<AnswerResult> {
@@ -1084,8 +1176,12 @@ export class InterviewEngine {
     }
 
     if (response.decision === 'ApproveWithConditions') {
+      // Write conditions to ledger (best-effort)
+      const conditions = response.conditions ?? [];
+      await this.writeConditionalApprovalToLedger(conditions);
+
       // Determine phases to revisit
-      const phasesToRevisit = getPhasesToRevisit(response.conditions ?? []);
+      const phasesToRevisit = getPhasesToRevisit(conditions);
 
       if (phasesToRevisit.length === 0) {
         // No phases to revisit, consider it approved

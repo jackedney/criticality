@@ -19,7 +19,23 @@ import {
   type ProtocolStateSnapshot,
   type PersistedStateData,
 } from './persistence.js';
-import { createActiveState, createBlockingSubstate, createFailedSubstate } from './types.js';
+import {
+  createActiveState,
+  createBlockedState,
+  createFailedState,
+  createCompleteState,
+  isBlockedState,
+  isFailedState,
+  getPhase,
+  createIgnitionPhaseState,
+  createIgnitionInterviewing,
+  createLatticePhaseState,
+  createLatticeGeneratingStructure,
+  createCompositionAuditPhaseState,
+  createCompositionAuditAuditing,
+  createInjectionPhaseState,
+  createInjectionSelectingFunction,
+} from './types.js';
 import type { ArtifactType } from './transitions.js';
 import type { BlockingRecord } from './blocking.js';
 
@@ -42,7 +58,7 @@ describe('Protocol Checkpoint/Resume', () => {
   const createTestSnapshot = (
     overrides: Partial<ProtocolStateSnapshot> = {}
   ): ProtocolStateSnapshot => ({
-    state: createActiveState('Ignition'),
+    state: createActiveState(createIgnitionPhaseState(createIgnitionInterviewing('Discovery', 0))),
     artifacts: [],
     blockingQueries: [],
     ...overrides,
@@ -110,7 +126,7 @@ describe('Protocol Checkpoint/Resume', () => {
 
     it('should return valid for state at Lattice with required artifacts', () => {
       const snapshot = createTestSnapshot({
-        state: createActiveState('Lattice'),
+        state: createActiveState(createLatticePhaseState(createLatticeGeneratingStructure())),
         artifacts: ['spec'],
       });
       const persistedAt = new Date();
@@ -122,7 +138,17 @@ describe('Protocol Checkpoint/Resume', () => {
 
     it('should return error for invalid phase', () => {
       const snapshot = {
-        state: { phase: 'InvalidPhase' as const, substate: { kind: 'Active' as const } },
+        state: {
+          kind: 'Active' as const,
+          phase: {
+            phase: 'InvalidPhase' as const,
+            substate: {
+              step: 'interviewing' as const,
+              interviewPhase: 'Discovery' as const,
+              questionIndex: 0,
+            },
+          },
+        },
         artifacts: [],
         blockingQueries: [],
       };
@@ -135,29 +161,28 @@ describe('Protocol Checkpoint/Resume', () => {
       expect(result.errors.some((e) => e.code === 'INVALID_PHASE')).toBe(true);
     });
 
-    it('should return error for invalid substate kind', () => {
+    it('should return error for invalid state kind', () => {
       const snapshot = {
-        state: {
-          phase: 'Ignition' as const,
-          substate: { kind: 'Invalid' as const },
-        },
+        state: { kind: 'Invalid' as const },
         artifacts: [],
         blockingQueries: [],
       };
       const persistedAt = new Date();
 
-      // @ts-expect-error - Testing invalid substate kind
+      // @ts-expect-error - Testing invalid state kind
       const result = validateStateIntegrity(snapshot, persistedAt);
 
       expect(result.valid).toBe(false);
-      expect(result.errors.some((e) => e.code === 'INVALID_SUBSTATE')).toBe(true);
+      expect(result.errors.some((e) => e.code === 'INVALID_STATE')).toBe(true);
     });
 
-    it('should return error for Blocking substate missing query', () => {
+    it('should return error for Blocked state missing query', () => {
       const snapshot = {
         state: {
+          kind: 'Blocked' as const,
+          reason: 'user_requested' as const,
           phase: 'Lattice' as const,
-          substate: { kind: 'Blocking' as const, blockedAt: new Date().toISOString() },
+          blockedAt: new Date().toISOString(),
         },
         artifacts: ['spec'],
         blockingQueries: [],
@@ -171,15 +196,13 @@ describe('Protocol Checkpoint/Resume', () => {
       expect(result.errors.some((e) => e.message.includes('missing query'))).toBe(true);
     });
 
-    it('should return error for Failed substate missing error', () => {
+    it('should return error for Failed state missing error', () => {
       const snapshot = {
         state: {
+          kind: 'Failed' as const,
           phase: 'Injection' as const,
-          substate: {
-            kind: 'Failed' as const,
-            failedAt: new Date().toISOString(),
-            recoverable: true,
-          },
+          failedAt: new Date().toISOString(),
+          recoverable: true,
         },
         artifacts: ['spec', 'latticeCode', 'witnesses', 'contracts', 'validatedStructure'],
         blockingQueries: [],
@@ -195,7 +218,7 @@ describe('Protocol Checkpoint/Resume', () => {
 
     it('should return error for missing required artifacts at Lattice phase', () => {
       const snapshot = createTestSnapshot({
-        state: createActiveState('Lattice'),
+        state: createActiveState(createLatticePhaseState(createLatticeGeneratingStructure())),
         artifacts: [], // Missing 'spec'
       });
       const persistedAt = new Date();
@@ -209,7 +232,9 @@ describe('Protocol Checkpoint/Resume', () => {
 
     it('should return error for missing required artifacts at CompositionAudit phase', () => {
       const snapshot = createTestSnapshot({
-        state: createActiveState('CompositionAudit'),
+        state: createActiveState(
+          createCompositionAuditPhaseState(createCompositionAuditAuditing(0))
+        ),
         artifacts: ['spec'], // Missing latticeCode, witnesses, contracts
       });
       const persistedAt = new Date();
@@ -222,7 +247,9 @@ describe('Protocol Checkpoint/Resume', () => {
 
     it('should warn for unknown artifact types', () => {
       const snapshot = {
-        state: createActiveState('Ignition'),
+        state: createActiveState(
+          createIgnitionPhaseState(createIgnitionInterviewing('Discovery', 0))
+        ),
         artifacts: ['unknownArtifact' as ArtifactType],
         blockingQueries: [],
       };
@@ -254,18 +281,14 @@ describe('Protocol Checkpoint/Resume', () => {
     });
 
     it('should warn for blocking state with expired timeout', () => {
-      const blockingSubstate = createBlockingSubstate({
-        query: 'Test query?',
-        timeoutMs: 1000, // 1 second timeout
-      });
-      // Manually set blockedAt to past
       const snapshot = {
         state: {
+          kind: 'Blocked' as const,
+          reason: 'user_requested' as const,
           phase: 'Lattice' as const,
-          substate: {
-            ...blockingSubstate,
-            blockedAt: new Date(Date.now() - 60000).toISOString(), // 1 minute ago
-          },
+          query: 'Test query?',
+          blockedAt: new Date(Date.now() - 60000).toISOString(), // 1 minute ago
+          timeoutMs: 1000, // 1 second timeout
         },
         artifacts: ['spec' as ArtifactType],
         blockingQueries: [],
@@ -279,7 +302,16 @@ describe('Protocol Checkpoint/Resume', () => {
 
     it('should validate complete protocol state at Complete phase', () => {
       const snapshot = createTestSnapshot({
-        state: createActiveState('Complete'),
+        state: createCompleteState([
+          'spec',
+          'latticeCode',
+          'witnesses',
+          'contracts',
+          'validatedStructure',
+          'implementedCode',
+          'verifiedCode',
+          'finalArtifact',
+        ]),
         artifacts: [
           'spec',
           'latticeCode',
@@ -303,10 +335,15 @@ describe('Protocol Checkpoint/Resume', () => {
   describe('validatePersistedStructure', () => {
     it('should return valid for well-formed persisted data', () => {
       const data = {
-        version: '1.0.0',
+        version: '2.0.0',
         persistedAt: new Date().toISOString(),
-        phase: 'Ignition',
-        substate: { kind: 'Active' },
+        state: {
+          kind: 'Active',
+          phase: {
+            phase: 'Ignition',
+            substate: { step: 'interviewing', interviewPhase: 'Discovery', questionIndex: 0 },
+          },
+        },
         artifacts: [],
         blockingQueries: [],
       };
@@ -326,8 +363,13 @@ describe('Protocol Checkpoint/Resume', () => {
     it('should return error for missing version', () => {
       const data = {
         persistedAt: new Date().toISOString(),
-        phase: 'Ignition',
-        substate: { kind: 'Active' },
+        state: {
+          kind: 'Active',
+          phase: {
+            phase: 'Ignition',
+            substate: { step: 'interviewing', interviewPhase: 'Discovery', questionIndex: 0 },
+          },
+        },
         artifacts: [],
         blockingQueries: [],
       };
@@ -342,8 +384,13 @@ describe('Protocol Checkpoint/Resume', () => {
       const data = {
         version: 'invalid',
         persistedAt: new Date().toISOString(),
-        phase: 'Ignition',
-        substate: { kind: 'Active' },
+        state: {
+          kind: 'Active',
+          phase: {
+            phase: 'Ignition',
+            substate: { step: 'interviewing', interviewPhase: 'Discovery', questionIndex: 0 },
+          },
+        },
         artifacts: [],
         blockingQueries: [],
       };
@@ -358,8 +405,13 @@ describe('Protocol Checkpoint/Resume', () => {
       const data = {
         version: '99.0.0', // Future version
         persistedAt: new Date().toISOString(),
-        phase: 'Ignition',
-        substate: { kind: 'Active' },
+        state: {
+          kind: 'Active',
+          phase: {
+            phase: 'Ignition',
+            substate: { step: 'interviewing', interviewPhase: 'Discovery', questionIndex: 0 },
+          },
+        },
         artifacts: [],
         blockingQueries: [],
       };
@@ -371,19 +423,19 @@ describe('Protocol Checkpoint/Resume', () => {
     });
 
     it('should warn for older minor version', () => {
-      // Only test if current version is > 1.0.0
+      // Only test if current version is > x.0.0
       const currentParsed = /^(\d+)\.(\d+)\.(\d+)$/.exec(PERSISTED_STATE_VERSION);
       if (!currentParsed) {
         return;
       }
 
-      const major = parseInt(currentParsed[1] ?? '1', 10);
+      const major = parseInt(currentParsed[1] ?? '2', 10);
       const minor = parseInt(currentParsed[2] ?? '0', 10);
       const patch = parseInt(currentParsed[3] ?? '0', 10);
 
       if (minor === 0 && patch === 0) {
         return;
-      } // Can't test with 1.0.0
+      } // Can't test with x.0.0
 
       const olderVersion =
         patch > 0
@@ -393,8 +445,13 @@ describe('Protocol Checkpoint/Resume', () => {
       const data = {
         version: olderVersion,
         persistedAt: new Date().toISOString(),
-        phase: 'Ignition',
-        substate: { kind: 'Active' },
+        state: {
+          kind: 'Active',
+          phase: {
+            phase: 'Ignition',
+            substate: { step: 'interviewing', interviewPhase: 'Discovery', questionIndex: 0 },
+          },
+        },
         artifacts: [],
         blockingQueries: [],
       };
@@ -407,7 +464,7 @@ describe('Protocol Checkpoint/Resume', () => {
 
     it('should return error for missing required fields', () => {
       const data = {
-        version: '1.0.0',
+        version: '2.0.0',
         // Missing other fields
       };
 
@@ -421,7 +478,7 @@ describe('Protocol Checkpoint/Resume', () => {
   describe('resumeFromCheckpoint', () => {
     it('should successfully resume from valid state file', async () => {
       const snapshot = createTestSnapshot({
-        state: createActiveState('Lattice'),
+        state: createActiveState(createLatticePhaseState(createLatticeGeneratingStructure())),
         artifacts: ['spec'],
       });
       const filePath = join(testDir, 'state.json');
@@ -431,7 +488,7 @@ describe('Protocol Checkpoint/Resume', () => {
 
       expect(result.success).toBe(true);
       if (result.success) {
-        expect(result.snapshot.state.phase).toBe('Lattice');
+        expect(getPhase(result.snapshot.state)).toBe('Lattice');
         expect(result.snapshot.artifacts).toEqual(['spec']);
         expect(result.validation.valid).toBe(true);
       }
@@ -479,10 +536,15 @@ describe('Protocol Checkpoint/Resume', () => {
     it('should return INVALID_STATE for state with missing artifacts', async () => {
       // Manually write a state file with missing artifacts
       const data: PersistedStateData = {
-        version: '1.0.0',
+        version: '2.0.0',
         persistedAt: new Date().toISOString(),
-        phase: 'Lattice',
-        substate: { kind: 'Active' },
+        state: {
+          kind: 'Active',
+          phase: {
+            phase: 'Lattice',
+            substate: { step: 'generatingStructure' },
+          },
+        },
         artifacts: [], // Missing 'spec'
         blockingQueries: [],
       };
@@ -499,13 +561,15 @@ describe('Protocol Checkpoint/Resume', () => {
     });
 
     it('should resume from blocking state', async () => {
-      const blockingSubstate = createBlockingSubstate({
+      const blockedState = createBlockedState({
+        reason: 'user_requested',
+        phase: 'Lattice',
         query: 'Approve architecture?',
         options: ['Yes', 'No'],
         timeoutMs: 300000,
       });
       const snapshot = createTestSnapshot({
-        state: { phase: 'Lattice', substate: blockingSubstate },
+        state: blockedState,
         artifacts: ['spec'],
       });
       const filePath = join(testDir, 'state.json');
@@ -515,18 +579,19 @@ describe('Protocol Checkpoint/Resume', () => {
 
       expect(result.success).toBe(true);
       if (result.success) {
-        expect(result.snapshot.state.substate.kind).toBe('Blocking');
+        expect(result.snapshot.state.kind).toBe('Blocked');
       }
     });
 
     it('should resume from failed state', async () => {
-      const failedSubstate = createFailedSubstate({
+      const failedState = createFailedState({
+        phase: 'Injection',
         error: 'Type checking failed',
         code: 'TYPE_ERROR',
         recoverable: true,
       });
       const snapshot = createTestSnapshot({
-        state: { phase: 'Injection', substate: failedSubstate },
+        state: failedState,
         artifacts: ['spec', 'latticeCode', 'witnesses', 'contracts', 'validatedStructure'],
       });
       const filePath = join(testDir, 'state.json');
@@ -536,16 +601,18 @@ describe('Protocol Checkpoint/Resume', () => {
 
       expect(result.success).toBe(true);
       if (result.success) {
-        expect(result.snapshot.state.substate.kind).toBe('Failed');
-        if (result.snapshot.state.substate.kind === 'Failed') {
-          expect(result.snapshot.state.substate.error).toBe('Type checking failed');
+        expect(result.snapshot.state.kind).toBe('Failed');
+        if (isFailedState(result.snapshot.state)) {
+          expect(result.snapshot.state.error).toBe('Type checking failed');
         }
       }
     });
 
     it('should include validation warnings in result', async () => {
       const snapshot = {
-        state: createActiveState('Ignition'),
+        state: createActiveState(
+          createIgnitionPhaseState(createIgnitionInterviewing('Discovery', 0))
+        ),
         artifacts: ['unknownArtifact' as ArtifactType],
         blockingQueries: [],
       };
@@ -570,7 +637,7 @@ describe('Protocol Checkpoint/Resume', () => {
         resolved: false,
       };
       const snapshot = createTestSnapshot({
-        state: createActiveState('Lattice'),
+        state: createActiveState(createLatticePhaseState(createLatticeGeneratingStructure())),
         artifacts: ['spec'],
         blockingQueries: [blockingRecord],
       });
@@ -595,14 +662,16 @@ describe('Protocol Checkpoint/Resume', () => {
 
       expect(result.resumed).toBe(false);
       expect(result.recoveryPerformed).toBe(false);
-      expect(result.snapshot.state.phase).toBe('Ignition');
+      expect(getPhase(result.snapshot.state)).toBe('Ignition');
       expect(result.snapshot.artifacts).toEqual([]);
       expect(result.validation).toBeNull();
     });
 
     it('should resume from valid state file', async () => {
       const snapshot = createTestSnapshot({
-        state: createActiveState('CompositionAudit'),
+        state: createActiveState(
+          createCompositionAuditPhaseState(createCompositionAuditAuditing(0))
+        ),
         artifacts: ['spec', 'latticeCode', 'witnesses', 'contracts'],
       });
       const filePath = join(testDir, 'state.json');
@@ -612,7 +681,7 @@ describe('Protocol Checkpoint/Resume', () => {
 
       expect(result.resumed).toBe(true);
       expect(result.recoveryPerformed).toBe(false);
-      expect(result.snapshot.state.phase).toBe('CompositionAudit');
+      expect(getPhase(result.snapshot.state)).toBe('CompositionAudit');
       expect(result.validation).not.toBeNull();
     });
 
@@ -624,16 +693,21 @@ describe('Protocol Checkpoint/Resume', () => {
 
       expect(result.resumed).toBe(false);
       expect(result.recoveryPerformed).toBe(true);
-      expect(result.snapshot.state.phase).toBe('Ignition');
+      expect(getPhase(result.snapshot.state)).toBe('Ignition');
     });
 
     it('should recover and return fresh state for invalid state', async () => {
       // State at Lattice but missing required artifacts
       const data: PersistedStateData = {
-        version: '1.0.0',
+        version: '2.0.0',
         persistedAt: new Date().toISOString(),
-        phase: 'Lattice',
-        substate: { kind: 'Active' },
+        state: {
+          kind: 'Active',
+          phase: {
+            phase: 'Lattice',
+            substate: { step: 'generatingStructure' },
+          },
+        },
         artifacts: [], // Invalid - missing 'spec'
         blockingQueries: [],
       };
@@ -644,12 +718,12 @@ describe('Protocol Checkpoint/Resume', () => {
 
       expect(result.resumed).toBe(false);
       expect(result.recoveryPerformed).toBe(true);
-      expect(result.snapshot.state.phase).toBe('Ignition');
+      expect(getPhase(result.snapshot.state)).toBe('Ignition');
     });
 
     it('should include validation result when resuming', async () => {
       const snapshot = createTestSnapshot({
-        state: createActiveState('Lattice'),
+        state: createActiveState(createLatticePhaseState(createLatticeGeneratingStructure())),
         artifacts: ['spec'],
       });
       const filePath = join(testDir, 'state.json');
@@ -694,7 +768,7 @@ describe('Protocol Checkpoint/Resume', () => {
 
     it('should return true for truncated file', async () => {
       const filePath = join(testDir, 'truncated.json');
-      await safeWriteFile(filePath, '{"version": "1.0.0", "persistedAt":', 'utf-8');
+      await safeWriteFile(filePath, '{"version": "2.0.0", "persistedAt":', 'utf-8');
 
       const corrupted = await isStateCorrupted(filePath);
 
@@ -724,7 +798,7 @@ describe('Protocol Checkpoint/Resume', () => {
     it('should resume from exact position after simulated crash', async () => {
       // 1. Save state at a specific position
       const snapshot = createTestSnapshot({
-        state: createActiveState('Injection'),
+        state: createActiveState(createInjectionPhaseState(createInjectionSelectingFunction())),
         artifacts: ['spec', 'latticeCode', 'witnesses', 'contracts', 'validatedStructure'],
         blockingQueries: [],
       });
@@ -742,7 +816,7 @@ describe('Protocol Checkpoint/Resume', () => {
 
       if (resumeResult.success) {
         // Verify we resume from exact position
-        expect(resumeResult.snapshot.state.phase).toBe('Injection');
+        expect(getPhase(resumeResult.snapshot.state)).toBe('Injection');
         expect(resumeResult.snapshot.artifacts).toEqual([
           'spec',
           'latticeCode',
@@ -755,7 +829,9 @@ describe('Protocol Checkpoint/Resume', () => {
 
     it('should resume blocking state after crash', async () => {
       // 1. Save state while blocked for human intervention
-      const blockingSubstate = createBlockingSubstate({
+      const blockedState = createBlockedState({
+        reason: 'user_requested',
+        phase: 'Injection',
         query: 'Approve implementation?',
         options: ['Yes', 'No', 'Request changes'],
         timeoutMs: 86400000, // 24 hours
@@ -765,12 +841,12 @@ describe('Protocol Checkpoint/Resume', () => {
         phase: 'Injection',
         query: 'Approve implementation?',
         options: ['Yes', 'No', 'Request changes'],
-        blockedAt: blockingSubstate.blockedAt,
+        blockedAt: blockedState.blockedAt,
         timeoutMs: 86400000,
         resolved: false,
       };
       const snapshot = createTestSnapshot({
-        state: { phase: 'Injection', substate: blockingSubstate },
+        state: blockedState,
         artifacts: ['spec', 'latticeCode', 'witnesses', 'contracts', 'validatedStructure'],
         blockingQueries: [blockingRecord],
       });
@@ -782,11 +858,11 @@ describe('Protocol Checkpoint/Resume', () => {
 
       // 3. Verify blocking state is restored
       expect(startupResult.resumed).toBe(true);
-      expect(startupResult.snapshot.state.substate.kind).toBe('Blocking');
+      expect(startupResult.snapshot.state.kind).toBe('Blocked');
       expect(startupResult.snapshot.blockingQueries).toHaveLength(1);
 
-      if (startupResult.snapshot.state.substate.kind === 'Blocking') {
-        expect(startupResult.snapshot.state.substate.query).toBe('Approve implementation?');
+      if (isBlockedState(startupResult.snapshot.state)) {
+        expect(startupResult.snapshot.state.query).toBe('Approve implementation?');
       }
     });
   });
@@ -800,30 +876,31 @@ describe('Protocol Checkpoint/Resume', () => {
 
       expect(result.resumed).toBe(false);
       expect(result.recoveryPerformed).toBe(true);
-      expect(result.snapshot.state.phase).toBe('Ignition');
+      expect(getPhase(result.snapshot.state)).toBe('Ignition');
     });
 
     it('should trigger clean start for truncated state file', async () => {
       const filePath = join(testDir, 'truncated.json');
-      await safeWriteFile(filePath, '{"version": "1.0.0", "persisted', 'utf-8');
+      await safeWriteFile(filePath, '{"version": "2.0.0", "persisted', 'utf-8');
 
       const result = await getStartupState(filePath);
 
       expect(result.resumed).toBe(false);
       expect(result.recoveryPerformed).toBe(true);
-      expect(result.snapshot.state.phase).toBe('Ignition');
+      expect(getPhase(result.snapshot.state)).toBe('Ignition');
     });
 
-    it('should trigger clean start for state with invalid phase', async () => {
+    it('should trigger clean start for state with invalid state kind', async () => {
       const data = {
-        version: '1.0.0',
+        version: '2.0.0',
         persistedAt: new Date().toISOString(),
-        phase: 'NonExistentPhase',
-        substate: { kind: 'Active' },
+        state: {
+          kind: 'NonExistentKind',
+        },
         artifacts: [],
         blockingQueries: [],
       };
-      const filePath = join(testDir, 'invalid-phase.json');
+      const filePath = join(testDir, 'invalid-state.json');
       await safeWriteFile(filePath, JSON.stringify(data), 'utf-8');
 
       const result = await getStartupState(filePath);
@@ -834,8 +911,8 @@ describe('Protocol Checkpoint/Resume', () => {
 
     it('should trigger clean start for state with missing required fields', async () => {
       const data = {
-        version: '1.0.0',
-        // Missing persistedAt, phase, substate, etc.
+        version: '2.0.0',
+        // Missing persistedAt, state, etc.
       };
       const filePath = join(testDir, 'incomplete.json');
       await safeWriteFile(filePath, JSON.stringify(data), 'utf-8');

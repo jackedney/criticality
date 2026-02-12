@@ -5,7 +5,7 @@
  */
 
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
-import { rm } from 'node:fs/promises';
+import { rm, mkdir } from 'node:fs/promises';
 import { join } from 'node:path';
 import {
   InterviewEngine,
@@ -15,6 +15,7 @@ import {
   type ApprovalAnswerResponse,
 } from './engine.js';
 import { getCriticalityBaseDir } from './persistence.js';
+import { safeReadFile, safeWriteFile, safeExists } from '../utils/safe-fs.js';
 
 // Test helper to create a unique project ID for isolation
 function createTestProjectId(): string {
@@ -892,6 +893,217 @@ describe('InterviewEngine', () => {
       const error = new InterviewEngineError('Test error', 'PERSISTENCE_ERROR', { cause });
 
       expect(error.cause).toBe(cause);
+    });
+  });
+
+  describe('ledger integration for conditional approval', () => {
+    let tempDir: string;
+    let ledgerPath: string;
+
+    async function advanceToApproval(engine: InterviewEngine): Promise<void> {
+      await engine.answer({ phase: 'Discovery', type: 'open', text: 'A task app' });
+      await engine.answer({ phase: 'Architecture', type: 'open', text: 'Monolith' });
+      await engine.answer({
+        phase: 'Constraints',
+        type: 'delegation',
+        decision: 'Delegate',
+      });
+      await engine.answer({
+        phase: 'DesignPreferences',
+        type: 'delegation',
+        decision: 'Delegate',
+      });
+      await engine.answer({ phase: 'Synthesis', type: 'open', text: 'No additional notes' });
+    }
+
+    beforeEach(async () => {
+      tempDir = join(process.cwd(), `.test-ledger-${String(Date.now())}`);
+      // eslint-disable-next-line security/detect-non-literal-fs-filename -- test temp directory
+      await mkdir(tempDir, { recursive: true });
+      ledgerPath = join(tempDir, 'DECISIONS.toml');
+    });
+
+    afterEach(async () => {
+      try {
+        await rm(tempDir, { recursive: true, force: true });
+      } catch {
+        // Ignore cleanup errors
+      }
+    });
+
+    it('creates ledger entries for each condition when projectRoot provided', async () => {
+      const engine = new InterviewEngine(projectId, { projectRoot: tempDir });
+      await engine.start();
+      await advanceToApproval(engine);
+
+      const response: ApprovalAnswerResponse = {
+        phase: 'Approval',
+        type: 'approval',
+        decision: 'ApproveWithConditions',
+        conditions: ['Must support pagination', 'Rate limiting required'],
+        confirmations: {
+          system_boundaries: true,
+          data_models: true,
+          key_constraints: true,
+          testable_claims: true,
+        },
+      };
+
+      await engine.answer(response);
+
+      const content = await safeReadFile(ledgerPath, 'utf-8');
+      expect(content).toContain('Must support pagination');
+      expect(content).toContain('Rate limiting required');
+      expect(content).toContain('phase_structure');
+      expect(content).toContain('human_resolution');
+      expect(content).toContain('provisional');
+      expect(content).toContain('ignition');
+      expect(content).toContain('Conditional approval from user during Ignition interview');
+    });
+
+    it('does not create ledger entries when no projectRoot provided', async () => {
+      const engine = new InterviewEngine(projectId);
+      await engine.start();
+      await advanceToApproval(engine);
+
+      const response: ApprovalAnswerResponse = {
+        phase: 'Approval',
+        type: 'approval',
+        decision: 'ApproveWithConditions',
+        conditions: ['Must support pagination'],
+        confirmations: {
+          system_boundaries: true,
+          data_models: true,
+          key_constraints: true,
+          testable_claims: true,
+        },
+      };
+
+      await engine.answer(response);
+
+      const exists = await safeExists(ledgerPath);
+      expect(exists).toBe(false);
+    });
+
+    it('handles empty conditions array by failing validation (existing behavior)', async () => {
+      const engine = new InterviewEngine(projectId, { projectRoot: tempDir });
+      await engine.start();
+      await advanceToApproval(engine);
+
+      const response: ApprovalAnswerResponse = {
+        phase: 'Approval',
+        type: 'approval',
+        decision: 'ApproveWithConditions',
+        conditions: [],
+        confirmations: {
+          system_boundaries: true,
+          data_models: true,
+          key_constraints: true,
+          testable_claims: true,
+        },
+      };
+
+      await expect(engine.answer(response)).rejects.toThrow('requires at least one condition');
+
+      const exists = await safeExists(ledgerPath);
+      expect(exists).toBe(false);
+    });
+
+    it('preserves existing approval flow unchanged', async () => {
+      const engine = new InterviewEngine(projectId, { projectRoot: tempDir });
+      await engine.start();
+      await advanceToApproval(engine);
+
+      const response: ApprovalAnswerResponse = {
+        phase: 'Approval',
+        type: 'approval',
+        decision: 'ApproveWithConditions',
+        conditions: ['Must support pagination', 'Rate limiting required'],
+        confirmations: {
+          system_boundaries: true,
+          data_models: true,
+          key_constraints: true,
+          testable_claims: true,
+        },
+      };
+
+      const result = await engine.answer(response);
+
+      expect(result.accepted).toBe(true);
+      expect(result.phasesToRevisit).toBeDefined();
+      expect(result.phasesToRevisit).toContain('Constraints');
+    });
+
+    it('handles ledger write errors gracefully without breaking approval', async () => {
+      const readOnlyDir = join(tempDir, 'readonly');
+      // eslint-disable-next-line security/detect-non-literal-fs-filename -- test temp directory
+      await mkdir(readOnlyDir, { recursive: true });
+
+      const engine = new InterviewEngine(projectId, {
+        projectRoot: '/nonexistent/path/that/does/not/exist',
+      });
+      await engine.start();
+      await advanceToApproval(engine);
+
+      const response: ApprovalAnswerResponse = {
+        phase: 'Approval',
+        type: 'approval',
+        decision: 'ApproveWithConditions',
+        conditions: ['Must support pagination'],
+        confirmations: {
+          system_boundaries: true,
+          data_models: true,
+          key_constraints: true,
+          testable_claims: true,
+        },
+      };
+
+      const result = await engine.answer(response);
+
+      expect(result.accepted).toBe(true);
+      expect(result.phasesToRevisit).toBeDefined();
+    });
+
+    it('appends to existing ledger file', async () => {
+      const existingLedger = `[meta]
+version = "1.0.0"
+created = "2024-01-01T00:00:00.000Z"
+project = "test-project"
+
+[[decisions]]
+id = "phase_structure_001"
+timestamp = "2024-01-01T00:00:00.000Z"
+category = "phase_structure"
+constraint = "Existing decision"
+source = "design_choice"
+confidence = "canonical"
+status = "active"
+phase = "design"
+`;
+      await safeWriteFile(ledgerPath, existingLedger, 'utf-8');
+
+      const engine = new InterviewEngine(projectId, { projectRoot: tempDir });
+      await engine.start();
+      await advanceToApproval(engine);
+
+      const response: ApprovalAnswerResponse = {
+        phase: 'Approval',
+        type: 'approval',
+        decision: 'ApproveWithConditions',
+        conditions: ['New condition'],
+        confirmations: {
+          system_boundaries: true,
+          data_models: true,
+          key_constraints: true,
+          testable_claims: true,
+        },
+      };
+
+      await engine.answer(response);
+
+      const content = await safeReadFile(ledgerPath, 'utf-8');
+      expect(content).toContain('Existing decision');
+      expect(content).toContain('New condition');
     });
   });
 });

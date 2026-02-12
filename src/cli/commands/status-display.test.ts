@@ -8,64 +8,86 @@
 import { describe, it, expect } from 'vitest';
 import {
   createActiveState,
-  createBlockingSubstate,
-  isBlockingSubstate,
+  createBlockedState,
+  createCompleteState,
+  createInjectionImplementing,
+  createLatticeCompilingCheck,
+  createLatticeGeneratingStructure,
+  createMassDefectApplyingTransform,
+  createIgnitionInterviewing,
+  getPhase,
+  getStep,
+  isActiveState,
+  isBlockedState,
+  isCompleteState,
+  formatStepName,
+  formatBlockReasonLabel,
 } from '../../protocol/types.js';
 import type { ProtocolStateSnapshot } from '../../protocol/persistence.js';
 import type { BlockingRecord } from '../../protocol/blocking.js';
 
 describe('Blocking Reason Display (US-003)', () => {
   it('should format blocking reason with type, description, and resolutions', () => {
-    const blockingSubstate = createBlockingSubstate({
+    const blockedState = createBlockedState({
+      reason: 'user_requested',
+      phase: 'Lattice',
       query: 'Two requirements contradict each other.',
       options: ['Remove first requirement', 'Remove second requirement', 'Merge requirements'],
     });
 
-    expect(isBlockingSubstate(blockingSubstate)).toBe(true);
-    if (isBlockingSubstate(blockingSubstate)) {
-      expect(blockingSubstate.query).toBe('Two requirements contradict each other.');
-      expect(blockingSubstate.options).toHaveLength(3);
+    expect(isBlockedState(blockedState)).toBe(true);
+    if (isBlockedState(blockedState)) {
+      expect(blockedState.query).toBe('Two requirements contradict each other.');
+      expect(blockedState.options).toHaveLength(3);
     }
   });
 
   it('should handle blocking state with no options', () => {
-    const blockingSubstate = createBlockingSubstate({
+    const blockedState = createBlockedState({
+      reason: 'user_requested',
+      phase: 'Lattice',
       query: 'Awaiting user input for architecture decision.',
     });
 
-    expect(isBlockingSubstate(blockingSubstate)).toBe(true);
-    if (isBlockingSubstate(blockingSubstate)) {
-      expect(blockingSubstate.query).toBe('Awaiting user input for architecture decision.');
-      expect(blockingSubstate.options).toBeUndefined();
+    expect(isBlockedState(blockedState)).toBe(true);
+    if (isBlockedState(blockedState)) {
+      expect(blockedState.query).toBe('Awaiting user input for architecture decision.');
+      expect(blockedState.options).toBeUndefined();
     }
   });
 
   it('should distinguish between blocked and active states', () => {
-    const activeState = createActiveState('Lattice');
-    const blockingState = createBlockingSubstate({ query: 'Block?' });
+    const activeState = createActiveState({
+      phase: 'Lattice',
+      substate: createLatticeCompilingCheck(0),
+    });
+    const blockedState = createBlockedState({
+      reason: 'user_requested',
+      phase: 'Lattice',
+      query: 'Block?',
+    });
 
-    expect(isBlockingSubstate(activeState.substate)).toBe(false);
-    expect(isBlockingSubstate(blockingState)).toBe(true);
+    expect(isBlockedState(activeState)).toBe(false);
+    expect(isBlockedState(blockedState)).toBe(true);
   });
 
-  it('should create snapshot with blocking substate', () => {
+  it('should create snapshot with blocked state', () => {
     const snapshot: ProtocolStateSnapshot = {
-      state: {
+      state: createBlockedState({
+        reason: 'user_requested',
         phase: 'Lattice',
-        substate: createBlockingSubstate({
-          query: 'Approve architecture?',
-          options: ['Yes', 'No', 'Revise'],
-        }),
-      },
+        query: 'Approve architecture?',
+        options: ['Yes', 'No', 'Revise'],
+      }),
       artifacts: ['spec'],
       blockingQueries: [],
     };
 
-    expect(snapshot.state.phase).toBe('Lattice');
-    expect(isBlockingSubstate(snapshot.state.substate)).toBe(true);
-    if (isBlockingSubstate(snapshot.state.substate)) {
-      expect(snapshot.state.substate.query).toBe('Approve architecture?');
-      expect(snapshot.state.substate.options).toEqual(['Yes', 'No', 'Revise']);
+    expect(getPhase(snapshot.state)).toBe('Lattice');
+    expect(isBlockedState(snapshot.state)).toBe(true);
+    if (isBlockedState(snapshot.state)) {
+      expect(snapshot.state.query).toBe('Approve architecture?');
+      expect(snapshot.state.options).toEqual(['Yes', 'No', 'Revise']);
     }
   });
 });
@@ -83,13 +105,12 @@ describe('Pending Queries Display (US-004)', () => {
     };
 
     const snapshot: ProtocolStateSnapshot = {
-      state: {
+      state: createBlockedState({
+        reason: 'user_requested',
         phase: 'Lattice',
-        substate: createBlockingSubstate({
-          query: 'Two requirements contradict each other.',
-          options: ['Yes', 'No'],
-        }),
-      },
+        query: 'Two requirements contradict each other.',
+        options: ['Yes', 'No'],
+      }),
       artifacts: ['spec'],
       blockingQueries: [blockingRecord],
     };
@@ -132,7 +153,10 @@ describe('Pending Queries Display (US-004)', () => {
     };
 
     const snapshot: ProtocolStateSnapshot = {
-      state: createActiveState('Injection'),
+      state: createActiveState({
+        phase: 'Injection',
+        substate: createInjectionImplementing('', 0),
+      }),
       artifacts: ['spec'],
       blockingQueries: [resolvedRecord],
     };
@@ -170,7 +194,10 @@ describe('Pending Queries Display (US-004)', () => {
     };
 
     const snapshot: ProtocolStateSnapshot = {
-      state: createActiveState('Injection'),
+      state: createActiveState({
+        phase: 'Injection',
+        substate: createInjectionImplementing('', 0),
+      }),
       artifacts: ['spec'],
       blockingQueries: [query1, query2, query3],
     };
@@ -215,42 +242,120 @@ describe('Pending Queries Display (US-004)', () => {
   });
 });
 
+describe('3-Tier Display Format (US-004)', () => {
+  it('should format step names as Title Case for active states', () => {
+    expect(formatStepName('interviewing')).toBe('Interviewing');
+    expect(formatStepName('generatingStructure')).toBe('Generating Structure');
+    expect(formatStepName('compilingCheck')).toBe('Compiling Check');
+    expect(formatStepName('applyingTransform')).toBe('Applying Transform');
+    expect(formatStepName('verifyingSemantics')).toBe('Verifying Semantics');
+  });
+
+  it('should format BlockReason labels for blocked states', () => {
+    expect(formatBlockReasonLabel('circuit_breaker')).toBe('Circuit Breaker');
+    expect(formatBlockReasonLabel('user_requested')).toBe('User Requested');
+    expect(formatBlockReasonLabel('canonical_conflict')).toBe('Canonical Conflict');
+    expect(formatBlockReasonLabel('unresolved_contradiction')).toBe('Unresolved Contradiction');
+    expect(formatBlockReasonLabel('security_review')).toBe('Security Review');
+  });
+
+  it('should show substep name from phase substate when active', () => {
+    const state = createActiveState({
+      phase: 'Lattice',
+      substate: createLatticeGeneratingStructure(),
+    });
+
+    expect(isActiveState(state)).toBe(true);
+    if (isActiveState(state)) {
+      const step = getStep(state);
+      expect(step).toBe('generatingStructure');
+      expect(step).toBeDefined();
+      if (step !== undefined) {
+        expect(formatStepName(step)).toBe('Generating Structure');
+      }
+    }
+  });
+
+  it('should show Ignition: Interviewing format for Ignition phase', () => {
+    const state = createActiveState({
+      phase: 'Ignition',
+      substate: createIgnitionInterviewing('Discovery', 0),
+    });
+
+    const phase = getPhase(state);
+    const step = getStep(state);
+    expect(phase).toBe('Ignition');
+    expect(step).toBe('interviewing');
+    expect(step).toBeDefined();
+    expect(phase).toBeDefined();
+    if (phase !== undefined && step !== undefined) {
+      expect(`${phase}: ${formatStepName(step)}`).toBe('Ignition: Interviewing');
+    }
+  });
+
+  it('should show Complete without trying to access phase.substate', () => {
+    const state = createCompleteState(['spec', 'latticeCode']);
+
+    expect(isCompleteState(state)).toBe(true);
+    expect(getPhase(state)).toBeUndefined();
+    expect(getStep(state)).toBeUndefined();
+  });
+
+  it('should show BlockReason label when state is blocked', () => {
+    const state = createBlockedState({
+      reason: 'circuit_breaker',
+      phase: 'Injection',
+      query: 'Too many failures',
+    });
+
+    expect(isBlockedState(state)).toBe(true);
+    if (isBlockedState(state)) {
+      expect(formatBlockReasonLabel(state.reason)).toBe('Circuit Breaker');
+    }
+  });
+});
+
 describe('Notifications Display (US-016)', () => {
   it('should show notification system as not configured', () => {
     const snapshot: ProtocolStateSnapshot = {
-      state: createActiveState('Injection'),
+      state: createActiveState({
+        phase: 'Injection',
+        substate: createInjectionImplementing('', 0),
+      }),
       artifacts: ['spec'],
       blockingQueries: [],
     };
 
-    expect(snapshot.state.phase).toBe('Injection');
-    expect(isBlockingSubstate(snapshot.state.substate)).toBe(false);
+    expect(getPhase(snapshot.state)).toBe('Injection');
+    expect(isBlockedState(snapshot.state)).toBe(false);
   });
 
   it('should display notifications section with Phase 4.2 reference', () => {
     const snapshot: ProtocolStateSnapshot = {
-      state: {
+      state: createBlockedState({
+        reason: 'user_requested',
         phase: 'Lattice',
-        substate: createBlockingSubstate({
-          query: 'Awaiting user input for architecture decision.',
-        }),
-      },
+        query: 'Awaiting user input for architecture decision.',
+      }),
       artifacts: ['spec'],
       blockingQueries: [],
     };
 
-    expect(isBlockingSubstate(snapshot.state.substate)).toBe(true);
+    expect(isBlockedState(snapshot.state)).toBe(true);
     expect(snapshot.blockingQueries).toHaveLength(0);
   });
 
   it('should gracefully handle missing notification module', () => {
     const snapshot: ProtocolStateSnapshot = {
-      state: createActiveState('MassDefect'),
+      state: createActiveState({
+        phase: 'MassDefect',
+        substate: createMassDefectApplyingTransform('', ''),
+      }),
       artifacts: ['spec', 'verifiedCode'],
       blockingQueries: [],
     };
 
-    expect(snapshot.state.phase).toBe('MassDefect');
+    expect(getPhase(snapshot.state)).toBe('MassDefect');
     expect(snapshot.artifacts).toContain('verifiedCode');
     expect(snapshot.blockingQueries).toHaveLength(0);
   });

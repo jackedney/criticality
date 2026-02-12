@@ -21,6 +21,7 @@ import type {
   HistoryQueryOptions,
   DependencyGraphQueryOptions,
   DependencyGraphResult,
+  ValidationProof,
 } from './types.js';
 
 /**
@@ -246,6 +247,14 @@ export interface InvalidateOptions {
    * Required when invalidating a decision with confidence 'canonical'.
    */
   forceInvalidateCanonical?: boolean;
+}
+
+/**
+ * Options for reinstating a suspended decision.
+ */
+export interface ReinstateOptions {
+  /** New confidence level after reinstatement. Default: 'inferred'. */
+  confidence?: 'canonical' | 'delegated' | 'inferred' | 'provisional';
 }
 
 /**
@@ -1415,6 +1424,74 @@ export class Ledger {
         decision.failure_context !== undefined
           ? `${decision.failure_context}; Composition Audit contradiction: ${contradictionReason}`
           : `Composition Audit contradiction: ${contradictionReason}`,
+    };
+
+    // Replace in the array
+    // eslint-disable-next-line security/detect-object-injection -- safe: decisionIndex is numeric from .findIndex()
+    this.decisions[decisionIndex] = updatedDecision;
+
+    // Update last_modified
+    this.meta.last_modified = this.now().toISOString();
+
+    return updatedDecision;
+  }
+
+  /**
+   * Reinstates a suspended decision with a new confidence level.
+   *
+   * Per spec section 5.1: Decisions with confidence 'suspended' (created when
+   * dependencies are invalidated) can be reactivated via reinstatement with
+   * a validation proof.
+   *
+   * This method:
+   * - Only affects decisions with confidence 'suspended' and status 'active'
+   * - Changes confidence to the specified level (default: 'inferred')
+   * - Records the validation proof in contradiction_resolved
+   * - Updates last_modified timestamp
+   *
+   * @param decisionId - ID of the suspended decision to reinstate.
+   * @param validation - Proof that the decision has been re-validated.
+   * @param options - Options including target confidence level.
+   * @returns The updated decision with reinstated confidence.
+   * @throws DecisionNotFoundError if the decision doesn't exist.
+   * @throws InvalidSupersedeError if the decision is not suspended or not active.
+   */
+  reinstate(decisionId: string, validation: ValidationProof, options?: ReinstateOptions): Decision {
+    // Find the decision
+    const decisionIndex = this.decisions.findIndex((d) => d.id === decisionId);
+    if (decisionIndex === -1) {
+      throw new DecisionNotFoundError(decisionId);
+    }
+
+    // eslint-disable-next-line security/detect-object-injection -- safe: decisionIndex is numeric from .findIndex()
+    const decision = this.decisions[decisionIndex];
+    if (decision === undefined) {
+      throw new DecisionNotFoundError(decisionId);
+    }
+
+    // Only reinstate suspended decisions
+    if (decision.confidence !== 'suspended') {
+      throw new InvalidSupersedeError(
+        decisionId,
+        `cannot reinstate decision with confidence '${decision.confidence}'; only 'suspended' decisions can be reinstated`
+      );
+    }
+
+    // Must be active
+    if (decision.status !== 'active') {
+      throw new InvalidSupersedeError(
+        decisionId,
+        `cannot reinstate decision with status '${decision.status}'; only active decisions can be reinstated`
+      );
+    }
+
+    const targetConfidence = options?.confidence ?? 'inferred';
+
+    // Create the reinstated decision
+    const updatedDecision: Decision = {
+      ...decision,
+      confidence: targetConfidence,
+      contradiction_resolved: `Reinstated: ${validation.reason} (validator: ${validation.validator})`,
     };
 
     // Replace in the array

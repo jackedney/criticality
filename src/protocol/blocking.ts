@@ -11,11 +11,15 @@ import type { Ledger, DecisionInput, Decision } from '../ledger/index.js';
 import {
   type ProtocolState,
   type ProtocolPhase,
-  type BlockingOptions,
-  isBlockingSubstate,
-  createBlockingSubstate,
-  createActiveSubstate,
-  createProtocolState,
+  type BlockedState,
+  type ActiveState,
+  type PhaseState,
+  isBlockedState,
+  getPhase,
+  createBlockedState,
+  createActiveState,
+  createFailedState,
+  type BlockedStateOptions,
 } from './types.js';
 
 /**
@@ -33,7 +37,7 @@ export interface BlockingRecord {
   readonly phase: ProtocolPhase;
   /** The query prompting human intervention. */
   readonly query: string;
-  /** Available options for the human to choose from. */
+  /** Available options for human to choose from. */
   readonly options?: readonly string[];
   /** Timestamp when blocking started (ISO 8601). */
   readonly blockedAt: string;
@@ -49,7 +53,7 @@ export interface BlockingRecord {
  * Resolution of a blocking query.
  */
 export interface BlockingResolution {
-  /** The ID of the blocking query being resolved. */
+  /** The ID of blocking query being resolved. */
   readonly queryId: BlockingQueryId;
   /** The selected option or custom response. */
   readonly response: string;
@@ -65,7 +69,7 @@ export interface BlockingResolution {
 export type EnterBlockingResult =
   | {
       readonly success: true;
-      readonly state: ProtocolState;
+      readonly state: BlockedState;
       readonly record: BlockingRecord;
     }
   | {
@@ -79,7 +83,7 @@ export type EnterBlockingResult =
 export type ResolveBlockingResult =
   | {
       readonly success: true;
-      readonly state: ProtocolState;
+      readonly state: ActiveState;
       readonly decision: Decision;
       readonly record: BlockingRecord;
     }
@@ -120,7 +124,7 @@ export type TimeoutHandlingResult =
  * Error codes for blocking operations.
  */
 export type BlockingErrorCode =
-  | 'NOT_BLOCKING' // State is not in blocking substate
+  | 'NOT_BLOCKING' // State is not in blocking state
   | 'ALREADY_BLOCKING' // State is already blocking
   | 'QUERY_ID_MISMATCH' // Provided query ID does not match current blocking
   | 'ALREADY_RESOLVED' // Blocking has already been resolved
@@ -143,7 +147,7 @@ export interface BlockingError {
 /**
  * Options for entering a blocking state.
  */
-export interface EnterBlockingOptions extends BlockingOptions {
+export interface EnterBlockingOptions extends BlockedStateOptions {
   /** Optional custom ID for the blocking query (auto-generated if not provided). */
   id?: BlockingQueryId;
 }
@@ -174,7 +178,7 @@ export interface TimeoutHandlingOptions {
 
 /**
  * Mapping of decision phases to protocol phases.
- * Used when recording decisions to the ledger.
+ * Used when recording decisions to ledger.
  */
 function protocolPhaseToDecisionPhase(
   phase: ProtocolPhase
@@ -206,10 +210,64 @@ function protocolPhaseToDecisionPhase(
 }
 
 /**
+ * Creates a default PhaseState for a given phase, used when resolving blocked states.
+ *
+ * @param phase - The protocol phase.
+ * @returns A PhaseState with the default substate for that phase.
+ */
+function createDefaultPhaseStateForBlocking(phase: ProtocolPhase): PhaseState {
+  switch (phase) {
+    case 'Ignition':
+      return {
+        phase: 'Ignition',
+        substate: {
+          step: 'interviewing' as const,
+          interviewPhase: 'Discovery' as const,
+          questionIndex: 0,
+        },
+      };
+    case 'Lattice':
+      return {
+        phase: 'Lattice',
+        substate: { step: 'generatingStructure' as const },
+      };
+    case 'CompositionAudit':
+      return {
+        phase: 'CompositionAudit',
+        substate: { step: 'auditing' as const, auditorsCompleted: 0 },
+      };
+    case 'Injection':
+      return {
+        phase: 'Injection',
+        substate: { step: 'selectingFunction' as const },
+      };
+    case 'Mesoscopic':
+      return {
+        phase: 'Mesoscopic',
+        substate: { step: 'generatingTests' as const },
+      };
+    case 'MassDefect':
+      return {
+        phase: 'MassDefect',
+        substate: { step: 'analyzingComplexity' as const },
+      };
+    case 'Complete':
+      return {
+        phase: 'Ignition',
+        substate: {
+          step: 'interviewing' as const,
+          interviewPhase: 'Discovery' as const,
+          questionIndex: 0,
+        },
+      };
+  }
+}
+
+/**
  * Generates a unique blocking query ID.
  *
  * @param phase - The phase in which blocking is occurring.
- * @returns A unique ID for the blocking query.
+ * @returns A unique ID for blocking query.
  */
 export function generateBlockingQueryId(phase: ProtocolPhase): BlockingQueryId {
   const timestamp = Date.now();
@@ -231,7 +289,7 @@ function createBlockingError(code: BlockingErrorCode, message: string): Blocking
 /**
  * Enters a blocking state from any phase.
  *
- * This transitions the protocol state to a blocking substate,
+ * This transitions protocol state to a blocking state,
  * recording the query and available options for human intervention.
  *
  * @param currentState - The current protocol state.
@@ -240,8 +298,10 @@ function createBlockingError(code: BlockingErrorCode, message: string): Blocking
  *
  * @example
  * ```typescript
- * const state = createActiveState('Lattice');
+ * const state = createActiveState(createIgnitionPhaseState(createIgnitionInterviewing('Discovery', 0)));
  * const result = enterBlocking(state, {
+ *   reason: 'user_requested',
+ *   phase: 'Lattice',
  *   query: 'Approve architecture?',
  *   options: ['Yes', 'No', 'Revise'],
  *   timeoutMs: 300000, // 5 minutes
@@ -256,8 +316,10 @@ export function enterBlocking(
   currentState: ProtocolState,
   options: EnterBlockingOptions
 ): EnterBlockingResult {
-  // Cannot block in Complete phase
-  if (currentState.phase === 'Complete') {
+  const phase = getPhase(currentState);
+
+  // Cannot block if phase is undefined or Complete
+  if (phase === undefined || phase === 'Complete') {
     return {
       success: false,
       error: createBlockingError('INVALID_PHASE', 'Cannot enter blocking state in Complete phase'),
@@ -265,38 +327,29 @@ export function enterBlocking(
   }
 
   // Cannot enter blocking if already blocking
-  if (isBlockingSubstate(currentState.substate)) {
+  if (isBlockedState(currentState)) {
+    const query = currentState.query;
     return {
       success: false,
       error: createBlockingError(
         'ALREADY_BLOCKING',
-        `Already in blocking state with query: "${currentState.substate.query}"`
+        `Already in blocking state with query: "${query}"`
       ),
     };
   }
 
   // Generate ID if not provided
-  const blockingId = options.id ?? generateBlockingQueryId(currentState.phase);
+  const blockingId = options.id ?? generateBlockingQueryId(phase);
 
-  // Create the blocking substate - handle optional fields for exactOptionalPropertyTypes
-  const blockingOpts: BlockingOptions = { query: options.query };
-  if (options.options !== undefined) {
-    blockingOpts.options = options.options;
-  }
-  if (options.timeoutMs !== undefined) {
-    blockingOpts.timeoutMs = options.timeoutMs;
-  }
-  const blockingSubstate = createBlockingSubstate(blockingOpts);
-
-  // Create the new state
-  const newState = createProtocolState(currentState.phase, blockingSubstate);
+  // Create a blocked state using the factory
+  const newState = createBlockedState(options);
 
   // Create the blocking record
   const recordBase = {
     id: blockingId,
-    phase: currentState.phase,
+    phase,
     query: options.query,
-    blockedAt: blockingSubstate.blockedAt,
+    blockedAt: newState.blockedAt,
     resolved: false,
   };
 
@@ -322,12 +375,12 @@ export function enterBlocking(
 /**
  * Resolves a blocking state and records the decision to the ledger.
  *
- * This transitions the protocol state back to active and creates
+ * This transitions protocol state back to active and creates
  * a decision entry in the ledger recording the human intervention.
  *
  * @param currentState - The current protocol state (must be blocking).
  * @param record - The blocking record for this blocking state.
- * @param resolveOptions - Options for resolving the blocking.
+ * @param resolveOptions - Options for resolving blocking.
  * @param ledger - The decision ledger to record the resolution.
  * @returns Result containing the new state, decision, and updated record, or an error.
  *
@@ -352,13 +405,10 @@ export function resolveBlocking(
   ledger: Ledger
 ): ResolveBlockingResult {
   // Must be in blocking state
-  if (!isBlockingSubstate(currentState.substate)) {
+  if (!isBlockedState(currentState)) {
     return {
       success: false,
-      error: createBlockingError(
-        'NOT_BLOCKING',
-        'Cannot resolve: state is not in blocking substate'
-      ),
+      error: createBlockingError('NOT_BLOCKING', 'Cannot resolve: state is not in blocking state'),
     };
   }
 
@@ -374,18 +424,17 @@ export function resolveBlocking(
   }
 
   // Validate response against options if options are provided
-  const blockingSubstate = currentState.substate;
   if (
-    blockingSubstate.options !== undefined &&
-    blockingSubstate.options.length > 0 &&
+    record.options !== undefined &&
+    record.options.length > 0 &&
     resolveOptions.allowCustomResponse !== true
   ) {
-    if (!blockingSubstate.options.includes(resolveOptions.response)) {
+    if (!record.options.includes(resolveOptions.response)) {
       return {
         success: false,
         error: createBlockingError(
           'INVALID_RESPONSE',
-          `Response '${resolveOptions.response}' is not in available options: ${blockingSubstate.options.join(', ')}. Use allowCustomResponse: true to allow custom responses.`
+          `Response '${resolveOptions.response}' is not in available options: ${record.options.join(', ')}. Use allowCustomResponse: true to allow custom responses.`
         ),
       };
     }
@@ -426,11 +475,9 @@ export function resolveBlocking(
 
   const decision = ledger.append(decisionInput);
 
-  // Create the active substate
-  const activeSubstate = createActiveSubstate();
-
-  // Create the new state
-  const newState = createProtocolState(currentState.phase, activeSubstate);
+  // Create an active state restoring the phase from the blocked state
+  const phaseState = createDefaultPhaseStateForBlocking(record.phase);
+  const newState = createActiveState(phaseState);
 
   // Update the blocking record
   const updatedRecordBase = {
@@ -505,12 +552,12 @@ export function checkTimeout(record: BlockingRecord, now?: number): TimeoutCheck
  *
  * This function applies the specified timeout handling strategy:
  * - 'escalate': Returns error indicating timeout needs escalation
- * - 'default': Uses the default response and resolves the blocking
+ * - 'default': Uses the default response and resolves blocking
  * - 'fail': Transitions to failed state
  *
  * @param currentState - The current protocol state (must be blocking).
  * @param record - The blocking record for this blocking state.
- * @param options - Options for handling the timeout.
+ * @param options - Options for handling timeout.
  * @param ledger - Optional ledger for recording decisions (required for 'default' strategy).
  * @returns Result containing the handled state or error.
  *
@@ -535,12 +582,12 @@ export function handleTimeout(
   ledger?: Ledger
 ): TimeoutHandlingResult {
   // Must be in blocking state
-  if (!isBlockingSubstate(currentState.substate)) {
+  if (!isBlockedState(currentState)) {
     return {
       success: false,
       error: createBlockingError(
         'NOT_BLOCKING',
-        'Cannot handle timeout: state is not in blocking substate'
+        'Cannot handle timeout: state is not in blocking state'
       ),
     };
   }
@@ -629,22 +676,19 @@ export function handleTimeout(
 
     case 'fail': {
       // Transition to failed state
-      const failedSubstate = {
-        kind: 'Failed' as const,
+      const newState = createFailedState({
+        phase: record.phase,
         error: `Timeout on blocking query: "${record.query}"`,
         code: 'BLOCKING_TIMEOUT',
-        failedAt: new Date().toISOString(),
         recoverable: true,
         context: `Blocking query ID: ${record.id}, Timeout: ${String(record.timeoutMs)}ms`,
-      };
-
-      const newState = createProtocolState(currentState.phase, failedSubstate);
+      });
 
       // Update record as "resolved" (via timeout)
       const resolution: BlockingResolution = {
         queryId: record.id,
         response: 'TIMEOUT_FAILURE',
-        resolvedAt: failedSubstate.failedAt,
+        resolvedAt: newState.failedAt,
       };
 
       // Add rationale if provided

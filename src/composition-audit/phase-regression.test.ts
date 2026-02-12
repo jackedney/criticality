@@ -6,6 +6,7 @@
 
 import { describe, it, expect, beforeEach } from 'vitest';
 import { Ledger } from '../ledger/index.js';
+import { getPhase } from '../protocol/types.js';
 import type { Contradiction } from './types.js';
 import {
   analyzeContradictions,
@@ -291,8 +292,8 @@ describe('Phase Regression Handler', () => {
       if (result.success) {
         expect(result.kind).toBe('blocked');
         if (result.kind === 'blocked') {
-          expect(result.state.phase).toBe('CompositionAudit');
-          expect(result.state.substate.kind).toBe('Blocking');
+          expect(getPhase(result.state)).toBe('CompositionAudit');
+          expect(result.state.kind).toBe('Blocked');
           expect(result.query).toContain('INTERACTING CONTRADICTIONS');
           expect(result.options.length).toBeGreaterThan(0);
           expect(result.contradictions).toHaveLength(2);
@@ -412,7 +413,7 @@ describe('Phase Regression Handler', () => {
       if (result.success) {
         expect(result.kind).toBe('blocked');
         if (result.kind === 'blocked') {
-          expect(result.state.substate.kind).toBe('Blocking');
+          expect(result.state.kind).toBe('Blocked');
           expect(result.query).toContain('rejected');
           expect(result.contradictions).toContain(contradiction);
         }
@@ -608,8 +609,8 @@ describe('Phase Regression Handler', () => {
 
       expect(blockedResult.success).toBe(true);
       if (blockedResult.success && blockedResult.kind === 'blocked') {
-        expect(blockedResult.state.phase).toBe('CompositionAudit');
-        expect(blockedResult.state.substate.kind).toBe('Blocking');
+        expect(getPhase(blockedResult.state)).toBe('CompositionAudit');
+        expect(blockedResult.state.kind).toBe('Blocked');
         expect(blockedResult.query).toContain('rejected');
       }
     });

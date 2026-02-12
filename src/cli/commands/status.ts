@@ -1,19 +1,23 @@
 /**
  * Status command handler for the Criticality Protocol CLI.
  *
- * Displays the current protocol state including phase, substate type,
+ * Displays the current protocol state including phase, state kind,
  * blocking queries, and available artifacts using OpenTUI Box components.
  */
 
 import type { CliContext, CliCommandResult } from '../types.js';
 import { StatePersistenceError } from '../../protocol/persistence.js';
 import type { ProtocolStateSnapshot } from '../../protocol/persistence.js';
-import type { ProtocolSubstate, BlockingSubstate } from '../../protocol/types.js';
+import type { ProtocolState, BlockedState } from '../../protocol/types.js';
 import {
-  isActiveSubstate,
-  isBlockingSubstate,
-  isFailedSubstate,
+  isActiveState,
+  isBlockedState,
+  isCompleteState,
+  isFailedState,
+  getPhase,
   PROTOCOL_PHASES,
+  formatStepName,
+  formatBlockReasonLabel,
 } from '../../protocol/types.js';
 import type { BlockingRecord } from '../../protocol/blocking.js';
 import { loadLedger } from '../../ledger/persistence.js';
@@ -150,47 +154,31 @@ async function checkAndSendReminder(
 }
 
 /**
- * Formats hierarchical state (Phase > Task > Operation).
+ * Formats hierarchical state (Phase > Step).
  *
- * Shows available levels of hierarchy with > separator.
- * If task/operation not available, shows only available levels.
+ * Shows the phase name with its state kind, plus the active step if applicable.
  *
- * @param phase - The protocol phase.
- * @param substate - The protocol substate.
+ * @param state - The protocol state.
  * @param options - Display options.
  * @returns The formatted hierarchical state string.
  */
-function formatHierarchicalState(
-  phase: string,
-  substate: ProtocolSubstate,
-  options: StatusDisplayOptions
-): string {
+function formatHierarchicalState(state: ProtocolState, options: StatusDisplayOptions): string {
   const dimCode = options.colors ? '\x1b[2m' : '';
   const resetCode = options.colors ? '\x1b[0m' : '';
   const greenCode = options.colors ? '\x1b[32m' : '';
   const redCode = options.colors ? '\x1b[31m' : '';
 
-  // Determine the substate label for display
-  let substateLabel = 'Active';
-  if (isBlockingSubstate(substate)) {
-    substateLabel = 'Blocked';
-  } else if (isFailedSubstate(substate)) {
-    substateLabel = 'Failed';
-  }
+  const phase = getPhase(state) ?? 'Complete';
+  const stateLabel = state.kind;
+  const stateColor = stateLabel === 'Blocked' || stateLabel === 'Failed' ? redCode : greenCode;
+  const phaseWithState = `${greenCode}${phase}${resetCode} (${stateColor}${stateLabel}${resetCode})`;
 
-  // Format as "Phase (Substate)" - e.g., "Lattice (Active)" or "Lattice (Blocked)"
-  const substateColor = substateLabel === 'Blocked' ? redCode : greenCode;
-  const phaseWithSubstate = `${greenCode}${phase}${resetCode} (${substateColor}${substateLabel}${resetCode})`;
+  const parts: string[] = [phaseWithState];
 
-  const parts: string[] = [phaseWithSubstate];
-
-  if (isActiveSubstate(substate)) {
-    if (substate.task !== undefined) {
-      parts.push(substate.task);
-    }
-    if (substate.operation !== undefined) {
-      parts.push(substate.operation);
-    }
+  if (isActiveState(state)) {
+    parts.push(formatStepName(state.phase.substate.step));
+  } else if (isBlockedState(state)) {
+    parts.push(`Blocked: ${formatBlockReasonLabel(state.reason)}`);
   }
 
   return parts.join(` ${dimCode}>${resetCode} `);
@@ -239,11 +227,11 @@ function formatRecentDecisions(
 /**
  * Formats a blocking reason for display.
  *
- * @param substate - The blocking substate.
+ * @param state - The blocked state containing query and options.
  * @param options - Display options.
  * @returns The formatted blocking reason text.
  */
-function formatBlockingReason(substate: BlockingSubstate, options: StatusDisplayOptions): string {
+function formatBlockingReason(state: BlockedState, options: StatusDisplayOptions): string {
   const redCode = options.colors ? '\x1b[31m' : '';
   const resetCode = options.colors ? '\x1b[0m' : '';
   const boldCode = options.colors ? '\x1b[1m' : '';
@@ -252,12 +240,12 @@ function formatBlockingReason(substate: BlockingSubstate, options: StatusDisplay
 
   result += `${boldCode}Blocking Reason:${resetCode}\n`;
   result += `${redCode}Type: blocking_query${resetCode}\n`;
-  result += `Description: ${substate.query}\n`;
+  result += `Description: ${state.query}\n`;
 
-  if (substate.options && substate.options.length > 0) {
+  if (state.options && state.options.length > 0) {
     result += `\n${boldCode}Suggested Resolutions:${resetCode}\n`;
-    for (let i = 0; i < substate.options.length; i++) {
-      const option = substate.options[i];
+    for (let i = 0; i < state.options.length; i++) {
+      const option = state.options[i];
       if (option !== undefined) {
         result += `  ${String(i + 1)}. ${option}\n`;
       }
@@ -440,22 +428,19 @@ async function renderStatus(
   const statePath = getStatePath();
   const cliConfig = loadCliConfig();
   const nextScheduled = await checkAndSendReminder(snapshot, statePath);
-  const isBlocked = isBlockingSubstate(snapshot.state.substate);
+  const isBlocked = isBlockedState(snapshot.state);
 
-  const hierarchicalState = formatHierarchicalState(
-    snapshot.state.phase,
-    snapshot.state.substate,
-    options
-  );
+  const hierarchicalState = formatHierarchicalState(snapshot.state, options);
 
   let statusText = `Phase: ${hierarchicalState}`;
   let additionalInfo = '';
 
-  if (snapshot.state.phase === 'Complete') {
+  if (isCompleteState(snapshot.state)) {
     statusText = 'Protocol Complete';
     additionalInfo = `Artifacts: ${snapshot.artifacts.join(', ') || 'None'}`;
-  } else if (isActiveSubstate(snapshot.state.substate)) {
-    const phaseIndex = PROTOCOL_PHASES.indexOf(snapshot.state.phase);
+  } else if (isActiveState(snapshot.state)) {
+    const phase = getPhase(snapshot.state);
+    const phaseIndex = phase !== undefined ? PROTOCOL_PHASES.indexOf(phase) : -1;
     if (phaseIndex >= 0) {
       const totalPhases = PROTOCOL_PHASES.length - 1;
       const progress = ((phaseIndex + 1) / totalPhases) * 100;
@@ -463,11 +448,11 @@ async function renderStatus(
     } else {
       additionalInfo = 'Unknown phase';
     }
-  } else if (isBlockingSubstate(snapshot.state.substate)) {
-    additionalInfo = `Blocking Query: ${snapshot.state.substate.query}`;
-  } else if (isFailedSubstate(snapshot.state.substate)) {
-    additionalInfo = `Error: ${snapshot.state.substate.error}`;
-    if (snapshot.state.substate.recoverable) {
+  } else if (isBlockedState(snapshot.state)) {
+    additionalInfo = `Blocking Query: ${snapshot.state.query}`;
+  } else if (isFailedState(snapshot.state)) {
+    additionalInfo = `Error: ${snapshot.state.error}`;
+    if (snapshot.state.recoverable) {
       additionalInfo += ' (Recoverable)';
     }
   }
@@ -475,8 +460,8 @@ async function renderStatus(
   const mainStatus = statusText + (additionalInfo ? '\n\n' + additionalInfo : '');
   console.log(wrapInBox(mainStatus, options));
 
-  if (isBlockingSubstate(snapshot.state.substate)) {
-    const blockingReason = formatBlockingReason(snapshot.state.substate, options);
+  if (isBlockedState(snapshot.state)) {
+    const blockingReason = formatBlockingReason(snapshot.state, options);
     console.log();
     console.log(wrapInBox(blockingReason, options));
   }

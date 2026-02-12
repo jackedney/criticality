@@ -18,6 +18,7 @@ import type {
   DecisionCategory,
   LedgerData,
   DecisionFilter,
+  ValidationProof,
 } from './index.js';
 
 describe('Ledger', () => {
@@ -2775,6 +2776,210 @@ describe('Ledger', () => {
       expect(transitiveIds).toContain(a.id);
       expect(transitiveIds).toContain(b.id);
       expect(transitiveIds).toContain(c.id);
+    });
+  });
+
+  describe('reinstate', () => {
+    let ledger: Ledger;
+
+    const validationProof: ValidationProof = {
+      reason: 'Dependencies restored after upstream fix',
+      validator: 'composition_audit',
+      timestamp: '2024-01-20T13:00:00.000Z',
+    };
+
+    beforeEach(() => {
+      ledger = new Ledger({
+        project: 'test-project',
+        now: (): Date => new Date('2024-01-20T12:00:00.000Z'),
+      });
+    });
+
+    describe('successful reinstatement', () => {
+      it('should reinstate a suspended decision to inferred confidence by default', () => {
+        const decision = ledger.append(
+          createTestInput({
+            constraint: 'Suspended decision',
+            confidence: 'suspended',
+          })
+        );
+
+        const updated = ledger.reinstate(decision.id, validationProof);
+
+        expect(updated.confidence).toBe('inferred');
+        expect(updated.id).toBe(decision.id);
+      });
+
+      it('should reinstate with explicit confidence level', () => {
+        const decision = ledger.append(
+          createTestInput({
+            constraint: 'Suspended decision',
+            confidence: 'suspended',
+          })
+        );
+
+        const updated = ledger.reinstate(decision.id, validationProof, {
+          confidence: 'canonical',
+        });
+
+        expect(updated.confidence).toBe('canonical');
+      });
+
+      it('should record validation proof in contradiction_resolved', () => {
+        const decision = ledger.append(
+          createTestInput({
+            constraint: 'Suspended decision',
+            confidence: 'suspended',
+          })
+        );
+
+        const updated = ledger.reinstate(decision.id, validationProof);
+
+        expect(updated.contradiction_resolved).toContain('Reinstated');
+        expect(updated.contradiction_resolved).toContain(validationProof.reason);
+        expect(updated.contradiction_resolved).toContain(validationProof.validator);
+      });
+
+      it('should update the decision in place (retrievable by getById)', () => {
+        const decision = ledger.append(
+          createTestInput({
+            constraint: 'Suspended decision',
+            confidence: 'suspended',
+          })
+        );
+
+        ledger.reinstate(decision.id, validationProof);
+
+        const retrieved = ledger.getById(decision.id);
+        expect(retrieved?.confidence).toBe('inferred');
+      });
+
+      it('should update last_modified timestamp', () => {
+        const decision = ledger.append(
+          createTestInput({
+            constraint: 'Suspended decision',
+            confidence: 'suspended',
+          })
+        );
+
+        ledger.reinstate(decision.id, validationProof);
+
+        const data = ledger.toData();
+        expect(data.meta.last_modified).toBe('2024-01-20T12:00:00.000Z');
+      });
+
+      it('should preserve active status', () => {
+        const decision = ledger.append(
+          createTestInput({
+            constraint: 'Suspended decision',
+            confidence: 'suspended',
+          })
+        );
+
+        const updated = ledger.reinstate(decision.id, validationProof);
+
+        expect(updated.status).toBe('active');
+      });
+    });
+
+    describe('error handling', () => {
+      it('should throw DecisionNotFoundError for non-existent decision', () => {
+        expect(() => ledger.reinstate('nonexistent_001', validationProof)).toThrow(
+          DecisionNotFoundError
+        );
+      });
+
+      it('should throw InvalidSupersedeError for non-suspended decisions', () => {
+        const decision = ledger.append(
+          createTestInput({
+            constraint: 'Canonical decision',
+            confidence: 'canonical',
+          })
+        );
+
+        expect(() => ledger.reinstate(decision.id, validationProof)).toThrow(InvalidSupersedeError);
+        expect(() => ledger.reinstate(decision.id, validationProof)).toThrow(
+          /only 'suspended' decisions can be reinstated/
+        );
+      });
+
+      it('should throw InvalidSupersedeError for inferred decisions', () => {
+        const decision = ledger.append(
+          createTestInput({
+            constraint: 'Inferred decision',
+            confidence: 'inferred',
+          })
+        );
+
+        expect(() => ledger.reinstate(decision.id, validationProof)).toThrow(InvalidSupersedeError);
+      });
+
+      it('should throw InvalidSupersedeError for invalidated decisions', () => {
+        const decision = ledger.append(
+          createTestInput({
+            constraint: 'Suspended decision',
+            confidence: 'suspended',
+          })
+        );
+
+        ledger.invalidate(decision.id);
+
+        expect(() => ledger.reinstate(decision.id, validationProof)).toThrow(InvalidSupersedeError);
+        expect(() => ledger.reinstate(decision.id, validationProof)).toThrow(
+          /only active decisions can be reinstated/
+        );
+      });
+
+      it('should throw InvalidSupersedeError for superseded decisions', () => {
+        const decision = ledger.append(
+          createTestInput({
+            constraint: 'Suspended decision',
+            confidence: 'suspended',
+          })
+        );
+
+        ledger.supersede(decision.id, createTestInput({ constraint: 'Replacement' }));
+
+        expect(() => ledger.reinstate(decision.id, validationProof)).toThrow(InvalidSupersedeError);
+      });
+    });
+
+    describe('append-only invariant', () => {
+      it('should not delete or add decisions during reinstatement', () => {
+        const decision = ledger.append(
+          createTestInput({
+            constraint: 'Suspended decision',
+            confidence: 'suspended',
+          })
+        );
+
+        const sizeBefore = ledger.size;
+        ledger.reinstate(decision.id, validationProof);
+        const sizeAfter = ledger.size;
+
+        expect(sizeAfter).toBe(sizeBefore);
+      });
+
+      it('should preserve all other decision fields', () => {
+        const decision = ledger.append(
+          createTestInput({
+            category: 'architectural',
+            constraint: 'Suspended constraint text',
+            confidence: 'suspended',
+            source: 'discussion',
+            phase: 'ignition',
+            rationale: 'Some rationale',
+          })
+        );
+
+        const updated = ledger.reinstate(decision.id, validationProof);
+
+        expect(updated.category).toBe('architectural');
+        expect(updated.constraint).toBe('Suspended constraint text');
+        expect(updated.source).toBe('discussion');
+        expect(updated.phase).toBe('ignition');
+        expect(updated.rationale).toBe('Some rationale');
+      });
     });
   });
 

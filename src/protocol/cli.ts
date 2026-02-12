@@ -13,9 +13,20 @@
 import type { ProtocolPhase } from './types.js';
 import type { ProtocolStateSnapshot } from './persistence.js';
 import type { BlockingRecord } from './blocking.js';
-import { loadState, stateFileExists, saveState } from './persistence.js';
+import { stateFileExists, loadState, saveState } from './persistence.js';
 import { getProtocolStatus, createOrchestrator, type ExternalOperations } from './orchestrator.js';
-import { createActiveSubstate } from './types.js';
+import {
+  createActiveState,
+  createIgnitionInterviewing,
+  createLatticeCompilingCheck,
+  createCompositionAuditAuditing,
+  createInjectionImplementing,
+  createMesoscopicExecutingCluster,
+  createMassDefectApplyingTransform,
+  isBlockedState,
+  getPhase,
+  type PhaseState,
+} from './types.js';
 
 /**
  * Default state file path.
@@ -45,7 +56,7 @@ export interface CliOptions {
  * Result of CLI command execution.
  */
 export interface CliResult {
-  /** Whether the command succeeded. */
+  /** Whether command succeeded. */
   success: boolean;
   /** Output message. */
   message: string;
@@ -54,7 +65,7 @@ export interface CliResult {
 }
 
 /**
- * Help text for the CLI.
+ * Help text for CLI.
  */
 const HELP_TEXT = `
 criticality - Protocol Orchestrator CLI
@@ -65,7 +76,7 @@ Usage:
 Commands:
   status              Show current protocol state (read-only)
   resume              Continue execution from persisted state
-  resolve <response>  Answer a blocking query with the given response
+  resolve <response>  Answer a blocking query with given response
   help                Show this help message
 
 Options:
@@ -163,7 +174,7 @@ export function parseArgs(args: readonly string[]): CliOptions {
 }
 
 /**
- * Format the protocol status for display.
+ * Format protocol status for display.
  *
  * @param snapshot - The state snapshot.
  * @param verbose - Whether to show verbose output.
@@ -175,7 +186,7 @@ function formatStatus(snapshot: ProtocolStateSnapshot, verbose: boolean): string
 
   lines.push('Protocol Status');
   lines.push('===============');
-  lines.push(`Phase: ${status.phase}`);
+  lines.push(`Phase: ${status.phase ?? 'Unknown'}`);
   lines.push(`State: ${status.substate}`);
 
   if (status.artifacts.length > 0) {
@@ -321,7 +332,7 @@ export async function executeResume(options: CliOptions): Promise<CliResult> {
     const status = getProtocolStatus(result.snapshot);
     return {
       success: true,
-      message: `Protocol at phase ${status.phase} (${status.substate}).\nRun "criticality status" for details.`,
+      message: `Protocol at phase ${status.phase ?? 'Unknown'} (${status.substate}).\nRun "criticality status" for details.`,
       exitCode: 0,
     };
   } catch (error) {
@@ -362,32 +373,70 @@ export async function executeResolve(options: CliOptions): Promise<CliResult> {
 
   try {
     const snapshot = await loadState(options.statePath);
-    const { substate } = snapshot.state;
+    const state = snapshot.state;
 
-    if (substate.kind !== 'Blocking') {
+    if (!isBlockedState(state)) {
       return {
         success: false,
-        message: `Protocol is not blocked (current state: ${substate.kind}).\nResolve is only valid when the protocol is waiting for input.`,
+        message: `Protocol is not blocked (current state: ${state.kind}).\nResolve is only valid when protocol is waiting for input.`,
         exitCode: 1,
       };
     }
 
     // Record the resolution and transition to active state
-    const activeSubstate = createActiveSubstate();
+    const blockedState = state;
+    const phase = getPhase(state);
+    if (phase === undefined) {
+      return {
+        success: false,
+        message: 'Cannot resolve: state has no phase',
+        exitCode: 1,
+      };
+    }
+
+    // Create an active state with default substate as placeholder
+    // PhaseState requires a valid phase (not Complete), so we check before casting
+    const validPhase: Exclude<ProtocolPhase, 'Complete'> =
+      phase === 'Complete' ? 'Ignition' : phase;
+
+    // Use the appropriate factory to create the correct PhaseState
+    let phaseState: PhaseState;
+    switch (validPhase) {
+      case 'Ignition':
+        phaseState = { phase: 'Ignition', substate: createIgnitionInterviewing('Discovery', 0) };
+        break;
+      case 'Lattice':
+        phaseState = { phase: 'Lattice', substate: createLatticeCompilingCheck(0) };
+        break;
+      case 'CompositionAudit':
+        phaseState = { phase: 'CompositionAudit', substate: createCompositionAuditAuditing(0) };
+        break;
+      case 'Injection':
+        phaseState = { phase: 'Injection', substate: createInjectionImplementing('', 0) };
+        break;
+      case 'Mesoscopic':
+        phaseState = { phase: 'Mesoscopic', substate: createMesoscopicExecutingCluster('', 0) };
+        break;
+      case 'MassDefect':
+        phaseState = { phase: 'MassDefect', substate: createMassDefectApplyingTransform('', '') };
+        break;
+    }
+
+    const activeState = createActiveState(phaseState);
+
     const recordId = `resolved-${String(Date.now())}`;
 
     // Find the original blocking query to get its ID for proper resolution tracking
     const originalBlockingQuery = snapshot.blockingQueries.find(
-      (entry) =>
-        entry.phase === snapshot.state.phase && entry.query === substate.query && !entry.resolved
+      (entry) => entry.phase === phase && entry.query === blockedState.query && !entry.resolved
     );
     const originalQueryId = originalBlockingQuery?.id ?? recordId;
 
     const resolvedRecord: BlockingRecord = {
       id: recordId,
-      phase: snapshot.state.phase,
-      query: substate.query,
-      blockedAt: substate.blockedAt,
+      phase,
+      query: blockedState.query,
+      blockedAt: blockedState.blockedAt,
       resolved: true as const,
       resolution: {
         queryId: originalQueryId,
@@ -396,10 +445,7 @@ export async function executeResolve(options: CliOptions): Promise<CliResult> {
       },
     };
     const newSnapshot: ProtocolStateSnapshot = {
-      state: {
-        phase: snapshot.state.phase,
-        substate: activeSubstate,
-      },
+      state: activeState,
       artifacts: snapshot.artifacts,
       blockingQueries: [...snapshot.blockingQueries, resolvedRecord],
     };

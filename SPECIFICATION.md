@@ -115,17 +115,17 @@ All decisions, constraints, and assumptions must be captured in machine-readable
 │           │                                                                  │
 │           ▼                                                                  │
 │  ┌──────────────────┐     ┌─────────────────┐                               │
-│  │  PHASE I:        │     │  Decision       │                               │
-│  │  IGNITION        │────▶│  Ledger         │◀─── Persists across phases    │
-│  │  (Specification) │     │  (append-only)  │                               │
+│  │  IGNITION         │     │  Decision       │                               │
+│  │  (Specification) │────▶│  Ledger         │◀─── Persists across phases    │
+│  │                  │     │  (append-only)  │                               │
 │  └────────┬─────────┘     └─────────────────┘                               │
 │           │                        ▲                                         │
 │           │ spec.toml              │ decisions                               │
 │           ▼                        │                                         │
 │  ┌──────────────────┐              │                                         │
-│  │  PHASE II:       │              │                                         │
-│  │  LATTICE         │──────────────┤                                         │
-│  │  (Structure)     │              │                                         │
+│  │  LATTICE         │              │                                         │
+│  │  (Structure)     │──────────────┤                                         │
+│  │                  │              │                                         │
 │  └────────┬─────────┘              │                                         │
 │           │                        │                                         │
 │           │ skeleton + witnesses   │                                         │
@@ -139,25 +139,25 @@ All decisions, constraints, and assumptions must be captured in machine-readable
 │           │ validated structure    │                                         │
 │           ▼                        │                                         │
 │  ┌──────────────────┐              │                                         │
-│  │  PHASE III:      │              │                                         │
-│  │  INJECTION       │──────────────┤                                         │
-│  │  (Implementation)│              │                                         │
+│  │  INJECTION       │              │                                         │
+│  │  (Implementation)│──────────────┤                                         │
+│  │                  │              │                                         │
 │  └────────┬─────────┘              │                                         │
 │           │                        │                                         │
 │           │ implemented code       │                                         │
 │           ▼                        │                                         │
 │  ┌──────────────────┐              │                                         │
-│  │  PHASE III.5:    │              │                                         │
-│  │  MESOSCOPIC      │──────────────┤                                         │
-│  │  (Integration)   │              │                                         │
+│  │  MESOSCOPIC      │              │                                         │
+│  │  (Integration)   │──────────────┤                                         │
+│  │                  │              │                                         │
 │  └────────┬─────────┘              │                                         │
 │           │                        │                                         │
 │           │ verified code          │                                         │
 │           ▼                        │                                         │
 │  ┌──────────────────┐              │                                         │
-│  │  PHASE IV:       │              │                                         │
-│  │  MASS DEFECT     │──────────────┘                                         │
-│  │  (Refinement)    │                                                        │
+│  │  MASS DEFECT    │              │                                         │
+│  │  (Refinement)    │──────────────┘                                         │
+│  │                  │                                                        │
 │  └────────┬─────────┘                                                        │
 │           │                                                                  │
 │           │ final artifact                                                   │
@@ -774,7 +774,7 @@ The circuit breaker uses a **hybrid approach**: break if (all tiers exhausted) O
 
 If any of these conditions are met, halt Injection and return to Lattice with a structural defect report:
 
-- Single function fails across all model tiers (must include at least one Opus attempt)
+- Single function fails across all model tiers (must include at least one architect_model attempt)
 - Max attempts per function exceeded (default: 8)
 - >20% of functions in a module escalate
 - >10% of all functions fail
@@ -1258,11 +1258,11 @@ min_test_coverage = 0.80
 
 #### Model Assignment
 
-| Role | Model | Rationale |
-|------|-------|-----------|
-| Reducer | MiniMax M2 | Fast, good at local transforms |
-| Semantic Refiner | Claude Opus 4.5 | Complex refactoring |
-| High-Risk Auditor | Kimi K2 (optional) | Verify semantic preservation |
+| Role | Model Alias | Rationale |
+|------|-------------|-----------|
+| Reducer | worker_model | Fast, good at local transforms |
+| Semantic Refiner | architect_model | Complex refactoring |
+| High-Risk Auditor | auditor_model (optional) | Verify semantic preservation |
 
 #### Initial Pattern Catalog
 
@@ -1569,22 +1569,22 @@ type FailureType =
 
 | Failure | Model | Attempt | Action |
 |---------|-------|---------|--------|
-| Syntax (recoverable) | MiniMax | 1 | Retry same model |
-| Syntax (recoverable) | MiniMax | 2 | Retry with syntax hint |
-| Syntax (fatal) | MiniMax | 1 | Escalate to Sonnet |
-| Type | MiniMax | 1 | Retry with expanded type context |
-| Type | MiniMax | 2 | Escalate to Sonnet |
-| Type | Sonnet | 2 | Escalate to Opus |
-| Type | Opus | 2 | Circuit break |
-| Test | MiniMax | 1-2 | Retry same model |
-| Test | MiniMax | 3 | Escalate to Sonnet |
-| Test | Sonnet | 2 | Escalate to Opus |
-| Test | Opus | 2 | Circuit break + human review |
+| Syntax (recoverable) | worker_model | 1 | Retry same model |
+| Syntax (recoverable) | worker_model | 2 | Retry with syntax hint |
+| Syntax (fatal) | worker_model | 1 | Escalate to structurer_model |
+| Type | worker_model | 1 | Retry with expanded type context |
+| Type | worker_model | 2 | Escalate to structurer_model |
+| Type | structurer_model | 2 | Escalate to architect_model |
+| Type | architect_model | 2 | Circuit break |
+| Test | worker_model | 1-2 | Retry same model |
+| Test | worker_model | 3 | Escalate to structurer_model |
+| Test | structurer_model | 2 | Escalate to architect_model |
+| Test | architect_model | 2 | Circuit break + human review |
 | Timeout | Any | 1 | Escalate immediately |
-| Semantic | MiniMax | 1 | Escalate to Sonnet |
-| Semantic | Sonnet | 1 | Escalate to Opus |
-| Semantic | Opus | 1 | Circuit break + human review |
-| Security | Any | 1 | Escalate to Opus immediately |
+| Semantic | worker_model | 1 | Escalate to structurer_model |
+| Semantic | structurer_model | 1 | Escalate to architect_model |
+| Semantic | architect_model | 1 | Circuit break + human review |
+| Security | Any | 1 | Escalate to architect_model immediately |
 | Coherence | Any | 1 | Circuit break (return to Lattice) |
 
 #### Security Vulnerability Detection
@@ -1852,7 +1852,7 @@ interface PersistedProtocolState {
 
 ### Claim Parsing
 
-Natural language claims are parsed by an LLM (Sonnet) into structured form:
+Natural language claims are parsed by an LLM (structurer_model) into structured form:
 
 ```json
 {
@@ -1937,11 +1937,11 @@ The protocol uses role-based model aliases. Specific model assignments are confi
 
 ### Cost Optimization Strategy
 
-1. **Default to cheapest capable model** — MiniMax for implementation
+1. **Default to cheapest capable model** — worker_model for implementation
 2. **Conservative pre-emption** — Upgrade on strong signals only (context size, signature complexity)
 3. **Escalate on failure** — Move to more capable models after failures
-4. **Expensive models for design** — Opus for architecture decisions
-5. **Fast models for verification** — Kimi K2 for auditing
+4. **Expensive models for design** — architect_model for architecture decisions
+5. **Fast models for verification** — auditor_model for auditing
 
 ### Model Capability Requirements
 
@@ -1985,11 +1985,11 @@ Task type determines base model:
 
 | Task Type | Base Model Role | Default Model |
 |-----------|-----------------|---------------|
-| implement | worker_model | MiniMax M2 |
-| audit | auditor_model | Kimi K2 |
-| transform | worker_model | MiniMax M2 |
-| synthesize | architect_model | Claude Opus 4.5 |
-| structure | structurer_model | Claude Sonnet 4.5 |
+| implement | worker_model | worker_model |
+| audit | auditor_model | auditor_model |
+| transform | worker_model | worker_model |
+| synthesize | architect_model | architect_model |
+| structure | structurer_model | structurer_model |
 
 #### Conservative Pre-emption Rules
 
@@ -2056,12 +2056,12 @@ When input exceeds model context limits, the orchestrator applies deterministic 
 
 #### Context Limits
 
-| Model | Max Input Tokens | Max Output Tokens |
-|-------|------------------|-------------------|
-| MiniMax M2 | 16,000 | 4,000 |
-| Kimi K2 | 128,000 | 8,000 |
-| Claude Sonnet 4.5 | 200,000 | 16,000 |
-| Claude Opus 4.5 | 200,000 | 32,000 |
+| Model Alias | Max Input Tokens | Max Output Tokens |
+|-------------|------------------|-------------------|
+| worker_model | 16,000 | 4,000 |
+| auditor_model | 128,000 | 8,000 |
+| structurer_model | 200,000 | 16,000 |
+| architect_model | 200,000 | 32,000 |
 
 #### Overflow Strategies
 
@@ -2202,17 +2202,17 @@ The protocol defines success metrics across four categories with specific target
 interface SuccessMetrics {
     // Correctness (hard requirements)
     correctness: {
-        compilationRate: number;         // Target: 1.0 (100% from Phase II)
+        compilationRate: number;         // Target: 1.0 (100% from Lattice)
         testPassRate: number;            // Target: 0.95 (95%+)
         securityVulnerabilities: number; // Target: 0
     };
 
     // Efficiency (optimization targets)
     efficiency: {
-        costPer1KLOC: number;            // Tracked, no fixed target
-        timePer1KLOC: number;            // Tracked, no fixed target
-        escalationToSonnet: number;      // Target: < 0.10 (10%)
-        escalationToOpus: number;        // Target: < 0.01 (1%)
+        costPer1KLOC: number;                    // Tracked, no fixed target
+        timePer1KLOC: number;                    // Tracked, no fixed target
+        escalationToStructurerModel: number;       // Target: < 0.10 (10%)
+        escalationToArchitectModel: number;        // Target: < 0.01 (1%)
     };
 
     // Reliability
@@ -2234,11 +2234,11 @@ interface SuccessMetrics {
 
 | Category | Metric | Target | Notes |
 |----------|--------|--------|-------|
-| Correctness | Compilation rate | 100% | Hard requirement from Phase II |
+| Correctness | Compilation rate | 100% | Hard requirement from Lattice |
 | Correctness | Test pass rate | ≥ 95% | After Injection complete |
 | Correctness | Security vulns | 0 | No known vulnerabilities |
-| Efficiency | Escalation to Sonnet | < 10% | Of total functions |
-| Efficiency | Escalation to Opus | < 1% | Of total functions |
+| Efficiency | Escalation to structurer_model | < 10% | Of total functions |
+| Efficiency | Escalation to architect_model | < 1% | Of total functions |
 | Reliability | Recovery rate | ≥ 95% | Successful resumes from block |
 | Reliability | Human intervention | < 5% | Of total runs |
 | Quality | Cyclomatic complexity | < 10 | Per function average |
@@ -2311,7 +2311,7 @@ Agents are defined with strict MCP access policies to enforce the "Principle of 
 
 ## 9. Orchestrator Specification
 
-### 8.1 Responsibilities
+### 9.1 Responsibilities
 
 The orchestrator is **deterministic** and performs **classification but not reasoning**:
 
@@ -2337,7 +2337,7 @@ The orchestrator is **deterministic** and performs **classification but not reas
 
 **Blocking Behavior**: On block, the orchestrator persists state, sends a one-time notification (Slack/email), and exits. Human runs `criticality status` or `criticality resume` when ready.
 
-### 8.2 State Hierarchy
+### 9.2 State Hierarchy
 
 The orchestrator uses a **hierarchical state machine** with two levels:
 
@@ -2376,7 +2376,7 @@ ProtocolState
             └── VerifyingSemantics
 ```
 
-### 8.3 State Definitions
+### 9.3 State Definitions
 
 #### Top-Level Protocol State
 
@@ -2586,7 +2586,7 @@ interface VerifyingSemanticsData {
 }
 ```
 
-### 8.4 Transition Definitions
+### 9.4 Transition Definitions
 
 #### Transition Structure
 
@@ -2905,7 +2905,7 @@ type Action =
 └─────────────────────────────────────────────────────────────────────────────┘
 ```
 
-### 8.5 Tick Function
+### 9.5 Tick Function
 
 The orchestrator executes as a loop of atomic "ticks". Each tick is deterministic given the current state and artifacts.
 
@@ -3009,7 +3009,7 @@ async function run(orchestrator: Orchestrator): Promise<RunResult> {
 }
 ```
 
-### 8.6 Persistence and Resume
+### 9.6 Persistence and Resume
 
 #### Persisted State Schema
 
@@ -3161,7 +3161,7 @@ Use ↑/↓ to navigate, Enter to select, or type option number
 
 The interactive approach ensures users see the full context and implications of each resolution option before making a decision, which is particularly important for blocking queries that may have far-reaching effects on the protocol state.
 
-### 8.7 Invariants
+### 9.7 Invariants
 
 The orchestrator maintains these invariants:
 
@@ -3174,7 +3174,7 @@ The orchestrator maintains these invariants:
 | **No Reasoning** | Orchestrator never generates solutions | Only classification and dispatch |
 | **Compile Oracle** | From Lattice onward, code must compile | Guard on phase transitions |
 
-### 8.8 AST Operations
+### 9.8 AST Operations
 
 The orchestrator uses language-specific AST libraries for code manipulation:
 
@@ -3206,7 +3206,7 @@ function injectRustImplementation(skeleton: string, fnName: string, body: string
 }
 ```
 
-### 8.9 Configuration
+### 9.9 Configuration
 
 ```toml
 [orchestrator]
@@ -3307,14 +3307,14 @@ class GoAdapter implements LanguageAdapter { /* ... */ }
 
 | Term | Definition |
 |------|------------|
-| **Criticality** | The property of being compilable; the system maintains criticality from Phase II onward |
+| **Criticality** | The property of being compilable; the system maintains criticality from Lattice onward |
 | **Context Shedding** | Deliberate destruction of conversation history at phase boundaries |
 | **Decision Ledger** | Append-only log of validated decisions that survives phase transitions |
-| **Lattice** | The compilable skeleton produced by Phase II; contains structure but no logic |
+| **Lattice** | The compilable skeleton produced by Lattice; contains structure but no logic |
 | **Micro-Contract** | Formal constraints attached to a function signature |
-| **Ralph Loop** | The stateless implementation loop in Phase III, named after the "Ralph Wiggum Loop" pattern from [awesomeclaude.ai](https://awesomeclaude.ai/ralph-wiggum). Embodies "persistent iteration despite setbacks"—a while loop that repeatedly feeds prompts until completion. Named after The Simpsons character representing relentless determination. |
+| **Ralph Loop** | The stateless implementation loop in Injection, named after the "Ralph Wiggum Loop" pattern from [awesomeclaude.ai](https://awesomeclaude.ai/ralph-wiggum). Embodies "persistent iteration despite setbacks"—a while loop that repeatedly feeds prompts until completion. Named after The Simpsons character representing relentless determination. |
 | **Type Witness** | A type-level encoding of a runtime invariant |
-| **Mass Defect** | The reduction in code size/complexity during Phase IV (physics analogy) |
+| **Mass Defect** | The reduction in code size/complexity during Mass Defect (physics analogy) |
 
 ### Appendix B: File Structure
 

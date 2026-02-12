@@ -16,12 +16,27 @@ import {
 } from './blocking.js';
 import {
   createActiveState,
-  createProtocolState,
-  createBlockingSubstate,
-  isActiveSubstate,
-  isBlockingSubstate,
-  isFailedSubstate,
+  createBlockedState,
+  createCompleteState,
+  isActiveState,
+  isBlockedState,
+  isFailedState,
+  getPhase,
   PROTOCOL_PHASES,
+  createIgnitionPhaseState,
+  createIgnitionInterviewing,
+  createLatticePhaseState,
+  createLatticeGeneratingStructure,
+  createInjectionPhaseState,
+  createInjectionSelectingFunction,
+  createMesoscopicPhaseState,
+  createMesoscopicGeneratingTests,
+  createCompositionAuditPhaseState,
+  createCompositionAuditAuditing,
+  createMassDefectPhaseState,
+  createMassDefectAnalyzingComplexity,
+  type ProtocolPhase,
+  type ProtocolState,
 } from './types.js';
 import { Ledger } from '../ledger/index.js';
 
@@ -31,6 +46,29 @@ describe('Blocking State Management', () => {
   beforeEach(() => {
     ledger = new Ledger({ project: 'test-project' });
   });
+
+  function createActiveStateForPhase(phase: ProtocolPhase): ProtocolState {
+    switch (phase) {
+      case 'Ignition':
+        return createActiveState(
+          createIgnitionPhaseState(createIgnitionInterviewing('Discovery', 0))
+        );
+      case 'Lattice':
+        return createActiveState(createLatticePhaseState(createLatticeGeneratingStructure()));
+      case 'CompositionAudit':
+        return createActiveState(
+          createCompositionAuditPhaseState(createCompositionAuditAuditing(0))
+        );
+      case 'Injection':
+        return createActiveState(createInjectionPhaseState(createInjectionSelectingFunction()));
+      case 'Mesoscopic':
+        return createActiveState(createMesoscopicPhaseState(createMesoscopicGeneratingTests()));
+      case 'MassDefect':
+        return createActiveState(createMassDefectPhaseState(createMassDefectAnalyzingComplexity()));
+      case 'Complete':
+        return createCompleteState([]);
+    }
+  }
 
   describe('generateBlockingQueryId', () => {
     it('generates unique IDs for the same phase', () => {
@@ -51,13 +89,19 @@ describe('Blocking State Management', () => {
   describe('enterBlocking', () => {
     describe('Acceptance Criteria: Any phase can enter blocking state', () => {
       it('can enter blocking from Ignition phase', () => {
-        const state = createActiveState('Ignition');
-        const result = enterBlocking(state, { query: 'Approve spec?' });
+        const state = createActiveState(
+          createIgnitionPhaseState(createIgnitionInterviewing('Discovery', 0))
+        );
+        const result = enterBlocking(state, {
+          reason: 'user_requested',
+          phase: 'Ignition',
+          query: 'Approve spec?',
+        });
 
         expect(result.success).toBe(true);
         if (result.success) {
-          expect(isBlockingSubstate(result.state.substate)).toBe(true);
-          expect(result.state.phase).toBe('Ignition');
+          expect(isBlockedState(result.state)).toBe(true);
+          expect(getPhase(result.state)).toBe('Ignition');
         }
       });
 
@@ -67,20 +111,28 @@ describe('Blocking State Management', () => {
             continue;
           }
 
-          const state = createActiveState(phase);
-          const result = enterBlocking(state, { query: `Block at ${phase}?` });
+          const state = createActiveStateForPhase(phase);
+          const result = enterBlocking(state, {
+            reason: 'user_requested',
+            phase,
+            query: `Block at ${phase}?`,
+          });
 
           expect(result.success).toBe(true);
           if (result.success) {
-            expect(result.state.phase).toBe(phase);
-            expect(isBlockingSubstate(result.state.substate)).toBe(true);
+            expect(getPhase(result.state)).toBe(phase);
+            expect(isBlockedState(result.state)).toBe(true);
           }
         }
       });
 
       it('cannot enter blocking from Complete phase', () => {
-        const state = createActiveState('Complete');
-        const result = enterBlocking(state, { query: 'Block?' });
+        const state = createCompleteState([]);
+        const result = enterBlocking(state, {
+          reason: 'user_requested',
+          phase: 'Complete',
+          query: 'Block?',
+        });
 
         expect(result.success).toBe(false);
         if (!result.success) {
@@ -91,38 +143,48 @@ describe('Blocking State Management', () => {
     });
 
     describe('Acceptance Criteria: Blocking records query and available options', () => {
-      it('records query in blocking substate', () => {
-        const state = createActiveState('Lattice');
-        const result = enterBlocking(state, { query: 'Approve decision graph?' });
+      it('records query in blocked state', () => {
+        const state = createActiveState(
+          createLatticePhaseState(createLatticeGeneratingStructure())
+        );
+        const result = enterBlocking(state, {
+          reason: 'user_requested',
+          phase: 'Lattice',
+          query: 'Approve decision graph?',
+        });
 
         expect(result.success).toBe(true);
         if (result.success) {
-          const substate = result.state.substate;
-          if (isBlockingSubstate(substate)) {
-            expect(substate.query).toBe('Approve decision graph?');
-          }
+          expect(isBlockedState(result.state)).toBe(true);
+          expect(result.state.query).toBe('Approve decision graph?');
         }
       });
 
-      it('records available options in blocking substate', () => {
-        const state = createActiveState('Lattice');
+      it('records available options in blocked state', () => {
+        const state = createActiveState(
+          createLatticePhaseState(createLatticeGeneratingStructure())
+        );
         const result = enterBlocking(state, {
+          reason: 'user_requested',
+          phase: 'Lattice',
           query: 'Choose approach?',
           options: ['Option A', 'Option B', 'Option C'],
         });
 
         expect(result.success).toBe(true);
         if (result.success) {
-          const substate = result.state.substate;
-          if (isBlockingSubstate(substate)) {
-            expect(substate.options).toEqual(['Option A', 'Option B', 'Option C']);
-          }
+          expect(isBlockedState(result.state)).toBe(true);
+          expect(result.state.options).toEqual(['Option A', 'Option B', 'Option C']);
         }
       });
 
       it('records query and options in blocking record', () => {
-        const state = createActiveState('Injection');
+        const state = createActiveState(
+          createInjectionPhaseState(createInjectionSelectingFunction())
+        );
         const result = enterBlocking(state, {
+          reason: 'user_requested',
+          phase: 'Injection',
           query: 'Approve implementation?',
           options: ['Yes', 'No'],
         });
@@ -139,8 +201,12 @@ describe('Blocking State Management', () => {
 
     describe('Example: enter blocking state with query "Approve architecture?"', () => {
       it('enters blocking state with architecture approval query', () => {
-        const state = createActiveState('Lattice');
+        const state = createActiveState(
+          createLatticePhaseState(createLatticeGeneratingStructure())
+        );
         const result = enterBlocking(state, {
+          reason: 'user_requested',
+          phase: 'Lattice',
           query: 'Approve architecture?',
           options: ['Yes', 'No', 'Revise'],
           timeoutMs: 300000, // 5 minutes
@@ -148,15 +214,12 @@ describe('Blocking State Management', () => {
 
         expect(result.success).toBe(true);
         if (result.success) {
-          expect(result.state.phase).toBe('Lattice');
-          expect(isBlockingSubstate(result.state.substate)).toBe(true);
+          expect(getPhase(result.state)).toBe('Lattice');
+          expect(isBlockedState(result.state)).toBe(true);
 
-          const substate = result.state.substate;
-          if (isBlockingSubstate(substate)) {
-            expect(substate.query).toBe('Approve architecture?');
-            expect(substate.options).toEqual(['Yes', 'No', 'Revise']);
-            expect(substate.timeoutMs).toBe(300000);
-          }
+          expect(result.state.query).toBe('Approve architecture?');
+          expect(result.state.options).toEqual(['Yes', 'No', 'Revise']);
+          expect(result.state.timeoutMs).toBe(300000);
 
           expect(result.record.query).toBe('Approve architecture?');
           expect(result.record.options).toEqual(['Yes', 'No', 'Revise']);
@@ -167,8 +230,10 @@ describe('Blocking State Management', () => {
     });
 
     it('uses provided ID if specified', () => {
-      const state = createActiveState('Lattice');
+      const state = createActiveState(createLatticePhaseState(createLatticeGeneratingStructure()));
       const result = enterBlocking(state, {
+        reason: 'user_requested',
+        phase: 'Lattice',
         query: 'Test?',
         id: 'custom-id-123',
       });
@@ -180,11 +245,16 @@ describe('Blocking State Management', () => {
     });
 
     it('returns error if already in blocking state', () => {
-      const state = createProtocolState(
-        'Lattice',
-        createBlockingSubstate({ query: 'Already blocking?' })
-      );
-      const result = enterBlocking(state, { query: 'New query?' });
+      const state = createBlockedState({
+        reason: 'user_requested',
+        phase: 'Lattice',
+        query: 'Already blocking?',
+      });
+      const result = enterBlocking(state, {
+        reason: 'user_requested',
+        phase: 'Lattice',
+        query: 'New query?',
+      });
 
       expect(result.success).toBe(false);
       if (!result.success) {
@@ -194,9 +264,15 @@ describe('Blocking State Management', () => {
     });
 
     it('records blockedAt timestamp', () => {
-      const state = createActiveState('Mesoscopic');
+      const state = createActiveState(
+        createMesoscopicPhaseState(createMesoscopicGeneratingTests())
+      );
       const before = Date.now();
-      const result = enterBlocking(state, { query: 'Block?' });
+      const result = enterBlocking(state, {
+        reason: 'user_requested',
+        phase: 'Mesoscopic',
+        query: 'Block?',
+      });
       const after = Date.now();
 
       expect(result.success).toBe(true);
@@ -211,9 +287,12 @@ describe('Blocking State Management', () => {
   describe('resolveBlocking', () => {
     describe('Acceptance Criteria: Resolution unblocks and records decision to ledger', () => {
       it('transitions to active state on resolution', () => {
-        // Enter blocking state
-        const activeState = createActiveState('Lattice');
+        const activeState = createActiveState(
+          createLatticePhaseState(createLatticeGeneratingStructure())
+        );
         const enterResult = enterBlocking(activeState, {
+          reason: 'user_requested',
+          phase: 'Lattice',
           query: 'Approve?',
           options: ['Yes', 'No'],
         });
@@ -223,7 +302,6 @@ describe('Blocking State Management', () => {
           return;
         }
 
-        // Resolve blocking state
         const resolveResult = resolveBlocking(
           enterResult.state,
           enterResult.record,
@@ -233,14 +311,18 @@ describe('Blocking State Management', () => {
 
         expect(resolveResult.success).toBe(true);
         if (resolveResult.success) {
-          expect(isActiveSubstate(resolveResult.state.substate)).toBe(true);
-          expect(resolveResult.state.phase).toBe('Lattice');
+          expect(isActiveState(resolveResult.state)).toBe(true);
+          expect(getPhase(resolveResult.state)).toBe('Lattice');
         }
       });
 
       it('records decision to ledger with human_resolution source', () => {
-        const activeState = createActiveState('Injection');
+        const activeState = createActiveState(
+          createInjectionPhaseState(createInjectionSelectingFunction())
+        );
         const enterResult = enterBlocking(activeState, {
+          reason: 'user_requested',
+          phase: 'Injection',
           query: 'Proceed?',
           options: ['Yes', 'No'],
         });
@@ -271,8 +353,12 @@ describe('Blocking State Management', () => {
 
     describe('Example: resolve blocking state records human decision', () => {
       it('resolves architecture approval and records to ledger', () => {
-        const activeState = createActiveState('Lattice');
+        const activeState = createActiveState(
+          createLatticePhaseState(createLatticeGeneratingStructure())
+        );
         const enterResult = enterBlocking(activeState, {
+          reason: 'user_requested',
+          phase: 'Lattice',
           query: 'Approve architecture?',
           options: ['Yes', 'No', 'Revise'],
         });
@@ -295,7 +381,7 @@ describe('Blocking State Management', () => {
         expect(resolveResult.success).toBe(true);
         if (resolveResult.success) {
           // State is back to active
-          expect(isActiveSubstate(resolveResult.state.substate)).toBe(true);
+          expect(isActiveState(resolveResult.state)).toBe(true);
 
           // Decision is recorded
           expect(resolveResult.decision.constraint).toContain('Approve architecture?');
@@ -315,8 +401,12 @@ describe('Blocking State Management', () => {
     });
 
     it('validates response is in options when options provided', () => {
-      const activeState = createActiveState('Lattice');
+      const activeState = createActiveState(
+        createLatticePhaseState(createLatticeGeneratingStructure())
+      );
       const enterResult = enterBlocking(activeState, {
+        reason: 'user_requested',
+        phase: 'Lattice',
         query: 'Choose?',
         options: ['A', 'B', 'C'],
       });
@@ -342,8 +432,12 @@ describe('Blocking State Management', () => {
     });
 
     it('allows custom response when allowCustomResponse is true', () => {
-      const activeState = createActiveState('Lattice');
+      const activeState = createActiveState(
+        createLatticePhaseState(createLatticeGeneratingStructure())
+      );
       const enterResult = enterBlocking(activeState, {
+        reason: 'user_requested',
+        phase: 'Lattice',
         query: 'Choose?',
         options: ['A', 'B'],
       });
@@ -367,7 +461,9 @@ describe('Blocking State Management', () => {
     });
 
     it('returns error if not in blocking state', () => {
-      const activeState = createActiveState('Lattice');
+      const activeState = createActiveState(
+        createLatticePhaseState(createLatticeGeneratingStructure())
+      );
       const record = {
         id: 'test-id',
         phase: 'Lattice' as const,
@@ -385,7 +481,11 @@ describe('Blocking State Management', () => {
     });
 
     it('returns error if already resolved', () => {
-      const state = createProtocolState('Lattice', createBlockingSubstate({ query: 'Test?' }));
+      const state = createBlockedState({
+        reason: 'user_requested',
+        phase: 'Lattice',
+        query: 'Test?',
+      });
       const record: BlockingRecord = {
         id: 'test-id',
         phase: 'Lattice' as const,
@@ -497,10 +597,12 @@ describe('Blocking State Management', () => {
   describe('handleTimeout', () => {
     describe('Negative case: timeout on blocked state triggers appropriate handling', () => {
       it('handles timeout with escalate strategy', () => {
-        const state = createProtocolState(
-          'Lattice',
-          createBlockingSubstate({ query: 'Test?', timeoutMs: 60000 })
-        );
+        const state = createBlockedState({
+          reason: 'user_requested',
+          phase: 'Lattice',
+          query: 'Test?',
+          timeoutMs: 60000,
+        });
         const record = {
           id: 'test-id',
           phase: 'Lattice' as const,
@@ -519,10 +621,13 @@ describe('Blocking State Management', () => {
       });
 
       it('handles timeout with default strategy', () => {
-        const state = createProtocolState(
-          'Lattice',
-          createBlockingSubstate({ query: 'Test?', options: ['Yes', 'No'], timeoutMs: 60000 })
-        );
+        const state = createBlockedState({
+          reason: 'user_requested',
+          phase: 'Lattice',
+          query: 'Test?',
+          options: ['Yes', 'No'],
+          timeoutMs: 60000,
+        });
         const record = {
           id: 'test-id',
           phase: 'Lattice' as const,
@@ -546,7 +651,7 @@ describe('Blocking State Management', () => {
 
         expect(result.success).toBe(true);
         if (result.success) {
-          expect(isActiveSubstate(result.state.substate)).toBe(true);
+          expect(isActiveState(result.state)).toBe(true);
           expect(result.record.resolved).toBe(true);
           expect(result.record.resolution?.response).toBe('No');
           expect(result.decision).toBeDefined();
@@ -555,10 +660,12 @@ describe('Blocking State Management', () => {
       });
 
       it('handles timeout with fail strategy', () => {
-        const state = createProtocolState(
-          'Injection',
-          createBlockingSubstate({ query: 'Critical decision?', timeoutMs: 30000 })
-        );
+        const state = createBlockedState({
+          reason: 'user_requested',
+          phase: 'Injection',
+          query: 'Critical decision?',
+          timeoutMs: 30000,
+        });
         const record = {
           id: 'test-id',
           phase: 'Injection' as const,
@@ -572,11 +679,11 @@ describe('Blocking State Management', () => {
 
         expect(result.success).toBe(true);
         if (result.success) {
-          expect(isFailedSubstate(result.state.substate)).toBe(true);
-          if (isFailedSubstate(result.state.substate)) {
-            expect(result.state.substate.error).toContain('Timeout');
-            expect(result.state.substate.code).toBe('BLOCKING_TIMEOUT');
-            expect(result.state.substate.recoverable).toBe(true);
+          expect(isFailedState(result.state)).toBe(true);
+          if (isFailedState(result.state)) {
+            expect(result.state.error).toContain('Timeout');
+            expect(result.state.code).toBe('BLOCKING_TIMEOUT');
+            expect(result.state.recoverable).toBe(true);
           }
           expect(result.record.resolved).toBe(true);
           expect(result.record.resolution?.response).toBe('TIMEOUT_FAILURE');
@@ -585,7 +692,7 @@ describe('Blocking State Management', () => {
     });
 
     it('returns error if not in blocking state', () => {
-      const state = createActiveState('Lattice');
+      const state = createActiveState(createLatticePhaseState(createLatticeGeneratingStructure()));
       const record = {
         id: 'test-id',
         phase: 'Lattice' as const,
@@ -604,7 +711,11 @@ describe('Blocking State Management', () => {
     });
 
     it('returns error if no timeout configured', () => {
-      const state = createProtocolState('Lattice', createBlockingSubstate({ query: 'Test?' }));
+      const state = createBlockedState({
+        reason: 'user_requested',
+        phase: 'Lattice',
+        query: 'Test?',
+      });
       const record = {
         id: 'test-id',
         phase: 'Lattice' as const,
@@ -622,10 +733,12 @@ describe('Blocking State Management', () => {
     });
 
     it('returns error for default strategy without defaultResponse', () => {
-      const state = createProtocolState(
-        'Lattice',
-        createBlockingSubstate({ query: 'Test?', timeoutMs: 60000 })
-      );
+      const state = createBlockedState({
+        reason: 'user_requested',
+        phase: 'Lattice',
+        query: 'Test?',
+        timeoutMs: 60000,
+      });
       const record = {
         id: 'test-id',
         phase: 'Lattice' as const,
@@ -755,8 +868,12 @@ describe('Blocking State Management', () => {
   describe('Integration: Full blocking workflow', () => {
     it('completes full workflow: enter -> check timeout -> resolve', () => {
       // 1. Enter blocking state
-      const activeState = createActiveState('Lattice');
+      const activeState = createActiveState(
+        createLatticePhaseState(createLatticeGeneratingStructure())
+      );
       const enterResult = enterBlocking(activeState, {
+        reason: 'user_requested',
+        phase: 'Lattice',
         query: 'Approve architecture?',
         options: ['Yes', 'No', 'Revise'],
         timeoutMs: 300000,
@@ -788,8 +905,8 @@ describe('Blocking State Management', () => {
       expect(resolveResult.success).toBe(true);
       if (resolveResult.success) {
         // State is back to active
-        expect(isActiveSubstate(resolveResult.state.substate)).toBe(true);
-        expect(resolveResult.state.phase).toBe('Lattice');
+        expect(isActiveState(resolveResult.state)).toBe(true);
+        expect(getPhase(resolveResult.state)).toBe('Lattice');
 
         // Record is updated
         expect(resolveResult.record.resolved).toBe(true);
@@ -806,15 +923,14 @@ describe('Blocking State Management', () => {
 
     it('handles timeout workflow: enter -> timeout -> handle', () => {
       // 1. Create a blocking state that has already timed out
+      const state = createBlockedState({
+        reason: 'user_requested',
+        phase: 'Injection',
+        query: 'Approve implementation?',
+        options: ['Yes', 'No'],
+        timeoutMs: 60000,
+      });
       const blockedAt = new Date(Date.now() - 120000).toISOString(); // 2 minutes ago
-      const state = createProtocolState(
-        'Injection',
-        createBlockingSubstate({
-          query: 'Approve implementation?',
-          options: ['Yes', 'No'],
-          timeoutMs: 60000,
-        })
-      );
       const record = {
         id: 'timeout-test',
         phase: 'Injection' as const,
@@ -843,7 +959,7 @@ describe('Blocking State Management', () => {
 
       expect(handleResult.success).toBe(true);
       if (handleResult.success) {
-        expect(isActiveSubstate(handleResult.state.substate)).toBe(true);
+        expect(isActiveState(handleResult.state)).toBe(true);
         expect(handleResult.decision?.constraint).toContain('No');
         expect(handleResult.decision?.rationale).toContain('Timeout');
       }
@@ -871,8 +987,12 @@ describe('Blocking State Management', () => {
       ];
 
       for (const { phase, expectedDecisionPhase } of testCases) {
-        const state = createActiveState(phase);
-        const enterResult = enterBlocking(state, { query: 'Test?' });
+        const state = createActiveStateForPhase(phase);
+        const enterResult = enterBlocking(state, {
+          reason: 'user_requested',
+          phase,
+          query: 'Test?',
+        });
 
         expect(enterResult.success).toBe(true);
         if (!enterResult.success) {

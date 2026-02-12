@@ -21,6 +21,7 @@ export type {
   HistoryQueryOptions,
   DependencyGraphQueryOptions,
   DependencyGraphResult,
+  ValidationProof,
 } from './types.js';
 
 export {
@@ -41,10 +42,15 @@ export type {
   LedgerOptions,
   SupersedeOptions,
   InvalidateOptions,
+  ReinstateOptions,
   AppendOptions,
   CascadeReport,
   CascadeAffectedDecision,
 } from './ledger.js';
+
+export { formatLedgerForPrompt } from './formatter.js';
+
+export type { FormatLedgerOptions } from './formatter.js';
 
 export {
   LedgerSerializationError,

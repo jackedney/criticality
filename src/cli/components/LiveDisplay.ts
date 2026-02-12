@@ -2,7 +2,7 @@
  * Live display component for protocol execution.
  *
  * Provides real-time terminal updates using @opentui/core with:
- * - Animated spinner with phase/task/operation hierarchy
+ * - Animated spinner with phase/step hierarchy
  * - Elapsed time counter updating every second
  * - Recent log entries (last 3-5 lines) below spinner
  * - Efficient rendering without flicker
@@ -11,8 +11,16 @@
  * @packageDocumentation
  */
 
-import type { ProtocolPhase, ProtocolSubstate } from '../../protocol/types.js';
-import { isActiveSubstate } from '../../protocol/types.js';
+import type { ProtocolState } from '../../protocol/types.js';
+import {
+  getPhase,
+  getStep,
+  isActiveState,
+  isBlockedState,
+  isFailedState,
+  formatStepName,
+  formatBlockReasonLabel,
+} from '../../protocol/types.js';
 
 /**
  * Live display configuration options.
@@ -60,8 +68,13 @@ export class LiveDisplay {
   private logBuffer: LogEntry[] = [];
   private readonly maxLogEntries: number;
   private readonly options: LiveDisplayOptions;
-  private phase: ProtocolPhase = 'Ignition';
-  private substate: ProtocolSubstate = { kind: 'Active' };
+  private protocolState: ProtocolState = {
+    kind: 'Active',
+    phase: {
+      phase: 'Ignition',
+      substate: { step: 'interviewing', interviewPhase: 'Discovery', questionIndex: 0 },
+    },
+  };
   private isRunning = false;
   private isTty: boolean;
   private lastOutput: string = '';
@@ -90,14 +103,14 @@ export class LiveDisplay {
         this.currentFrame =
           (this.currentFrame + 1) %
           (this.options.unicode ? SPINNER_FRAMES.length : ASCII_SPINNER_FRAMES.length);
-        this.update();
+        this.render();
       }, 100);
 
       this.timerInterval = setInterval(() => {
-        this.update();
+        this.render();
       }, 1000);
 
-      this.update();
+      this.render();
     } else {
       process.stdout.write(this.getStaticDisplay() + '\n');
     }
@@ -126,16 +139,15 @@ export class LiveDisplay {
   }
 
   /**
-   * Update the phase and substate.
+   * Update the displayed protocol state.
    *
-   * @param phase - The protocol phase.
-   * @param substate - The protocol substate.
+   * @param state - The current protocol state.
    */
-  updatePhase(phase: ProtocolPhase, substate: ProtocolSubstate): void {
-    this.phase = phase;
-    this.substate = substate;
-    this.addLog(`Phase: ${phase} > ${this.formatSubstate(substate)}`);
-    this.update();
+  updatePhase(state: ProtocolState): void {
+    this.protocolState = state;
+    const phase = getPhase(state) ?? 'Complete';
+    this.addLog(`Phase: ${phase}: ${this.formatState(state)}`);
+    this.render();
   }
 
   /**
@@ -155,13 +167,13 @@ export class LiveDisplay {
       this.logBuffer.shift();
     }
 
-    this.update();
+    this.render();
   }
 
   /**
    * Update the display output.
    */
-  private update(): void {
+  private render(): void {
     if (!this.isRunning || !this.isTty) {
       return;
     }
@@ -224,8 +236,9 @@ export class LiveDisplay {
    * @returns The formatted static display text.
    */
   private getStaticDisplay(): string {
+    const phase = getPhase(this.protocolState) ?? 'Complete';
     const timeLine = this.getElapsedTimeLine();
-    return `${this.phase} > ${this.formatSubstate(this.substate)}\n${timeLine}`;
+    return `${phase}: ${this.formatState(this.protocolState)}\n${timeLine}`;
   }
 
   /**
@@ -236,9 +249,10 @@ export class LiveDisplay {
   private getSpinnerLine(): string {
     const frames = this.options.unicode ? SPINNER_FRAMES : ASCII_SPINNER_FRAMES;
     const frame = frames[this.currentFrame % frames.length] ?? frames[0];
-    const substateText = this.formatSubstate(this.substate);
+    const phase = getPhase(this.protocolState) ?? 'Complete';
+    const stateText = this.formatState(this.protocolState);
 
-    return `${frame} ${this.phase}${substateText !== 'active' ? ' > ' + substateText : ''}`;
+    return `${frame} ${phase}${stateText !== 'active' ? ': ' + stateText : ''}`;
   }
 
   /**
@@ -286,34 +300,29 @@ export class LiveDisplay {
   }
 
   /**
-   * Format the substate for display.
+   * Format the protocol state for display.
    *
-   * @param substate - The protocol substate.
-   * @returns Formatted substate string.
+   * @param state - The protocol state.
+   * @returns Formatted state string.
    */
-  private formatSubstate(substate: ProtocolSubstate): string {
-    const kind = substate.kind;
-    if (kind === 'Active') {
-      if (isActiveSubstate(substate)) {
-        const parts: string[] = [];
-        if (substate.task !== undefined) {
-          parts.push(substate.task);
-        }
-        if (substate.operation !== undefined) {
-          parts.push(substate.operation);
-        }
-        if (parts.length === 0) {
-          return 'active';
-        }
-        return parts.join(' > ');
+  private formatState(state: ProtocolState): string {
+    if (isActiveState(state)) {
+      const step = getStep(state);
+      if (step !== undefined) {
+        return formatStepName(step);
       }
       return 'active';
     }
-    if (kind === 'Blocking') {
-      const query = substate.query;
-      return `blocked: ${query.substring(0, 30)}${query.length > 30 ? '...' : ''}`;
+
+    if (isBlockedState(state)) {
+      return `Blocked: ${formatBlockReasonLabel(state.reason)}`;
     }
-    const error = substate.error;
-    return `failed: ${error.substring(0, 30)}${error.length > 30 ? '...' : ''}`;
+
+    if (isFailedState(state)) {
+      const error = state.error;
+      return `failed: ${error.substring(0, 30)}${error.length > 30 ? '...' : ''}`;
+    }
+
+    return 'Complete';
   }
 }

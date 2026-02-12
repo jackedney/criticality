@@ -1,8 +1,8 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { NotificationService } from './service.js';
 import type { BlockingRecord } from '../protocol/blocking.js';
-import type { ProtocolState } from '../protocol/types.js';
 import type { NotificationConfig } from '../config/types.js';
+import type { WebhookProtocolState } from './types.js';
 
 describe('NotificationService', () => {
   let mockFetch: ReturnType<typeof vi.fn>;
@@ -250,7 +250,7 @@ describe('NotificationService', () => {
       const body = JSON.parse(callArgs[1].body as string) as {
         readonly event: string;
         readonly blocking_record: BlockingRecord;
-        readonly protocol_state: ProtocolState;
+        readonly protocol_state: WebhookProtocolState;
         readonly timestamp: string;
       };
 
@@ -258,9 +258,7 @@ describe('NotificationService', () => {
       expect(body.blocking_record).toEqual(blockingRecord);
       expect(body.protocol_state.phase).toBe('Lattice');
       expect(body.protocol_state.substate.kind).toBe('Blocking');
-      if (body.protocol_state.substate.kind === 'Blocking') {
-        expect(body.protocol_state.substate.query).toBe('Approve architecture?');
-      }
+      expect(body.protocol_state.substate.query).toBe('Approve architecture?');
       expect(typeof body.timestamp).toBe('string');
     });
 
@@ -294,14 +292,12 @@ describe('NotificationService', () => {
       expect(result.allSucceeded).toBe(true);
       const callArgs = mockFetch.mock.calls[0] as [string, RequestInit];
       const body = JSON.parse(callArgs[1].body as string) as {
-        readonly protocol_state: ProtocolState;
+        readonly protocol_state: WebhookProtocolState;
       };
 
       expect(body.protocol_state.substate.kind).toBe('Blocking');
-      if (body.protocol_state.substate.kind === 'Blocking') {
-        expect(body.protocol_state.substate.options).toBeUndefined();
-        expect(body.protocol_state.substate.timeoutMs).toBeUndefined();
-      }
+      expect(body.protocol_state.substate.options).toBeUndefined();
+      expect(body.protocol_state.substate.timeoutMs).toBeUndefined();
     });
 
     it('should return aggregate result with channel details', async () => {
@@ -367,9 +363,9 @@ describe('NotificationService', () => {
       const service = new NotificationService(config);
       mockFetch.mockResolvedValue({ ok: true, status: 200 });
 
-      const protocolState: ProtocolState = {
-        phase: 'Complete',
-        substate: { kind: 'Active' },
+      const protocolState = {
+        kind: 'Complete' as const,
+        artifacts: [],
       };
 
       const result = await service.notify('complete', protocolState);
@@ -378,12 +374,13 @@ describe('NotificationService', () => {
       const callArgs = mockFetch.mock.calls[0] as [string, RequestInit];
       const body = JSON.parse(callArgs[1].body as string) as {
         readonly event: string;
-        readonly protocol_state: ProtocolState;
+        readonly protocol_state: WebhookProtocolState;
         readonly blocking_record?: BlockingRecord;
       };
 
       expect(body.event).toBe('complete');
-      expect(body.protocol_state).toEqual(protocolState);
+      expect(body.protocol_state.phase).toBe('Complete');
+      expect(body.protocol_state.substate.kind).toBe('Active');
       expect(body.blocking_record).toBeUndefined();
     });
 
@@ -404,14 +401,12 @@ describe('NotificationService', () => {
       const service = new NotificationService(config);
       mockFetch.mockResolvedValue({ ok: true, status: 200 });
 
-      const protocolState: ProtocolState = {
-        phase: 'Injection',
-        substate: {
-          kind: 'Failed',
-          error: 'Test error',
-          failedAt: '2024-02-07T12:00:00Z',
-          recoverable: true,
-        },
+      const protocolState = {
+        kind: 'Failed' as const,
+        phase: 'Injection' as const,
+        error: 'Test error',
+        failedAt: '2024-02-07T12:00:00Z',
+        recoverable: true,
       };
 
       const result = await service.notify('error', protocolState);
@@ -420,11 +415,13 @@ describe('NotificationService', () => {
       const callArgs = mockFetch.mock.calls[0] as [string, RequestInit];
       const body = JSON.parse(callArgs[1].body as string) as {
         readonly event: string;
-        readonly protocol_state: ProtocolState;
+        readonly protocol_state: WebhookProtocolState;
       };
 
       expect(body.event).toBe('error');
-      expect(body.protocol_state).toEqual(protocolState);
+      expect(body.protocol_state.phase).toBe('Injection');
+      expect(body.protocol_state.substate.kind).toBe('Failed');
+      expect(body.protocol_state.substate.error).toBe('Test error');
     });
   });
 

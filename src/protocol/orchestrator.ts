@@ -1,7 +1,7 @@
 /**
  * Protocol orchestrator tick loop module.
  *
- * Implements the tick loop execution model as specified in orch_006:
+ * Implements of tick loop execution model as specified in orch_006:
  * Each tick evaluates guards, executes one transition, and persists state.
  *
  * The orchestrator is deterministic and performs no reasoning (orch_001).
@@ -19,11 +19,22 @@ import { transition, getValidTransitions, REQUIRED_ARTIFACTS } from './transitio
 import { checkTimeout } from './blocking.js';
 import { saveState } from './persistence.js';
 import { getStartupState } from './checkpoint.js';
-import { createActiveSubstate, createFailedSubstate } from './types.js';
+import * as path from 'node:path';
+import {
+  createActiveState,
+  createFailedState,
+  type BlockedState,
+  isBlockedState,
+  isCompleteState,
+  isFailedState,
+  isActiveState,
+  getPhase,
+  type PhaseState,
+} from './types.js';
 
 /**
  * Guard function type.
- * Guards evaluate conditions and return true if the transition should proceed.
+ * Guards evaluate conditions and return true if transition should proceed.
  */
 export type Guard = (context: TickContext) => boolean;
 
@@ -37,13 +48,13 @@ export type Action = (context: TickContext) => Promise<ActionResult>;
  * Result of executing an action.
  */
 export interface ActionResult {
-  /** Whether the action succeeded. */
+  /** Whether action succeeded. */
   readonly success: boolean;
-  /** New artifacts produced by the action. */
+  /** New artifacts produced by action. */
   readonly artifacts?: readonly ArtifactType[];
   /** Error message if action failed. */
   readonly error?: string;
-  /** Whether the error is recoverable. */
+  /** Whether error is recoverable. */
   readonly recoverable?: boolean;
 }
 
@@ -180,8 +191,8 @@ export const Guards = {
     (ctx) =>
       artifacts.every((a) => ctx.artifacts.has(a)),
 
-  /** Guard that checks if in active substate. */
-  isActive: (): Guard => (ctx) => ctx.snapshot.state.substate.kind === 'Active',
+  /** Guard that checks if in active state. */
+  isActive: (): Guard => (ctx) => isActiveState(ctx.snapshot.state),
 
   /** Guard that checks if blocking is resolved. */
   blockingResolved: (): Guard => (ctx) => ctx.pendingResolutions.length > 0,
@@ -253,6 +264,60 @@ export const Actions = {
 };
 
 /**
+ * Creates a default PhaseState for a given phase, used when resolving blocked states.
+ *
+ * @param phase - The protocol phase.
+ * @returns A PhaseState with the default substate for that phase.
+ */
+function createDefaultPhaseStateForResolution(phase: ProtocolPhase): PhaseState {
+  switch (phase) {
+    case 'Ignition':
+      return {
+        phase: 'Ignition',
+        substate: {
+          step: 'interviewing' as const,
+          interviewPhase: 'Discovery' as const,
+          questionIndex: 0,
+        },
+      };
+    case 'Lattice':
+      return {
+        phase: 'Lattice',
+        substate: { step: 'generatingStructure' as const },
+      };
+    case 'CompositionAudit':
+      return {
+        phase: 'CompositionAudit',
+        substate: { step: 'auditing' as const, auditorsCompleted: 0 },
+      };
+    case 'Injection':
+      return {
+        phase: 'Injection',
+        substate: { step: 'selectingFunction' as const },
+      };
+    case 'Mesoscopic':
+      return {
+        phase: 'Mesoscopic',
+        substate: { step: 'generatingTests' as const },
+      };
+    case 'MassDefect':
+      return {
+        phase: 'MassDefect',
+        substate: { step: 'analyzingComplexity' as const },
+      };
+    case 'Complete':
+      return {
+        phase: 'Ignition',
+        substate: {
+          step: 'interviewing' as const,
+          interviewPhase: 'Discovery' as const,
+          questionIndex: 0,
+        },
+      };
+  }
+}
+
+/**
  * Get required artifacts for transitioning to a phase.
  *
  * @param toPhase - The target phase.
@@ -288,13 +353,13 @@ function hasRequiredArtifacts(
  */
 export async function executeTick(context: TickContext, statePath: string): Promise<TickResult> {
   const { snapshot, notificationService } = context;
-  const { phase, substate } = snapshot.state;
+  const state = snapshot.state;
 
   // Check if already complete
-  if (phase === 'Complete') {
+  if (isCompleteState(state)) {
     try {
       if (notificationService !== undefined) {
-        await notificationService.notify('complete', snapshot.state);
+        await notificationService.notify('complete', state);
       }
     } catch {
       // Notification failure should not block protocol execution
@@ -308,10 +373,10 @@ export async function executeTick(context: TickContext, statePath: string): Prom
   }
 
   // Check if in failed state
-  if (substate.kind === 'Failed') {
+  if (isFailedState(state)) {
     try {
       if (notificationService !== undefined) {
-        await notificationService.notify('error', snapshot.state);
+        await notificationService.notify('error', state);
       }
     } catch {
       // Notification failure should not block protocol execution
@@ -321,31 +386,33 @@ export async function executeTick(context: TickContext, statePath: string): Prom
       snapshot,
       shouldContinue: false,
       stopReason: 'FAILED',
-      error: substate.error,
+      error: state.error,
     };
   }
 
   // Check if in blocking state
-  if (substate.kind === 'Blocking') {
+  if (isBlockedState(state)) {
+    const blockedState = state;
+
     // Warn about unexpected blocking in Complete phase
-    if (snapshot.state.phase === 'Complete') {
+    if (getPhase(state) === 'Complete') {
       // eslint-disable-next-line no-console
-      console.warn(`⚠ Unexpected blocking state in Complete phase. Query: "${substate.query}"`);
+      console.warn(`⚠ Unexpected blocking state in Complete phase. Query: "${blockedState.query}"`);
     }
 
     // Build a BlockingRecord for timeout checking
     const blockingRecordBase: BlockingRecord = {
-      id: `blocking-${snapshot.state.phase}`,
-      phase: snapshot.state.phase,
-      query: substate.query,
-      blockedAt: substate.blockedAt,
+      id: `blocking-${blockedState.phase}`,
+      phase: blockedState.phase,
+      query: blockedState.query,
+      blockedAt: blockedState.blockedAt,
       resolved: false,
     };
 
     // Add optional timeoutMs if present
     const blockingRecord: BlockingRecord =
-      substate.timeoutMs !== undefined
-        ? { ...blockingRecordBase, timeoutMs: substate.timeoutMs }
+      blockedState.timeoutMs !== undefined
+        ? { ...blockingRecordBase, timeoutMs: blockedState.timeoutMs }
         : blockingRecordBase;
 
     // Check for timeout
@@ -353,15 +420,16 @@ export async function executeTick(context: TickContext, statePath: string): Prom
 
     if (timeoutCheck.timedOut) {
       // Handle timeout by transitioning to failed state
-      const failedSubstate = createFailedSubstate({
-        error: `Blocking query timed out: ${substate.query}`,
+      const failedState = createFailedState({
+        phase: blockedState.phase,
+        error: `Blocking query timed out: ${blockedState.query}`,
         code: 'TIMEOUT',
         recoverable: true,
       });
 
       const newSnapshot: ProtocolStateSnapshot = {
         ...snapshot,
-        state: { phase, substate: failedSubstate },
+        state: failedState,
       };
 
       await saveState(newSnapshot, statePath);
@@ -379,7 +447,7 @@ export async function executeTick(context: TickContext, statePath: string): Prom
         snapshot: newSnapshot,
         shouldContinue: false,
         stopReason: 'FAILED',
-        error: `Blocking query timed out after ${String(substate.timeoutMs ?? 0)}ms`,
+        error: `Blocking query timed out after ${String(blockedState.timeoutMs ?? 0)}ms`,
       };
     }
 
@@ -388,10 +456,14 @@ export async function executeTick(context: TickContext, statePath: string): Prom
     if (context.pendingResolutions.length > 0) {
       const resolution = context.pendingResolutions[0];
       if (resolution !== undefined) {
-        const activeSubstate = createActiveSubstate();
+        // Create active state with the default substate for the blocked phase
+        const blockedPhase = blockedState.phase;
+        const phaseState = createDefaultPhaseStateForResolution(blockedPhase);
+        const activeState = createActiveState(phaseState);
+
         const newSnapshot: ProtocolStateSnapshot = {
           ...snapshot,
-          state: { phase, substate: activeSubstate },
+          state: activeState,
           blockingQueries: snapshot.blockingQueries.filter((q) => q.id !== resolution.queryId),
         };
 
@@ -415,6 +487,16 @@ export async function executeTick(context: TickContext, statePath: string): Prom
   }
 
   // In active state - evaluate possible transitions
+  const phase = getPhase(state);
+  if (phase === undefined) {
+    return {
+      transitioned: false,
+      snapshot,
+      shouldContinue: false,
+      stopReason: 'NO_VALID_TRANSITION',
+    };
+  }
+
   const validTargets = getValidTransitions(phase);
 
   if (validTargets.length === 0) {
@@ -427,10 +509,14 @@ export async function executeTick(context: TickContext, statePath: string): Prom
   }
 
   // Check for valid forward transition based on artifacts
+  // Derive projectRoot from statePath (assuming <projectRoot>/.criticality/state.json)
+  const criticalityDir = path.dirname(statePath);
+  const projectRoot = path.dirname(criticalityDir);
+
   for (const targetPhase of validTargets) {
     if (hasRequiredArtifacts(targetPhase, context.artifacts)) {
       // Attempt transition
-      const transitionResult = transition(snapshot.state, targetPhase, {
+      const transitionResult = await transition(state, targetPhase, projectRoot, {
         artifacts: { available: context.artifacts },
       });
 
@@ -444,7 +530,7 @@ export async function executeTick(context: TickContext, statePath: string): Prom
         await saveState(newSnapshot, statePath);
 
         // Send phase_change notification if phase changed
-        if (snapshot.state.phase !== newSnapshot.state.phase) {
+        if (phase !== targetPhase) {
           try {
             if (notificationService !== undefined) {
               // Create a pseudo-BlockingRecord for phase_change event
@@ -459,7 +545,7 @@ export async function executeTick(context: TickContext, statePath: string): Prom
         return {
           transitioned: true,
           snapshot: newSnapshot,
-          shouldContinue: transitionResult.state.phase !== 'Complete',
+          shouldContinue: !isCompleteState(transitionResult.state),
         };
       }
     }
@@ -501,7 +587,9 @@ export async function createOrchestrator(options: OrchestratorOptions): Promise<
   };
 
   // Mutable state for collected artifacts and resolutions
-  const collectedArtifacts = new Set<ArtifactType>(currentSnapshot.artifacts);
+  const collectedArtifacts = new Set<ArtifactType>(
+    currentSnapshot.artifacts as readonly ArtifactType[]
+  );
   const pendingResolutions: BlockingResolution[] = [];
 
   /**
@@ -523,13 +611,12 @@ export async function createOrchestrator(options: OrchestratorOptions): Promise<
       notificationService !== undefined &&
       orchestratorState.previousSnapshot !== undefined &&
       result.transitioned &&
-      result.snapshot.state.substate.kind === 'Blocking' &&
-      orchestratorState.previousSnapshot.state.substate.kind !== 'Blocking'
+      isBlockedState(result.snapshot.state) &&
+      !isBlockedState(orchestratorState.previousSnapshot.state)
     ) {
       try {
-        const { phase } = result.snapshot.state;
-        const substate = result.snapshot.state.substate;
-        const { query, blockedAt, options, timeoutMs } = substate;
+        const blockedState = result.snapshot.state;
+        const { phase, query, blockedAt, options, timeoutMs } = blockedState;
         const blockingRecord: BlockingRecord = {
           id: `blocking-${phase}`,
           phase,
@@ -560,7 +647,7 @@ export async function createOrchestrator(options: OrchestratorOptions): Promise<
   }
 
   /**
-   * Run the tick loop until completion, blocking, or failure.
+   * Run tick loop until completion, blocking, or failure.
    */
   async function run(): Promise<TickResult> {
     orchestratorState.running = true;
@@ -586,7 +673,7 @@ export async function createOrchestrator(options: OrchestratorOptions): Promise<
   }
 
   /**
-   * Add an artifact to the available set.
+   * Add an artifact to available set.
    */
   function addArtifact(artifact: ArtifactType): void {
     collectedArtifacts.add(artifact);
@@ -596,7 +683,8 @@ export async function createOrchestrator(options: OrchestratorOptions): Promise<
    * Add a blocking resolution.
    */
   function addResolution(response: string): void {
-    const currentPhase = currentSnapshot.state.phase;
+    const blockedState = currentSnapshot.state as BlockedState;
+    const currentPhase = blockedState.phase;
 
     const blockingQuery = currentSnapshot.blockingQueries.find(
       (q) => q.phase === currentPhase && !q.resolved
@@ -627,33 +715,36 @@ export async function createOrchestrator(options: OrchestratorOptions): Promise<
  * @returns Human-readable status information.
  */
 export function getProtocolStatus(snapshot: ProtocolStateSnapshot): {
-  phase: ProtocolPhase;
+  phase: ProtocolPhase | undefined;
   substate: string;
-  artifacts: readonly ArtifactType[];
+  artifacts: readonly string[];
   blocking: { query: string; blockedAt: string } | undefined;
   failed: { error: string; recoverable: boolean } | undefined;
 } {
   const { state, artifacts } = snapshot;
-  const { phase, substate } = state;
+  const phase = getPhase(state);
+  const stateKind = state.kind;
 
   let blocking: { query: string; blockedAt: string } | undefined;
   let failed: { error: string; recoverable: boolean } | undefined;
 
-  if (substate.kind === 'Blocking') {
+  if (isBlockedState(state)) {
+    const blockedState = state;
     blocking = {
-      query: substate.query,
-      blockedAt: substate.blockedAt,
+      query: blockedState.query,
+      blockedAt: blockedState.blockedAt,
     };
-  } else if (substate.kind === 'Failed') {
+  } else if (isFailedState(state)) {
+    const failedState = state;
     failed = {
-      error: substate.error,
-      recoverable: substate.recoverable,
+      error: failedState.error,
+      recoverable: failedState.recoverable,
     };
   }
 
   return {
     phase,
-    substate: substate.kind,
+    substate: stateKind,
     artifacts,
     blocking,
     failed,

@@ -9,15 +9,58 @@
 
 import type { BlockingRecord } from '../protocol/blocking.js';
 import type { ProtocolState } from '../protocol/types.js';
+import { isActiveState, isBlockedState, isFailedState } from '../protocol/types.js';
 import type { NotificationConfig } from '../config/types.js';
 import type {
   NotificationChannel,
   NotificationEvent,
   NotificationSendResult,
   WebhookPayload,
+  WebhookProtocolState,
 } from './types.js';
 import { NOTIFICATION_EVENTS } from './types.js';
 import { WebhookSender } from './webhook.js';
+
+/**
+ * Converts an internal ProtocolState to the webhook wire format.
+ *
+ * Maps the 3-tier discriminated union to the flat `{ phase, substate }`
+ * structure expected by external webhook consumers, enriched with
+ * `state_kind`, `block_reason` (when blocked), and `step` (when active).
+ */
+function toWebhookProtocolState(state: ProtocolState): WebhookProtocolState {
+  if (isActiveState(state)) {
+    return {
+      phase: state.phase.phase,
+      state_kind: 'Active',
+      step: state.phase.substate.step,
+      substate: { kind: 'Active', ...state.phase.substate },
+    };
+  }
+  if (isBlockedState(state)) {
+    const { kind: _kind, phase, reason, query, blockedAt, ...rest } = state;
+    return {
+      phase,
+      state_kind: 'Blocked',
+      block_reason: reason,
+      substate: { kind: 'Blocking', query, blockedAt, ...rest },
+    };
+  }
+  if (isFailedState(state)) {
+    const { kind: _kind, phase, ...rest } = state;
+    return {
+      phase,
+      state_kind: 'Failed',
+      substate: { kind: 'Failed', ...rest },
+    };
+  }
+  // CompleteState
+  return {
+    phase: 'Complete',
+    state_kind: 'Complete',
+    substate: { kind: 'Active' },
+  };
+}
 
 /**
  * Unified notification service for managing multiple notification channels.
@@ -142,42 +185,30 @@ export class NotificationService {
     let payload: WebhookPayload;
 
     if ('query' in data) {
-      const record = data;
-      const blockingBase = {
-        kind: 'Blocking' as const,
-        query: record.query,
-        blockedAt: record.blockedAt,
+      const record = data as BlockingRecord;
+      const protocolState: WebhookProtocolState = {
+        phase: record.phase,
+        state_kind: 'Blocked',
+        substate: {
+          kind: 'Blocking',
+          query: record.query,
+          blockedAt: record.blockedAt,
+          ...(record.options !== undefined ? { options: record.options } : {}),
+          ...(record.timeoutMs !== undefined ? { timeoutMs: record.timeoutMs } : {}),
+        },
       };
-
-      let blockingSubstate;
-      if (record.options !== undefined && record.timeoutMs !== undefined) {
-        blockingSubstate = {
-          ...blockingBase,
-          options: record.options,
-          timeoutMs: record.timeoutMs,
-        };
-      } else if (record.options !== undefined) {
-        blockingSubstate = { ...blockingBase, options: record.options };
-      } else if (record.timeoutMs !== undefined) {
-        blockingSubstate = { ...blockingBase, timeoutMs: record.timeoutMs };
-      } else {
-        blockingSubstate = blockingBase;
-      }
 
       payload = {
         event,
         timestamp,
         blocking_record: record,
-        protocol_state: {
-          phase: record.phase,
-          substate: blockingSubstate,
-        },
+        protocol_state: protocolState,
       };
     } else {
       payload = {
         event,
         timestamp,
-        protocol_state: data,
+        protocol_state: toWebhookProtocolState(data),
       };
     }
 

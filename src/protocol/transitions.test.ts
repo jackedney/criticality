@@ -2,7 +2,10 @@
  * Tests for Phase Transition logic.
  */
 
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { mkdtemp, rm, access } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import * as path from 'node:path';
 import {
   FORWARD_TRANSITIONS,
   FAILURE_TRANSITIONS,
@@ -22,12 +25,47 @@ import {
 } from './transitions.js';
 import {
   type ProtocolPhase,
+  type ProtocolState,
   PROTOCOL_PHASES,
   createActiveState,
-  createProtocolState,
-  createBlockingSubstate,
-  createFailedSubstate,
+  createBlockedState,
+  createFailedState,
+  getPhase,
+  createIgnitionPhaseState,
+  createIgnitionInterviewing,
+  createLatticePhaseState,
+  createLatticeGeneratingStructure,
+  createCompositionAuditPhaseState,
+  createCompositionAuditAuditing,
+  createInjectionPhaseState,
+  createInjectionSelectingFunction,
+  createMesoscopicPhaseState,
+  createMesoscopicGeneratingTests,
+  createMassDefectPhaseState,
+  createMassDefectAnalyzingComplexity,
+  createCompleteState,
 } from './types.js';
+
+function createActiveStateForPhase(phase: ProtocolPhase): ProtocolState {
+  switch (phase) {
+    case 'Ignition':
+      return createActiveState(
+        createIgnitionPhaseState(createIgnitionInterviewing('Discovery', 0))
+      );
+    case 'Lattice':
+      return createActiveState(createLatticePhaseState(createLatticeGeneratingStructure()));
+    case 'CompositionAudit':
+      return createActiveState(createCompositionAuditPhaseState(createCompositionAuditAuditing(0)));
+    case 'Injection':
+      return createActiveState(createInjectionPhaseState(createInjectionSelectingFunction()));
+    case 'Mesoscopic':
+      return createActiveState(createMesoscopicPhaseState(createMesoscopicGeneratingTests()));
+    case 'MassDefect':
+      return createActiveState(createMassDefectPhaseState(createMassDefectAnalyzingComplexity()));
+    case 'Complete':
+      return createCompleteState([]);
+  }
+}
 
 describe('Phase Transitions', () => {
   describe('FORWARD_TRANSITIONS', () => {
@@ -249,9 +287,45 @@ describe('Phase Transitions', () => {
   });
 
   describe('shedContext', () => {
-    it('returns true (placeholder implementation)', () => {
-      expect(shedContext('Ignition', 'Lattice')).toBe(true);
-      expect(shedContext('CompositionAudit', 'Ignition')).toBe(true);
+    let tempDir: string;
+
+    beforeEach(async () => {
+      tempDir = await mkdtemp(path.join(tmpdir(), 'criticality-shedcontext-'));
+    });
+
+    afterEach(async () => {
+      await rm(tempDir, { recursive: true, force: true });
+    });
+
+    it('returns true on successful archive creation', async () => {
+      const result = await shedContext('Ignition', 'Lattice', tempDir);
+      expect(result).toBe(true);
+    });
+
+    it('creates archive directory at expected path', async () => {
+      await shedContext('Ignition', 'Lattice', tempDir);
+
+      const archivesDir = path.join(tempDir, '.criticality', 'archives');
+      const dirExists = await access(archivesDir)
+        .then(() => true)
+        .catch(() => false);
+      expect(dirExists).toBe(true);
+    });
+
+    it('creates archive directory with phase transition in name', async () => {
+      await shedContext('CompositionAudit', 'Ignition', tempDir);
+
+      const archivesDir = path.join(tempDir, '.criticality', 'archives');
+      const dirExists = await access(archivesDir)
+        .then(() => true)
+        .catch(() => false);
+      expect(dirExists).toBe(true);
+    });
+
+    it('returns false on archive failure (graceful degradation)', async () => {
+      const invalidPath = '/nonexistent/path/that/does/not/exist';
+      const result = await shedContext('Ignition', 'Lattice', invalidPath);
+      expect(result).toBe(false);
     });
   });
 
@@ -284,27 +358,37 @@ describe('Phase Transitions', () => {
   });
 
   describe('transition', () => {
+    let tempDir: string;
+
+    beforeEach(async () => {
+      tempDir = await mkdtemp(path.join(tmpdir(), 'criticality-transition-'));
+    });
+
+    afterEach(async () => {
+      await rm(tempDir, { recursive: true, force: true });
+    });
+
     describe('Acceptance Criteria: transition from Ignition to Lattice succeeds with required artifacts', () => {
-      it('succeeds when spec artifact is provided', () => {
-        const state = createActiveState('Ignition');
+      it('succeeds when spec artifact is provided', async () => {
+        const state = createActiveStateForPhase('Ignition');
         const artifacts = createTransitionArtifacts(['spec']);
 
-        const result = transition(state, 'Lattice', { artifacts });
+        const result = await transition(state, 'Lattice', tempDir, { artifacts });
 
         expect(result.success).toBe(true);
         if (result.success) {
-          expect(result.state.phase).toBe('Lattice');
-          expect(result.state.substate.kind).toBe('Active');
+          expect(getPhase(result.state)).toBe('Lattice');
+          expect(result.state.kind).toBe('Active');
           expect(result.contextShed).toBe(true);
         }
       });
     });
 
     describe('Negative case: transition from Ignition to Injection returns invalid transition error', () => {
-      it('returns descriptive error when skipping phases', () => {
-        const state = createActiveState('Ignition');
+      it('returns descriptive error when skipping phases', async () => {
+        const state = createActiveStateForPhase('Ignition');
 
-        const result = transition(state, 'Injection');
+        const result = await transition(state, 'Injection', tempDir);
 
         expect(result.success).toBe(false);
         if (!result.success) {
@@ -329,64 +413,68 @@ describe('Phase Transitions', () => {
       ];
 
       for (const [from, to, requiredArtifacts] of forwardTransitionCases) {
-        it(`transitions from ${from} to ${to} with required artifacts`, () => {
-          const state = createActiveState(from);
+        it(`transitions from ${from} to ${to} with required artifacts`, async () => {
+          const state = createActiveStateForPhase(from);
           const artifacts = createTransitionArtifacts(requiredArtifacts);
 
-          const result = transition(state, to, { artifacts });
+          const result = await transition(state, to, tempDir, { artifacts });
 
           expect(result.success).toBe(true);
           if (result.success) {
-            expect(result.state.phase).toBe(to);
-            expect(result.state.substate.kind).toBe('Active');
+            if (to === 'Complete') {
+              expect(result.state.kind).toBe('Complete');
+            } else {
+              expect(getPhase(result.state)).toBe(to);
+              expect(result.state.kind).toBe('Active');
+            }
           }
         });
       }
     });
 
     describe('Valid failure transitions', () => {
-      it('transitions from CompositionAudit to Ignition with contradiction report', () => {
-        const state = createActiveState('CompositionAudit');
+      it('transitions from CompositionAudit to Ignition with contradiction report', async () => {
+        const state = createActiveStateForPhase('CompositionAudit');
         const artifacts = createTransitionArtifacts(['contradictionReport']);
 
-        const result = transition(state, 'Ignition', { artifacts });
+        const result = await transition(state, 'Ignition', tempDir, { artifacts });
 
         expect(result.success).toBe(true);
         if (result.success) {
-          expect(result.state.phase).toBe('Ignition');
+          expect(getPhase(result.state)).toBe('Ignition');
         }
       });
 
-      it('transitions from Injection to Lattice with structural defect report', () => {
-        const state = createActiveState('Injection');
+      it('transitions from Injection to Lattice with structural defect report', async () => {
+        const state = createActiveStateForPhase('Injection');
         const artifacts = createTransitionArtifacts(['structuralDefectReport']);
 
-        const result = transition(state, 'Lattice', { artifacts });
+        const result = await transition(state, 'Lattice', tempDir, { artifacts });
 
         expect(result.success).toBe(true);
         if (result.success) {
-          expect(result.state.phase).toBe('Lattice');
+          expect(getPhase(result.state)).toBe('Lattice');
         }
       });
 
-      it('transitions from Mesoscopic to Injection with cluster failure report', () => {
-        const state = createActiveState('Mesoscopic');
+      it('transitions from Mesoscopic to Injection with cluster failure report', async () => {
+        const state = createActiveStateForPhase('Mesoscopic');
         const artifacts = createTransitionArtifacts(['clusterFailureReport']);
 
-        const result = transition(state, 'Injection', { artifacts });
+        const result = await transition(state, 'Injection', tempDir, { artifacts });
 
         expect(result.success).toBe(true);
         if (result.success) {
-          expect(result.state.phase).toBe('Injection');
+          expect(getPhase(result.state)).toBe('Injection');
         }
       });
     });
 
     describe('Missing artifact errors', () => {
-      it('returns MISSING_ARTIFACTS error when no artifacts provided', () => {
-        const state = createActiveState('Ignition');
+      it('returns MISSING_ARTIFACTS error when no artifacts provided', async () => {
+        const state = createActiveStateForPhase('Ignition');
 
-        const result = transition(state, 'Lattice');
+        const result = await transition(state, 'Lattice', tempDir);
 
         expect(result.success).toBe(false);
         if (!result.success) {
@@ -396,11 +484,11 @@ describe('Phase Transitions', () => {
         }
       });
 
-      it('returns MISSING_ARTIFACTS error when some artifacts missing', () => {
-        const state = createActiveState('Lattice');
+      it('returns MISSING_ARTIFACTS error when some artifacts missing', async () => {
+        const state = createActiveStateForPhase('Lattice');
         const artifacts = createTransitionArtifacts(['latticeCode']); // missing witnesses, contracts
 
-        const result = transition(state, 'CompositionAudit', { artifacts });
+        const result = await transition(state, 'CompositionAudit', tempDir, { artifacts });
 
         expect(result.success).toBe(false);
         if (!result.success) {
@@ -412,10 +500,10 @@ describe('Phase Transitions', () => {
     });
 
     describe('Invalid transition errors', () => {
-      it('returns INVALID_TRANSITION for skipping phases', () => {
-        const state = createActiveState('Ignition');
+      it('returns INVALID_TRANSITION for skipping phases', async () => {
+        const state = createActiveStateForPhase('Ignition');
 
-        const result = transition(state, 'MassDefect');
+        const result = await transition(state, 'MassDefect', tempDir);
 
         expect(result.success).toBe(false);
         if (!result.success) {
@@ -423,10 +511,10 @@ describe('Phase Transitions', () => {
         }
       });
 
-      it('returns INVALID_TRANSITION for invalid backward transitions', () => {
-        const state = createActiveState('Lattice');
+      it('returns INVALID_TRANSITION for invalid backward transitions', async () => {
+        const state = createActiveStateForPhase('Lattice');
 
-        const result = transition(state, 'Ignition');
+        const result = await transition(state, 'Ignition', tempDir);
 
         expect(result.success).toBe(false);
         if (!result.success) {
@@ -435,10 +523,10 @@ describe('Phase Transitions', () => {
         }
       });
 
-      it('returns INVALID_TRANSITION for same-phase transition', () => {
-        const state = createActiveState('Injection');
+      it('returns INVALID_TRANSITION for same-phase transition', async () => {
+        const state = createActiveStateForPhase('Injection');
 
-        const result = transition(state, 'Injection');
+        const result = await transition(state, 'Injection', tempDir);
 
         expect(result.success).toBe(false);
         if (!result.success) {
@@ -448,10 +536,14 @@ describe('Phase Transitions', () => {
     });
 
     describe('State validation errors', () => {
-      it('returns BLOCKED_STATE when in blocking substate', () => {
-        const state = createProtocolState('Lattice', createBlockingSubstate({ query: 'Waiting?' }));
+      it('returns BLOCKED_STATE when in blocking substate', async () => {
+        const state = createBlockedState({
+          reason: 'user_requested',
+          phase: 'Lattice',
+          query: 'Waiting?',
+        });
 
-        const result = transition(state, 'CompositionAudit');
+        const result = await transition(state, 'CompositionAudit', tempDir);
 
         expect(result.success).toBe(false);
         if (!result.success) {
@@ -460,10 +552,10 @@ describe('Phase Transitions', () => {
         }
       });
 
-      it('returns FAILED_STATE when in failed substate', () => {
-        const state = createProtocolState('Injection', createFailedSubstate({ error: 'Failed' }));
+      it('returns FAILED_STATE when in failed substate', async () => {
+        const state = createFailedState({ phase: 'Injection', error: 'Failed' });
 
-        const result = transition(state, 'Mesoscopic');
+        const result = await transition(state, 'Mesoscopic', tempDir);
 
         expect(result.success).toBe(false);
         if (!result.success) {
@@ -472,10 +564,10 @@ describe('Phase Transitions', () => {
         }
       });
 
-      it('returns ALREADY_COMPLETE when in Complete phase', () => {
-        const state = createActiveState('Complete');
+      it('returns ALREADY_COMPLETE when in Complete phase', async () => {
+        const state = createCompleteState([]);
 
-        const result = transition(state, 'Ignition');
+        const result = await transition(state, 'Ignition', tempDir);
 
         expect(result.success).toBe(false);
         if (!result.success) {
@@ -486,25 +578,52 @@ describe('Phase Transitions', () => {
     });
 
     describe('Context shedding', () => {
-      it('triggers context shedding on successful transition', () => {
-        const state = createActiveState('Ignition');
+      it('triggers context shedding on successful transition', async () => {
+        const state = createActiveStateForPhase('Ignition');
         const artifacts = createTransitionArtifacts(['spec']);
 
-        const result = transition(state, 'Lattice', { artifacts });
+        const result = await transition(state, 'Lattice', tempDir, { artifacts });
 
         expect(result.success).toBe(true);
         if (result.success) {
           expect(result.contextShed).toBe(true);
         }
       });
+
+      it('creates archive directory during transition', async () => {
+        const state = createActiveStateForPhase('Ignition');
+        const artifacts = createTransitionArtifacts(['spec']);
+
+        await transition(state, 'Lattice', tempDir, { artifacts });
+
+        const archivesDir = path.join(tempDir, '.criticality', 'archives');
+        const dirExists = await access(archivesDir)
+          .then(() => true)
+          .catch(() => false);
+        expect(dirExists).toBe(true);
+      });
+
+      it('transition still succeeds if archiving fails (graceful degradation)', async () => {
+        const state = createActiveStateForPhase('Ignition');
+        const artifacts = createTransitionArtifacts(['spec']);
+        const invalidPath = '/nonexistent/path/that/does/not/exist';
+
+        const result = await transition(state, 'Lattice', invalidPath, { artifacts });
+
+        expect(result.success).toBe(true);
+        if (result.success) {
+          expect(result.contextShed).toBe(false);
+          expect(getPhase(result.state)).toBe('Lattice');
+        }
+      });
     });
 
     describe('Edge cases', () => {
-      it('handles Complete phase correctly (no valid transitions)', () => {
-        const state = createActiveState('Complete');
+      it('handles Complete phase correctly (no valid transitions)', async () => {
+        const state = createCompleteState([]);
 
         // Try any transition - should fail
-        const result = transition(state, 'Ignition');
+        const result = await transition(state, 'Ignition', tempDir);
 
         expect(result.success).toBe(false);
         if (!result.success) {
@@ -512,10 +631,10 @@ describe('Phase Transitions', () => {
         }
       });
 
-      it('provides descriptive error for phase that has no outgoing transitions', () => {
-        const state = createActiveState('Complete');
+      it('provides descriptive error for phase that has no outgoing transitions', async () => {
+        const state = createCompleteState([]);
 
-        const result = transition(state, 'MassDefect');
+        const result = await transition(state, 'MassDefect', tempDir);
 
         expect(result.success).toBe(false);
         if (!result.success) {
@@ -526,41 +645,40 @@ describe('Phase Transitions', () => {
     });
 
     describe('Acceptance Criteria: Mesoscopic -> MassDefect transition with verifiedCode artifact', () => {
-      it('transitions from Mesoscopic to MassDefect with verifiedCode artifact', () => {
-        const state = createActiveState('Mesoscopic');
+      it('transitions from Mesoscopic to MassDefect with verifiedCode artifact', async () => {
+        const state = createActiveStateForPhase('Mesoscopic');
         const artifacts = createTransitionArtifacts(['verifiedCode']);
 
-        const result = transition(state, 'MassDefect', { artifacts });
+        const result = await transition(state, 'MassDefect', tempDir, { artifacts });
 
         expect(result.success).toBe(true);
         if (result.success) {
-          expect(result.state.phase).toBe('MassDefect');
-          expect(result.state.substate.kind).toBe('Active');
+          expect(getPhase(result.state)).toBe('MassDefect');
+          expect(result.state.kind).toBe('Active');
           expect(result.contextShed).toBe(true);
         }
       });
     });
 
     describe('Acceptance Criteria: MassDefect -> Complete transition with finalArtifact', () => {
-      it('transitions from MassDefect to Complete with finalArtifact', () => {
-        const state = createActiveState('MassDefect');
+      it('transitions from MassDefect to Complete with finalArtifact', async () => {
+        const state = createActiveStateForPhase('MassDefect');
         const artifacts = createTransitionArtifacts(['finalArtifact']);
 
-        const result = transition(state, 'Complete', { artifacts });
+        const result = await transition(state, 'Complete', tempDir, { artifacts });
 
         expect(result.success).toBe(true);
         if (result.success) {
-          expect(result.state.phase).toBe('Complete');
-          expect(result.state.substate.kind).toBe('Active');
+          expect(result.state.kind).toBe('Complete');
         }
       });
     });
 
     describe('Negative case: MassDefect -> Complete without finalArtifact fails', () => {
-      it('returns MISSING_ARTIFACTS error when finalArtifact not provided', () => {
-        const state = createActiveState('MassDefect');
+      it('returns MISSING_ARTIFACTS error when finalArtifact not provided', async () => {
+        const state = createActiveStateForPhase('MassDefect');
 
-        const result = transition(state, 'Complete');
+        const result = await transition(state, 'Complete', tempDir);
 
         expect(result.success).toBe(false);
         if (!result.success) {

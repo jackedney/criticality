@@ -2,7 +2,8 @@
  * Phase execution handlers for protocol phases.
  *
  * Implements phase-specific execution logic for each protocol phase,
- * including Mass Defect which runs complexity reduction transformations.
+ * including Mass Defect which runs complexity reduction transformations,
+ * and Lattice which generates module structure, types, and contracts.
  *
  * @packageDocumentation
  */
@@ -22,8 +23,24 @@ import {
   formatMassDefectReport,
 } from '../mass-defect/index.js';
 import type { ModelRouter } from '../router/types.js';
+import { getPhase } from './types.js';
+import { parseSpec } from '../spec/parser.js';
+import type { Spec } from '../spec/types.js';
+import { generateModuleStructure, writeModuleStructure } from '../lattice/module-generator.js';
+import type { ModuleGeneratorOptions } from '../lattice/types.js';
+import { generateTypeDefinitions } from '../lattice/type-generator.js';
+import type { TypeGeneratorOptions } from '../lattice/type-generator.js';
+import { generateFunctionSignatures } from '../lattice/function-generator.js';
+import type { FunctionGeneratorOptions } from '../lattice/function-generator.js';
+import { generateWitnessIntegration } from '../lattice/witness-generator.js';
+import type { WitnessGeneratorOptions } from '../lattice/witness-generator.js';
+import { attachContracts } from '../lattice/contract-attacher.js';
+import type { ContractAttachmentOptions } from '../lattice/contract-attacher.js';
+import { CompilationVerifier } from '../lattice/compilation-verifier.js';
+import type { CompilationVerifierOptions } from '../lattice/compilation-verifier.js';
 
 const logger = new Logger({ component: 'MassDefectPhase', debugMode: false });
+const latticeLogger = new Logger({ component: 'LatticePhase', debugMode: false });
 
 /**
  * Context for MassDefect phase execution.
@@ -59,7 +76,7 @@ export async function executeMassDefectPhase(
   const { config, projectRoot, router } = massDefectContext;
 
   logger.info('mass_defect_started', {
-    phase: snapshot.state.phase,
+    phase: getPhase(snapshot.state),
   });
 
   try {
@@ -306,4 +323,308 @@ async function findTypeScriptFiles(rootDir: string): Promise<string[]> {
 
   await scanDir(rootDir);
   return files;
+}
+
+/**
+ * Context for Lattice phase execution.
+ */
+export interface LatticePhaseContext {
+  readonly config: Config;
+  readonly projectRoot: string;
+  readonly router: ModelRouter;
+}
+
+/**
+ * Executes the Lattice phase.
+ *
+ * @param context - The tick context containing phase and artifacts.
+ * @param latticeContext - Lattice-specific context.
+ * @returns Promise resolving to action result.
+ *
+ * @remarks
+ * The Lattice phase:
+ * - Parses spec.toml from the project root
+ * - Generates module structure with domain boundaries
+ * - Generates type definitions from data models
+ * - Generates function signatures from interfaces
+ * - Generates witness integration code
+ * - Attaches contracts to functions
+ * - Verifies compilation and repairs if needed
+ * - On success: archives artifacts and returns success
+ * - On failure: returns error with recoverable flag
+ */
+export async function executeLatticePhase(
+  context: TickContext,
+  latticeContext: LatticePhaseContext
+): Promise<ActionResult> {
+  const { snapshot } = context;
+  const { projectRoot, router } = latticeContext;
+
+  latticeLogger.info('lattice_started', {
+    phase: getPhase(snapshot.state),
+    projectRoot,
+  });
+
+  try {
+    const specPath = path.join(projectRoot, 'spec.toml');
+
+    const specExists = await fs
+      .access(specPath)
+      .then(() => true)
+      .catch(() => false);
+
+    if (!specExists) {
+      latticeLogger.error('spec_not_found', {
+        specPath,
+        message: 'spec.toml not found in project root',
+      });
+
+      return {
+        success: false,
+        error: 'Spec file not found: spec.toml',
+        recoverable: true,
+      };
+    }
+
+    latticeLogger.info('lattice_step', { step: 'parsing_spec' });
+
+    const specContent = await fs.readFile(specPath, 'utf-8');
+    let spec: Spec;
+    try {
+      spec = parseSpec(specContent);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      latticeLogger.error('spec_parse_failed', { error: message });
+
+      return {
+        success: false,
+        error: `Failed to parse spec.toml: ${message}`,
+        recoverable: true,
+      };
+    }
+
+    const moduleOptions: ModuleGeneratorOptions = {
+      baseDir: 'src',
+      domainDir: 'domain',
+      detectConventions: true,
+      generatePlaceholders: true,
+    };
+
+    latticeLogger.info('lattice_step', { step: 'generating_module_structure' });
+
+    let moduleResult;
+    try {
+      moduleResult = await generateModuleStructure(specContent, moduleOptions, projectRoot);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      latticeLogger.error('module_generation_failed', { error: message });
+
+      return {
+        success: false,
+        error: `Module generation failed: ${message}`,
+        recoverable: true,
+      };
+    }
+
+    await writeModuleStructure(moduleResult, projectRoot);
+
+    latticeLogger.info('lattice_step', { step: 'generating_type_definitions' });
+
+    const typeOptions: TypeGeneratorOptions = {
+      generateValidationFactories: true,
+      includeJsDoc: true,
+      emitWarnings: true,
+    };
+
+    try {
+      const typeResult = generateTypeDefinitions(spec, typeOptions);
+
+      const typesOutputPath = path.join(projectRoot, 'src', 'generated', 'types.ts');
+      await fs.mkdir(path.dirname(typesOutputPath), { recursive: true });
+      await fs.writeFile(typesOutputPath, typeResult.code, 'utf-8');
+
+      if (typeResult.warnings.length > 0) {
+        latticeLogger.warn('type_generation_warnings', {
+          warningCount: typeResult.warnings.length,
+        });
+      }
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      latticeLogger.error('type_generation_failed', { error: message });
+
+      return {
+        success: false,
+        error: `Type generation failed: ${message}`,
+        recoverable: true,
+      };
+    }
+
+    latticeLogger.info('lattice_step', { step: 'generating_function_signatures' });
+
+    const functionOptions: FunctionGeneratorOptions = {
+      includeJsDoc: true,
+      includeContracts: true,
+      asyncForPromise: true,
+      useJsExtension: true,
+    };
+
+    try {
+      const functionResult = generateFunctionSignatures(spec, functionOptions);
+
+      const functionsOutputPath = path.join(projectRoot, 'src', 'generated', 'functions.ts');
+      await fs.mkdir(path.dirname(functionsOutputPath), { recursive: true });
+      await fs.writeFile(functionsOutputPath, functionResult.code, 'utf-8');
+
+      if (functionResult.warnings.length > 0) {
+        latticeLogger.warn('function_generation_warnings', {
+          warningCount: functionResult.warnings.length,
+        });
+      }
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      latticeLogger.error('function_generation_failed', { error: message });
+
+      return {
+        success: false,
+        error: `Function generation failed: ${message}`,
+        recoverable: true,
+      };
+    }
+
+    latticeLogger.info('lattice_step', { step: 'generating_witness_integration' });
+
+    const witnessOptions: WitnessGeneratorOptions = {
+      generateValidationFactories: true,
+      generateArbitraries: true,
+      includeJsDoc: true,
+      emitWarnings: true,
+    };
+
+    try {
+      const witnessResult = generateWitnessIntegration(spec, witnessOptions);
+
+      const witnessesOutputPath = path.join(projectRoot, 'src', 'generated', 'witnesses.ts');
+      await fs.mkdir(path.dirname(witnessesOutputPath), { recursive: true });
+      await fs.writeFile(witnessesOutputPath, witnessResult.code, 'utf-8');
+
+      if (witnessResult.warnings.length > 0) {
+        latticeLogger.warn('witness_generation_warnings', {
+          warningCount: witnessResult.warnings.length,
+        });
+      }
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      latticeLogger.error('witness_generation_failed', { error: message });
+
+      return {
+        success: false,
+        error: `Witness generation failed: ${message}`,
+        recoverable: true,
+      };
+    }
+
+    latticeLogger.info('lattice_step', { step: 'attaching_contracts' });
+
+    const contractOptions: ContractAttachmentOptions = {
+      includeComplexity: true,
+      includePurity: true,
+      includeClaimRefs: true,
+      emitWarnings: true,
+    };
+
+    try {
+      const contractResult = attachContracts(spec, contractOptions);
+
+      const contractsOutputPath = path.join(projectRoot, 'src', 'generated', 'contracts.ts');
+      await fs.mkdir(path.dirname(contractsOutputPath), { recursive: true });
+
+      const contractCode = contractResult.contracts.map((c) => c.jsDoc).join('\n\n');
+
+      await fs.writeFile(contractsOutputPath, contractCode, 'utf-8');
+
+      if (contractResult.unmatchedClaimWarnings.length > 0) {
+        latticeLogger.warn('contract_unmatched_claims', {
+          unmatchedCount: contractResult.unmatchedClaimWarnings.length,
+        });
+      }
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      latticeLogger.error('contract_attachment_failed', { error: message });
+
+      return {
+        success: false,
+        error: `Contract attachment failed: ${message}`,
+        recoverable: true,
+      };
+    }
+
+    latticeLogger.info('lattice_step', { step: 'verifying_compilation' });
+
+    const verifierOptions: CompilationVerifierOptions = {
+      projectPath: projectRoot,
+      modelRouter: router,
+      maxRepairAttempts: 3,
+      runAstInspection: true,
+    };
+
+    const verifier = new CompilationVerifier(verifierOptions);
+    const verifyResult = await verifier.verify();
+
+    if (!verifyResult.success) {
+      latticeLogger.warn('lattice_repair_attempt', {
+        attempts: verifyResult.attempts.length,
+        state: verifyResult.state.kind,
+      });
+
+      if (verifyResult.state.kind === 'blocked') {
+        const errorMessages = verifyResult.state.unresolvedErrors
+          .slice(0, 3)
+          .map((e) => e.error.message)
+          .join('; ');
+
+        return {
+          success: false,
+          error: `Compilation failed after repair: ${errorMessages}`,
+          recoverable: true,
+        };
+      }
+
+      return {
+        success: false,
+        error: 'Compilation failed after repair',
+        recoverable: true,
+      };
+    }
+
+    latticeLogger.info('lattice_completed', {
+      attempts: verifyResult.attempts.length,
+      astPassed: verifyResult.astInspection?.passed ?? true,
+    });
+
+    await context.operations.archivePhaseArtifacts('Lattice');
+
+    return {
+      success: true,
+      artifacts: ['latticeCode', 'witnesses', 'contracts'],
+    };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    const stack = error instanceof Error ? error.stack : undefined;
+
+    latticeLogger.error('lattice_failed', {
+      error: message,
+      stack,
+    });
+
+    const isRecoverable =
+      error instanceof Error &&
+      !error.message.includes('ENOENT') &&
+      !error.message.includes('EACCES');
+
+    return {
+      success: false,
+      error: `Lattice phase failed: ${message}`,
+      recoverable: isRecoverable,
+    };
+  }
 }
