@@ -282,12 +282,12 @@
       ],
       "startedAt": "2026-02-12T08:47:02.593623+00:00",
       "completedAt": null,
-      "updatedAt": "2026-02-12T08:47:02.593785+00:00"
+      "updatedAt": "2026-02-12T09:16:43.010386+00:00"
     },
     {
       "id": "US-008",
       "title": "Add conditional approval ledger integration",
-      "status": "open",
+      "status": "done",
       "dependsOn": [
         "US-005"
       ],
@@ -302,7 +302,10 @@
         "Add tests: verify ledger entries created with correct fields for each condition, verify ledger file written, verify existing approval flow unchanged, verify error handling doesn't break approval",
         "Example: User approves with conditions ['Must support pagination', 'Rate limiting required'] \u2192 two ledger entries created with category 'phase_structure', confidence 'provisional', constraints matching the condition text",
         "Negative case: If conditions array is empty (ApproveWithConditions with no conditions), no ledger entries are created and the flow proceeds normally"
-      ]
+      ],
+      "updatedAt": "2026-02-12T09:13:16.029193+00:00",
+      "completedAt": "2026-02-12T09:13:16.029306+00:00",
+      "startedAt": "2026-02-12T09:13:16.029308+00:00"
     },
     {
       "id": "US-009",
