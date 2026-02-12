@@ -227,12 +227,12 @@
       ],
       "startedAt": "2026-02-11T23:36:32.578224+00:00",
       "completedAt": null,
-      "updatedAt": "2026-02-11T23:41:46.497205+00:00"
+      "updatedAt": "2026-02-11T23:59:18.468314+00:00"
     },
     {
       "id": "US-006",
       "title": "Implement context shedding",
-      "status": "open",
+      "status": "done",
       "dependsOn": [
         "US-005"
       ],
@@ -249,7 +249,10 @@
         "Add tests: verify archive directory is created, verify telemetry event is logged, verify transition still succeeds if archiving fails (graceful degradation), verify function returns true on success",
         "Example: transitioning from Ignition to Lattice creates .criticality/archives/Ignition-to-Lattice-2026-02-11T12:00:00Z/ and logs context_shed event",
         "Negative case: If archive directory creation fails (e.g., permissions), shedContext returns false but transition() still succeeds with a warning log"
-      ]
+      ],
+      "updatedAt": "2026-02-11T23:58:37.133153+00:00",
+      "completedAt": "2026-02-11T23:58:37.133263+00:00",
+      "startedAt": "2026-02-11T23:58:37.133265+00:00"
     },
     {
       "id": "US-007",
