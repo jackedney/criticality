@@ -41,68 +41,71 @@ const DEFAULT_OPTIONS: Required<CompositionAuditOptions> = {
 };
 
 /**
- * Extracts JSON from a response using various strategies.
+ * Extracts JSON from a response using a robust single-pass scanner.
+ *
+ * This implementation is O(N) and correctly handles nested braces, strings,
+ * and escape sequences, unlike naive regex or simple brace counting.
+ * It finds all balanced JSON candidates and returns the largest valid one.
  *
  * @param content - The raw response content.
  * @returns Extracted JSON string or null if not found.
  */
 function extractJSON(content: string): string | null {
-  // Strategy 1: Try to extract JSON by matching braces from first opening brace
-  const firstBraceIndex = content.indexOf('{');
-  if (firstBraceIndex !== -1) {
-    let braceCount = 0;
-    for (let i = firstBraceIndex; i < content.length; i++) {
-      if (content.charAt(i) === '{') {
-        braceCount++;
-      } else if (content.charAt(i) === '}') {
-        braceCount--;
-        if (braceCount === 0) {
-          const jsonCandidate = content.slice(firstBraceIndex, i + 1);
-          try {
-            JSON.parse(jsonCandidate);
-            return jsonCandidate;
-          } catch {
-            // Continue to next strategy
-            break;
-          }
+  const candidates: { start: number; end: number; len: number }[] = [];
+  const stack: number[] = [];
+  let inString = false;
+  let escaped = false;
+
+  for (let i = 0; i < content.length; i++) {
+    // eslint-disable-next-line security/detect-object-injection -- safe: i is bounded numeric loop counter
+    const char = content[i];
+
+    if (inString) {
+      if (escaped) {
+        escaped = false;
+      } else if (char === '\\') {
+        escaped = true;
+      } else if (char === '"') {
+        inString = false;
+      }
+      continue;
+    }
+
+    if (char === '"') {
+      inString = true;
+      continue;
+    }
+
+    if (char === '{') {
+      stack.push(i);
+    } else if (char === '}') {
+      if (stack.length > 0) {
+        const start = stack.pop();
+        if (start !== undefined) {
+          const end = i + 1;
+          candidates.push({ start, end, len: end - start });
         }
       }
     }
   }
 
-  // Strategy 2: Find the last closing brace and work backwards to matching opening brace
-  const lastBraceIndex = content.lastIndexOf('}');
-  if (lastBraceIndex !== -1) {
-    let braceCount = 0;
-    for (let i = lastBraceIndex; i >= 0; i--) {
-      if (content.charAt(i) === '}') {
-        braceCount++;
-      } else if (content.charAt(i) === '{') {
-        braceCount--;
-        if (braceCount === 0) {
-          const jsonCandidate = content.slice(i, lastBraceIndex + 1);
-          try {
-            JSON.parse(jsonCandidate);
-            return jsonCandidate;
-          } catch {
-            break;
-          }
-        }
-      }
+  // Sort by length descending, then by start index ascending
+  // This ensures we try the largest possible JSON object first (e.g. outer block)
+  candidates.sort((a, b) => {
+    if (b.len !== a.len) {
+      return b.len - a.len;
     }
-  }
+    return a.start - b.start;
+  });
 
-  // Strategy 3: Iteratively try substrings until JSON.parse succeeds
-  if (firstBraceIndex !== -1 && lastBraceIndex !== -1) {
-    let length = lastBraceIndex - firstBraceIndex + 1;
-    while (length > 0) {
-      const substring = content.slice(firstBraceIndex, firstBraceIndex + length);
-      try {
-        JSON.parse(substring);
-        return substring;
-      } catch {
-        length--;
-      }
+  // Try to parse candidates until we find a valid one
+  for (const { start, end } of candidates) {
+    const candidate = content.slice(start, end);
+    try {
+      JSON.parse(candidate);
+      return candidate;
+    } catch {
+      // Continue to next candidate
     }
   }
 
