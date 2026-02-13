@@ -262,6 +262,74 @@ describe('Contradiction Detector', () => {
       expect(result.summary).toContain('Failed to parse');
     });
 
+    it('extracts JSON from tricky content with braces in strings', async () => {
+      // This test targets the robust scanner logic (extractJSON)
+      // Input contains braces inside strings which would confuse simple brace counters
+      // Also contains garbage before and after
+      const trickyContent = `
+        Here is some reasoning...
+        {
+          "hasContradictions": true,
+          "summary": "Found issue with { braces } inside string",
+          "contradictions": [
+            {
+              "type": "invariant",
+              "severity": "warning",
+              "description": "Nested { brace } issue",
+              "involved": [{ "elementType": "constraint", "id": "C1", "name": "N", "text": "T" }],
+              "analysis": "Analysis with { nested { braces } } inside text",
+              "minimalScenario": "Scenario",
+              "suggestedResolutions": []
+            }
+          ]
+        }
+        And some trailing text with { unbalanced braces
+      `;
+
+      const { router } = createMockRouter(trickyContent);
+      const input = createTestInput();
+
+      const result = await detectContradictions(input, router, { enableCrossVerification: false });
+
+      expect(result.hasContradictions).toBe(true);
+      expect(result.summary).toContain('Found issue with { braces } inside string');
+      expect(result.contradictions[0]?.analysis).toContain('Analysis with { nested { braces } } inside text');
+    });
+
+    it('extracts the largest JSON object when nested', async () => {
+      // Input contains nested JSON-like structure. The scanner should return the outermost valid object.
+      // But wait, the scanner returns the *largest* valid object.
+      // If we have { outer: { inner: 1 } }, the outer is largest.
+      // If we have { invalid { inner: 1 } }, outer fails parse, inner succeeds.
+
+      const nestedContent = `
+        {
+          "hasContradictions": true,
+          "summary": "Outer object",
+          "contradictions": [
+             {
+              "type": "temporal",
+              "severity": "warning",
+              "description": "Inner issue",
+              "involved": [{ "elementType": "constraint", "id": "C1", "name": "N", "text": "T" }],
+              "analysis": "Analysis",
+              "minimalScenario": "Scenario",
+              "suggestedResolutions": []
+            }
+          ],
+          "extra": { "nested": "object" }
+        }
+      `;
+
+      const { router } = createMockRouter(nestedContent);
+      const input = createTestInput();
+
+      const result = await detectContradictions(input, router);
+
+      expect(result.hasContradictions).toBe(true);
+      expect(result.summary).toBe('Outer object');
+    });
+
     it('filters out invalid contradiction types', async () => {
       const auditorResponse = JSON.stringify({
         hasContradictions: true,
