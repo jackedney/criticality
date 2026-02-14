@@ -97,6 +97,22 @@ export interface TodoFunction {
 type FunctionLike = FunctionDeclaration | MethodDeclaration | ArrowFunction | FunctionExpression;
 
 /**
+ * Checks if a node is a FunctionLike declaration.
+ *
+ * @param node - The node to check.
+ * @returns True if the node is a FunctionLike declaration.
+ */
+function isFunctionLike(node: Node): node is FunctionLike {
+  const kind = node.getKind();
+  return (
+    kind === SyntaxKind.FunctionDeclaration ||
+    kind === SyntaxKind.MethodDeclaration ||
+    kind === SyntaxKind.ArrowFunction ||
+    kind === SyntaxKind.FunctionExpression
+  );
+}
+
+/**
  * Regular expression patterns for detecting TODO markers.
  * Matches:
  * - throw new Error('TODO')
@@ -856,6 +872,7 @@ export function findTodoFunctions(project: Project): TodoFunction[] {
   // Optimization: Only collect AST nodes for TODO functions, not all functions.
   // This significantly reduces buildCallGraph overhead by avoiding traversal of completed functions.
   const todoFunctionNodes: FunctionLike[] = [];
+  const processedFunctions = new Set<FunctionLike>();
 
   for (const sourceFile of project.getSourceFiles()) {
     // Skip node_modules and declaration files
@@ -872,29 +889,56 @@ export function findTodoFunctions(project: Project): TodoFunction[] {
       continue;
     }
 
-    const functions = collectFunctions(sourceFile);
+    // Optimization: Instead of full AST traversal with collectFunctions() which is O(Nodes),
+    // use regex search + getDescendantAtPos which is O(Matches * Depth).
+    // This is significantly faster for sparse TODO discovery (orders of magnitude faster on large files).
+    for (const pattern of TODO_PATTERNS) {
+      // Use global regex to find all matches in the file
+      const globalPattern = new RegExp(pattern.source, pattern.flags + 'g');
+      let match;
 
-    for (const func of functions) {
-      // Optimization: Extract body text from already loaded fileText to avoid internal getText() calls
-      // within hasTodoMarker (if we can)
-      const body = func.getBody();
-      if (!body) {
-        continue;
-      }
+      while ((match = globalPattern.exec(fileText)) !== null) {
+        const index = match.index;
+        const node = sourceFile.getDescendantAtPos(index);
 
-      // Extract substring directly from source file text using node positions.
-      // This is much faster than body.getText() which allocates a new string from tokens/AST.
-      const bodyText = fileText.substring(body.getStart(), body.getEnd());
+        if (!node) {
+          continue;
+        }
 
-      if (hasTodoMarker(func, bodyText)) {
-        todoFunctions.push({
-          name: getFunctionName(func),
-          filePath: sourceFile.getFilePath(),
-          line: func.getStartLineNumber(),
-          signature: extractSignature(func),
-          hasTodoBody: true,
-        });
-        todoFunctionNodes.push(func);
+        // Walk up to find all enclosing functions
+        let curr: Node | undefined = node;
+        while (curr) {
+          if (isFunctionLike(curr)) {
+            const func = curr;
+            if (!processedFunctions.has(func)) {
+              // Verify it matches strict criteria (has body containing the match)
+              const body = func.getBody();
+              if (body) {
+                // Check if the match index is inside the body
+                const start = body.getStart();
+                const end = body.getEnd();
+                if (index >= start && index < end) {
+                  processedFunctions.add(func);
+
+                  todoFunctions.push({
+                    name: getFunctionName(func),
+                    filePath: sourceFile.getFilePath(),
+                    line: func.getStartLineNumber(),
+                    signature: extractSignature(func),
+                    hasTodoBody: true,
+                  });
+                  todoFunctionNodes.push(func);
+                }
+              }
+            }
+          }
+
+          // Stop if we hit the file root
+          if (curr.getKind() === SyntaxKind.SourceFile) {
+            break;
+          }
+          curr = curr.getParent();
+        }
       }
     }
   }
