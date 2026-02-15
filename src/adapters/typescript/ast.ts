@@ -106,6 +106,16 @@ type FunctionLike = FunctionDeclaration | MethodDeclaration | ArrowFunction | Fu
 const TODO_PATTERNS = [/throw\s+new\s+Error\s*\(\s*['"]TODO['"]\s*\)/, /\/\/\s*todo!\s*\(\s*\)/i];
 
 /**
+ * Patterns that match a body containing ONLY a TODO marker.
+ * If a function body matches any of these, it contains no implementation logic
+ * and no function calls, so we can skip AST traversal.
+ */
+const TODO_ONLY_PATTERNS = [
+  /^\{\s*\}$/, // Empty body {}
+  /^\{\s*throw\s+new\s+Error\s*\(\s*['"]TODO['"]\s*\)\s*;?\s*\}$/i, // Only throw new Error('TODO')
+];
+
+/**
  * Regex for checking for todo!() macro call in raw text.
  */
 export const TODO_MACRO_REGEX = /todo!/i;
@@ -240,6 +250,19 @@ function buildCallGraph(functions: FunctionLike[]): Map<string, Set<string>> {
     // Find all call expressions in the function body
     const body = func.getBody();
     if (body) {
+      // Optimization: Check if body is simple TODO to avoid AST traversal.
+      // Extract substring directly from source file text using node positions.
+      const start = body.getStart();
+      const end = body.getEnd();
+      // Use full text from source file which is usually cached
+      const bodyText = func.getSourceFile().getFullText().substring(start, end);
+
+      // If it's a simple TODO body, it definitely has no function calls
+      if (TODO_ONLY_PATTERNS.some((pattern) => pattern.test(bodyText))) {
+        callGraph.set(name, calls);
+        continue;
+      }
+
       // Use getDescendantsOfKind for optimized traversal
       const callExpressions = body.getDescendantsOfKind(SyntaxKind.CallExpression);
       for (const callExpr of callExpressions) {
@@ -1095,12 +1118,7 @@ export function inspectAst(
     let isTodoBody = false;
     if (hasBody && bodyText !== undefined) {
       // TODO-only patterns: entire body must match exactly
-      const todoOnlyPatterns = [
-        /^\{\s*\}$/, // Empty body {}
-        /^\{\s*throw\s+new\s+Error\s*\(\s*['"]TODO['"]\s*\)\s*;?\s*\}$/i, // Only throw new Error('TODO')
-      ];
-
-      isTodoBody = todoOnlyPatterns.some((pattern) => pattern.test(bodyText));
+      isTodoBody = TODO_ONLY_PATTERNS.some((pattern) => pattern.test(bodyText));
     }
 
     // hasTodoBody in InspectedFunction indicates presence of TODO marker
